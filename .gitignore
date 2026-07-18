@@ -14,3 +14,11 @@ go.work.sum
 
 # Local runtime artifacts (strategy release trees created during tests/runs)
 /tmp/strategon-*
+
+# Frontend
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/.env
+web/.env.*
+!web/.env.example

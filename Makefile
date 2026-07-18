@@ -20,7 +20,7 @@ lint:
 breaking:
 	buf breaking --against '.git#branch=main'
 
-## generate: regenerate Go + connect-go from proto (checked into gen/)
+## generate: regenerate Go + connect-go + Connect-ES TS from proto
 generate proto:
 	buf generate
 
@@ -28,9 +28,19 @@ generate proto:
 build:
 	go build ./...
 
-## test: run the full test suite
+## test: run the full Go test suite
 test:
 	go test ./...
+
+## web-install / web-check / web-dev: frontend helpers
+web-install:
+	cd web && pnpm i
+
+web-check:
+	cd web && pnpm run check
+
+web-dev:
+	cd web && pnpm run dev -- --host 127.0.0.1 --port 5173
 
 ## tidy: sync go.mod/go.sum
 tidy:
