@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "google/protobuf/timestamp.proto";
+
+message MachineResources {
+  double cpu_percent = 1;
+  int64 memory_used_bytes = 2;
+  int64 memory_total_bytes = 3;
+  int64 disk_used_bytes = 4;
+  int64 disk_total_bytes = 5;
+  double load1 = 6;
+  int64 net_rx_bytes = 7;
+  int64 net_tx_bytes = 8;
+  google.protobuf.Timestamp collected_at = 9;
+}
+
+message ProcessMetrics {
+  string strategy = 1;
+  int32 pid = 2;
+  bool alive = 3;
+  int64 rss_bytes = 4;
+  int32 num_fds = 5;
+  double cpu_percent = 6;
+  int32 restart_count = 7;
+}
+
+// Heartbeat is high-frequency (5-10s) and lightweight. observed_generation lets
+// the control plane roughly track convergence without waiting for StatusReport.
+message Heartbeat {
+  MachineResources resources = 1;
+  repeated ProcessMetrics processes = 2;
+  int64 observed_generation = 3; // snapshot the agent has fully converged to
+  int32 agent_version = 4; // reported every beat for drift tracking
+}

@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "google/protobuf/timestamp.proto";
+
+// ObjectMeta borrows the k8s design vocabulary (metadata/spec/status) without
+// importing k8s. generation is incremented by the control plane on every spec
+// change and is the sole coupling between desired (spec) and actual (status).
+message ObjectMeta {
+  string name = 1;
+  string uid = 2;
+  int64 generation = 3; // control plane increments on spec change
+  map<string, string> labels = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// Condition expresses health as a k8s-style condition list rather than a single
+// bool. type is one of "Live" | "Ready" | "BusinessHealthy".
+message Condition {
+  string type = 1;
+  ConditionStatus status = 2;
+  string reason = 3; // machine-readable short code, e.g. "MarketDataStale"
+  string message = 4; // human-readable explanation
+  google.protobuf.Timestamp last_transition = 5;
+}
+
+enum ConditionStatus {
+  CONDITION_STATUS_UNSPECIFIED = 0;
+  CONDITION_STATUS_TRUE = 1;
+  CONDITION_STATUS_FALSE = 2;
+  CONDITION_STATUS_UNKNOWN = 3;
+}
+
+enum ArtifactType {
+  ARTIFACT_TYPE_UNSPECIFIED = 0;
+  ARTIFACT_TYPE_BINARY = 1; // Go static binary tarball
+  ARTIFACT_TYPE_OCI_IMAGE = 2; // reserved for Python/ML strategies
+}
+
+// ArtifactRef is content-addressed: config is also an ArtifactRef, so a config
+// change is just a new digest that travels the exact same deploy path.
+message ArtifactRef {
+  ArtifactType type = 1;
+  string name = 2;
+  string version = 3; // human-readable, e.g. "v42"
+  string digest = 4; // "sha256:..."; content-addressed, verification is free
+  string uri = 5; // "s3://bucket/key" or registry ref
+}
+
+enum ExecutionDriver {
+  EXECUTION_DRIVER_UNSPECIFIED = 0;
+  EXECUTION_DRIVER_EXEC = 1; // bare process + cgroup v2 (default)
+  EXECUTION_DRIVER_OCI = 2; // containerd/podman, host network
+}
+
+message ResourceLimits {
+  int64 cpu_millicores = 1; // written to cgroup v2 cpu.max
+  int64 memory_bytes = 2; // memory.max
+  int32 max_open_files = 3;
+}
+
+message DeployPolicy {
+  int32 startsecs = 1; // process must live N seconds to count as "started"
+  int32 health_window_seconds = 2; // auto-rollback observation window
+  int32 max_crashes_in_window = 3; // crashes over this in-window trigger rollback
+  int32 stop_grace_seconds = 4; // SIGTERM -> wait -> SIGKILL
+  bool enable_auto_rollback = 5;
+}
+
+message CronSchedule {
+  string name = 1;
+  string cron_expr = 2; // standard crontab syntax
+  string timezone = 3; // IANA tz, required and explicit
+  CronAction action = 4;
+  int32 jitter_seconds = 5; // random jitter to avoid all machines at once
+  string script_ref = 6; // artifact ref when action == RUN_SCRIPT
+}
+
+enum CronAction {
+  CRON_ACTION_UNSPECIFIED = 0;
+  CRON_ACTION_RESTART = 1;
+  CRON_ACTION_RELOAD_CONFIG = 2;
+  CRON_ACTION_RUN_SCRIPT = 3;
+}
+
+// LeaseSpec guards against double-trading; agent must renew before expiry or
+// commit suicide.
+message LeaseSpec {
+  bool required = 1; // whether the strategy must hold a lease before starting
+  int32 ttl_seconds = 2; // lease TTL; renew before expiry or self-terminate
+}

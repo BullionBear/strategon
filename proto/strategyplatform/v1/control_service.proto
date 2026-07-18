@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "google/protobuf/timestamp.proto";
+import "strategyplatform/v1/common.proto";
+import "strategyplatform/v1/enrollment.proto";
+import "strategyplatform/v1/telemetry.proto";
+
+// This is a different kind of connection from AgentService: low-frequency,
+// browser/CLI, must be curl-able. Served over HTTP/JSON via Connect. All write
+// paths go through the control plane, which validates, updates spec, increments
+// generation, and pushes the new DesiredState over the stream.
+message Machine {
+  ObjectMeta metadata = 1;
+  MachineSpec spec = 2;
+  MachineResources last_resources = 3;
+  bool reachable = 4;
+  int32 agent_version = 5;
+  google.protobuf.Timestamp last_heartbeat = 6;
+}
+
+message ListMachinesRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListMachinesResponse {
+  repeated Machine machines = 1;
+  string next_page_token = 2;
+}
+
+message GetMachineRequest {
+  string machine_id = 1;
+}
+
+message DeployRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  string artifact_version = 3; // version to deploy
+  string config_version = 4; // optional; empty = keep current config
+}
+
+message DeployResponse {
+  int64 generation = 1; // new spec generation, for the frontend to track convergence
+}
+
+message RollbackRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  string target_version = 3; // empty = previous version
+}
+
+message RollbackResponse {
+  int64 generation = 1;
+}
+
+message SetScheduleRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  repeated CronSchedule schedules = 3; // full overwrite of the strategy's cron
+}
+
+message SetScheduleResponse {
+  int64 generation = 1;
+}
+
+message AuditEntry {
+  google.protobuf.Timestamp timestamp = 1;
+  string actor = 2;
+  string action = 3; // "Deploy" | "Rollback" | "ConfigChange"
+  string machine_id = 4;
+  string strategy = 5;
+  string from_version = 6;
+  string to_version = 7;
+}
+
+message ListAuditRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  int32 page_size = 3;
+  string page_token = 4;
+}
+
+message ListAuditResponse {
+  repeated AuditEntry entries = 1;
+  string next_page_token = 2;
+}
+
+message MachineStatusEvent {
+  string machine_id = 1;
+  Machine machine = 2;
+  google.protobuf.Timestamp at = 3;
+}
+
+service ControlPlaneService {
+  rpc ListMachines(ListMachinesRequest) returns (ListMachinesResponse);
+  rpc GetMachine(GetMachineRequest) returns (Machine);
+
+  rpc Deploy(DeployRequest) returns (DeployResponse);
+  rpc Rollback(RollbackRequest) returns (RollbackResponse);
+  rpc SetSchedule(SetScheduleRequest) returns (SetScheduleResponse);
+
+  // UI real-time panel: machine status and deploy progress push.
+  rpc WatchMachine(GetMachineRequest) returns (stream MachineStatusEvent);
+
+  rpc ListAudit(ListAuditRequest) returns (ListAuditResponse);
+}

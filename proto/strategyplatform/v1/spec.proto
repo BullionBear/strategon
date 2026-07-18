@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "google/protobuf/timestamp.proto";
+import "strategyplatform/v1/common.proto";
+
+// StrategyAssignmentSpec is a single strategy the control plane wants running on
+// a machine. Only the control plane writes spec.
+message StrategyAssignmentSpec {
+  string strategy = 1; // logical strategy id
+  ArtifactRef artifact = 2; // desired binary/image version
+  ArtifactRef config = 3; // desired config version (config is an artifact too)
+  ExecutionDriver driver = 4;
+  ResourceLimits limits = 5;
+  DeployPolicy deploy_policy = 6;
+  LeaseSpec lease = 7;
+  repeated CronSchedule schedules = 8;
+  repeated string args = 9;
+  map<string, string> env = 10;
+}
+
+// DesiredState is the machine-level full snapshot pushed southbound. assignments
+// is a FULL list (not incremental): the agent diffs it against local actual
+// state. This full semantics makes reconnect/restart/loss degenerate into "take
+// the latest snapshot and converge once", idempotent and order-independent.
+message DesiredState {
+  int64 generation = 1; // monotonically increasing snapshot version
+  repeated StrategyAssignmentSpec assignments = 2; // full, not incremental
+  int32 desired_agent_version = 3; // target agent version for self-update canary
+  google.protobuf.Timestamp issued_at = 4;
+}

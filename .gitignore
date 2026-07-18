@@ -1,0 +1,16 @@
+# Binaries
+/bin/
+*.exe
+*.test
+*.out
+
+# Go workspace
+go.work
+go.work.sum
+
+# Editor / OS
+.DS_Store
+*.swp
+
+# Local runtime artifacts (strategy release trees created during tests/runs)
+/tmp/strategon-*
