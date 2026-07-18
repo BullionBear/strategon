@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "strategyplatform/v1/common.proto";
+
+message MachineSpec {
+  int32 num_cpus = 1;
+  int64 memory_total_bytes = 2;
+  string os = 3;
+  string arch = 4;
+  string kernel_version = 5;
+  string region = 6;
+  string zone = 7;
+  repeated ExecutionDriver supported_drivers = 8; // drivers this machine supports
+}
+
+// EnrollRequest is a one-time credential exchange over the bootstrap channel
+// (token-verified). After success all communication uses mTLS.
+message EnrollRequest {
+  string enrollment_token = 1; // control-plane-issued one-time short-TTL token
+  string requested_machine_id = 2;
+  bytes csr = 3; // certificate signing request (PEM); key pair generated locally
+  MachineSpec spec = 4;
+}
+
+message EnrollResponse {
+  bytes certificate = 1; // issued long-lived client cert (PEM)
+  bytes ca_bundle = 2; // CA to verify the control plane
+  string assigned_machine_id = 3;
+}
+
+// Register is the first AgentMessage after the stream is established.
+message Register {
+  string machine_id = 1;
+  string hostname = 2;
+  MachineSpec spec = 3;
+  int32 agent_version = 4;
+  string agent_semver = 5; // human-readable, e.g. "1.4.2"
+}

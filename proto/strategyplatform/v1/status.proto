@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "google/protobuf/timestamp.proto";
+import "strategyplatform/v1/common.proto";
+
+enum DeployPhase {
+  DEPLOY_PHASE_UNSPECIFIED = 0;
+  DEPLOY_PHASE_PENDING = 1;
+  DEPLOY_PHASE_DOWNLOADING = 2;
+  DEPLOY_PHASE_VERIFYING = 3; // verify SHA256 / digest
+  DEPLOY_PHASE_DRAINING = 4; // notify old process, cancel-orders/flatten hook
+  DEPLOY_PHASE_SWITCHING = 5; // atomic symlink swap
+  DEPLOY_PHASE_STARTING = 6;
+  DEPLOY_PHASE_HEALTH_CHECKING = 7;
+  DEPLOY_PHASE_HEALTHY = 8;
+  DEPLOY_PHASE_ROLLED_BACK = 9;
+  DEPLOY_PHASE_FAILED = 10;
+  DEPLOY_PHASE_ROLLING_BACK = 11;
+}
+
+// StrategyAssignmentStatus is written only by the agent. The control plane
+// compares spec.generation with observed_generation to know convergence
+// progress; running_artifact != spec.artifact means convergence in progress.
+message StrategyAssignmentStatus {
+  string strategy = 1;
+  DeployPhase phase = 2;
+  int64 observed_generation = 3; // spec generation this status reflects
+  ArtifactRef running_artifact = 4; // actually running version (may lag spec)
+  ArtifactRef running_config = 5;
+  repeated Condition conditions = 6; // Live / Ready / BusinessHealthy
+  int32 pid = 7;
+  int32 restart_count = 8;
+  google.protobuf.Timestamp started_at = 9;
+  string last_error = 10;
+  bool lease_held = 11;
+  google.protobuf.Timestamp lease_expires_at = 12;
+}

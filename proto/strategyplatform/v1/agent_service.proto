@@ -1,0 +1,118 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "google/protobuf/timestamp.proto";
+import "strategyplatform/v1/enrollment.proto";
+import "strategyplatform/v1/spec.proto";
+import "strategyplatform/v1/status.proto";
+import "strategyplatform/v1/telemetry.proto";
+
+message LeaseRequest {
+  string request_id = 1;
+  string strategy = 2;
+  string machine_id = 3;
+  int32 requested_ttl_seconds = 4;
+}
+
+message LeaseRenew {
+  string lease_id = 1;
+  string strategy = 2;
+}
+
+message LeaseResponse {
+  string request_id = 1;
+  bool granted = 2;
+  string lease_id = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  string deny_reason = 5; // e.g. "held by machine M2 until T"
+}
+
+// TriggerRollback is an imperative optimization, not a source of truth; it can
+// be equivalently expressed by re-pointing the spec version.
+message TriggerRollback {
+  string command_id = 1;
+  string strategy = 2;
+  string target_version = 3; // empty = previous version
+}
+
+message DrainNow {
+  string command_id = 1;
+  string strategy = 2;
+  int32 grace_seconds = 3;
+}
+
+message Ack {
+  string command_id = 1;
+}
+
+// Nack is sent when the agent receives a command it does not understand. Never
+// silently ignore: silent ignore would make the control plane think a deploy
+// succeeded.
+message Nack {
+  string in_reply_to = 1; // rejected message_id / command_id
+  string reason = 2; // e.g. "UnknownCommand" | "UnsupportedInThisAgentVersion"
+  int32 agent_version = 3;
+}
+
+message Event {
+  google.protobuf.Timestamp timestamp = 1;
+  EventSeverity severity = 2;
+  string strategy = 3;
+  string reason = 4; // "DeployStarted" | "AutoRollback" | "CrashLoop" | "LeaseSuicide"
+  string message = 5;
+  map<string, string> details = 6;
+}
+
+enum EventSeverity {
+  EVENT_SEVERITY_UNSPECIFIED = 0;
+  EVENT_SEVERITY_INFO = 1;
+  EVENT_SEVERITY_WARNING = 2;
+  EVENT_SEVERITY_ERROR = 3;
+}
+
+message StatusReport {
+  int64 observed_generation = 1;
+  repeated StrategyAssignmentStatus assignments = 2;
+}
+
+// AgentMessage is the northbound envelope. Field 1 is always message_id; oneof
+// payloads start at field 2 and only ever grow.
+message AgentMessage {
+  string message_id = 1;
+  oneof payload {
+    Register register = 2;
+    Heartbeat heartbeat = 3;
+    StatusReport status_report = 4;
+    Event event = 5;
+    Nack nack = 6;
+    LeaseRequest lease_request = 7;
+    LeaseRenew lease_renew = 8;
+  }
+}
+
+// ControlMessage is the southbound envelope. DesiredState is the main message;
+// the imperative payloads are latency optimizations, not truth.
+message ControlMessage {
+  string message_id = 1;
+  oneof payload {
+    DesiredState desired_state = 2; // main: full desired-state snapshot
+    TriggerRollback trigger_rollback = 3; // latency optimization, not truth
+    DrainNow drain_now = 4;
+    LeaseResponse lease_response = 5;
+    Ack ack = 6;
+  }
+}
+
+service AgentService {
+  // Bootstrap channel: token for cert. This RPC does not require an mTLS client
+  // certificate.
+  rpc Enroll(EnrollRequest) returns (EnrollResponse);
+
+  // Main connection: agent-initiated outbound bidi stream, mTLS throughout. All
+  // southbound commands are pushed back over this stream; the control plane
+  // never initiates an inbound connection to the agent.
+  rpc Connect(stream AgentMessage) returns (stream ControlMessage);
+}
