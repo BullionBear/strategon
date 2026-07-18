@@ -184,7 +184,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return // backoff not elapsed; tick will wake us
 	}
 	switch {
-	case versionMatches(spec, st) && st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY:
+	case versionMatches(spec, st) && st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY && st.proc != nil:
 		st.observedGen = r.generation
 		return // steady state
 
