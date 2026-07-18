@@ -177,11 +177,31 @@ func (r *Reconciler) reconcile() {
 }
 
 func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyState) {
-	if st.inflight != nil {
-		return // deploy in progress; wait for worker events
-	}
 	if st.backoff.Blocked(r.now()) {
 		return // backoff not elapsed; tick will wake us
+	}
+	if st.inflight != nil {
+		// A deploy is in flight. During the download→verify→switch pipeline the
+		// main loop must not touch process state. But once the deploy has
+		// STARTED the new process (HEALTH_CHECKING) the worker goroutine is
+		// done and supervision is the main loop's job: if that new version
+		// crash-exits before it is promoted to HEALTHY, restart it here so the
+		// crash-loop budget is spent and auto-rollback can fire. Without this a
+		// fast-crashing new version stalls forever — inflight (cleared only by
+		// markHealthy/rollback) would otherwise block every restart, freezing
+		// the crash counter below the rollback threshold. Backoff (checked
+		// above) paces the restarts.
+		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING &&
+			st.proc == nil && versionMatches(spec, st) {
+			r.startProcess(spec, st)
+		}
+		return // otherwise wait for worker events
+	}
+	// FAILED is terminal for this desired generation (RECONCILER §4.1): report
+	// the error and wait for the next desired change (new generation) rather
+	// than hammering download forever on a bad URI/digest.
+	if st.phase == pb.DeployPhase_DEPLOY_PHASE_FAILED && st.failedAtGen == r.generation {
+		return
 	}
 	switch {
 	case versionMatches(spec, st) && st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY && st.proc != nil:
@@ -194,8 +214,15 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 
 	case !versionMatches(spec, st):
 		if spec.GetArtifact().GetVersion() == st.lastBadVersion {
-			r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_WARNING, "SkipBadVersion",
-				fmt.Sprintf("skipping known-bad version %s", st.lastBadVersion))
+			// Edge-triggered: warn once when we start skipping this bad version,
+			// not on every tick. Otherwise a single auto-rollback floods the
+			// control plane with ~1 event/sec forever (the ROLLED_BACK state
+			// permanently satisfies this branch until desired changes).
+			if st.warnedBadVersion != st.lastBadVersion {
+				st.warnedBadVersion = st.lastBadVersion
+				r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_WARNING, "SkipBadVersion",
+					fmt.Sprintf("skipping known-bad version %s", st.lastBadVersion))
+			}
 			return
 		}
 		r.beginDeploy(spec, st)

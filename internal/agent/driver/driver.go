@@ -42,6 +42,12 @@ type Process struct {
 	// pidfd is a Linux file descriptor (>=0) that becomes readable when the
 	// process exits. -1 when unavailable.
 	pidfd int
+
+	// owned is true when this agent forked the process (Start), meaning it is
+	// the OS parent and must reap the exit to avoid a zombie. False for
+	// Adopt-ed processes (re-attached after self-update): those are children of
+	// init, which reaps them, and wait4 here would return ECHILD.
+	owned bool
 }
 
 // Pidfd exposes the raw pidfd for callers that need to poll it directly.

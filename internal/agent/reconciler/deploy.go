@@ -20,6 +20,7 @@ func (r *Reconciler) beginDeploy(spec *pb.StrategyAssignmentSpec, st *strategySt
 	ctx, cancel := context.WithCancel(r.ctx)
 	st.inflight = &deployOp{target: spec.GetArtifact(), config: spec.GetConfig(), cancel: cancel}
 	st.phase = pb.DeployPhase_DEPLOY_PHASE_PENDING
+	st.warnedBadVersion = "" // a real deploy is starting; allow a fresh skip warning later
 	// Remember the currently-running version so rollback is O(1) (no download).
 	st.prevArtifact = st.runningArtifact
 	st.prevConfig = st.runningConfig
@@ -132,6 +133,7 @@ func (r *Reconciler) applyWorkerEvent(ev workerEvent) {
 		if ev.err != nil {
 			st.lastError = ev.err.Error()
 		}
+		st.failedAtGen = r.generation
 		st.inflight = nil
 		r.emitEvent(ev.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "DeployFailed", st.lastError)
 	}

@@ -29,6 +29,8 @@ type strategyState struct {
 	restartCount int32
 	backoff      supervisor.BackoffState
 	lastBadVersion string // version marked bad by auto-rollback; skipped on reconcile
+	warnedBadVersion string // version already reported via SkipBadVersion; edge-trigger the warning
+	failedAtGen    int64  // generation that produced FAILED; stay failed until desired moves
 
 	observedGen int64
 

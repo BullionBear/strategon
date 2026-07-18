@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/artifacturi"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -205,6 +206,12 @@ func (m *Memory) ListAudit(machineID, strategy string) []*pb.AuditEntry {
 func (m *Memory) RegisterArtifact(ref *pb.ArtifactRef) error {
 	if ref.GetName() == "" || ref.GetVersion() == "" || ref.GetDigest() == "" {
 		return fmt.Errorf("register artifact: name, version, and digest are required")
+	}
+	if ref.GetUri() == "" {
+		return fmt.Errorf("register artifact: uri is required")
+	}
+	if _, err := artifacturi.ResolveLocal(ref.GetUri()); err != nil {
+		return fmt.Errorf("register artifact: %w", err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/artifacturi"
 )
 
 // LocalFetcher copies artifact bytes from a local source path encoded in the
@@ -18,10 +18,9 @@ type LocalFetcher struct{}
 
 // Fetch copies the file referenced by ref.uri to dest.
 func (LocalFetcher) Fetch(ctx context.Context, ref *pb.ArtifactRef, dest string) error {
-	uri := ref.GetUri()
-	src := strings.TrimPrefix(uri, "file://")
-	if src == uri && !strings.HasPrefix(uri, "/") {
-		return fmt.Errorf("local fetcher: unsupported uri %q (want file:// or absolute path)", uri)
+	src, err := artifacturi.ResolveLocal(ref.GetUri())
+	if err != nil {
+		return fmt.Errorf("local fetcher: %w", err)
 	}
 	in, err := os.Open(src)
 	if err != nil {
