@@ -1,19 +1,21 @@
-// Command controlplane runs the Strategon control plane: the AgentService bidi
-// stream endpoint over h2c (plaintext HTTP/2 for local/dev; mTLS is a deferred
-// follow-up), backed by the in-memory store. A tiny admin endpoint lets you set
-// a strategy assignment and watch an agent converge.
+// Command controlplane runs the Strategon control plane:
+//
+//   - AgentService on --agent-addr (default :8080) — agent-outbound bidi stream
+//   - ControlPlaneService on --human-addr (default 127.0.0.1:8081) — human HTTP/JSON
+//
+// Separate ports match FRONTEND.md §0: different clients, different mental
+// models. The human port binds loopback by default (no auth yet).
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"log/slog"
 	"net/http"
 	"os"
 	"time"
 
-	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
+	"github.com/bullionbear/strategon/internal/controlplane/api"
 	"github.com/bullionbear/strategon/internal/controlplane/grpcstream"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"golang.org/x/net/http2"
@@ -21,64 +23,66 @@ import (
 )
 
 func main() {
-	addr := flag.String("addr", ":8080", "listen address")
-	resync := flag.Duration("resync", 30*time.Second, "periodic full-resync interval")
+	agentAddr := flag.String("agent-addr", ":8080", "AgentService listen address")
+	humanAddr := flag.String("human-addr", "127.0.0.1:8081", "ControlPlaneService listen address (bind loopback; no auth)")
+	// Legacy alias for agent addr.
+	legacyAddr := flag.String("addr", "", "deprecated alias for --agent-addr")
+	resync := flag.Duration("resync", 30*time.Second, "periodic full-resync interval for agents")
 	flag.Parse()
+	if *legacyAddr != "" {
+		*agentAddr = *legacyAddr
+	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	st := store.NewMemory()
-	srv := grpcstream.New(st, grpcstream.WithResync(*resync), grpcstream.WithLogger(logger))
+	hub := store.NewHub()
+	st := store.NewMemory(hub)
+	agentSrv := grpcstream.New(st, grpcstream.WithResync(*resync), grpcstream.WithLogger(logger))
+	humanSrv := api.New(st, hub, agentSrv, logger)
 
-	mux := http.NewServeMux()
-	path, handler := strategyplatformv1connect.NewAgentServiceHandler(srv)
-	mux.Handle(path, handler)
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
-	registerAdmin(mux, st, srv)
+	agentMux := http.NewServeMux()
+	agentPath, agentHandler := strategyplatformv1connect.NewAgentServiceHandler(agentSrv)
+	agentMux.Handle(agentPath, agentHandler)
+	agentMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	humanMux := http.NewServeMux()
+	humanPath, humanHandler := strategyplatformv1connect.NewControlPlaneServiceHandler(humanSrv)
+	humanMux.Handle(humanPath, withCORS(humanHandler))
+	humanMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	h2s := &http2.Server{}
-	httpServer := &http.Server{Addr: *addr, Handler: h2c.NewHandler(mux, h2s)}
-	logger.Info("control plane listening", "addr", *addr)
-	if err := httpServer.ListenAndServe(); err != nil {
-		logger.Error("server exited", "err", err)
+	go func() {
+		logger.Info("agent service listening", "addr", *agentAddr)
+		srv := &http.Server{Addr: *agentAddr, Handler: h2c.NewHandler(agentMux, h2s)}
+		if err := srv.ListenAndServe(); err != nil {
+			logger.Error("agent server exited", "err", err)
+			os.Exit(1)
+		}
+	}()
+
+	logger.Info("human API listening", "addr", *humanAddr)
+	humanHTTP := &http.Server{Addr: *humanAddr, Handler: h2c.NewHandler(humanMux, h2s)}
+	if err := humanHTTP.ListenAndServe(); err != nil {
+		logger.Error("human server exited", "err", err)
 		os.Exit(1)
 	}
 }
 
-// registerAdmin exposes a minimal JSON endpoint for setting an assignment. The
-// full human-facing ControlPlaneService (Connect) is a deferred follow-up; this
-// stand-in exercises the "change desired state -> agent converges" path.
-func registerAdmin(mux *http.ServeMux, st store.Store, srv *grpcstream.Server) {
-	mux.HandleFunc("/admin/assign", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+// withCORS allows the local SvelteKit dev server to call the human API.
+// Production sits behind VPN/SSO; this is a local-dev convenience only.
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			origin = "*"
+		}
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms, Grpc-Timeout, X-Grpc-Web, X-User-Agent")
+		w.Header().Set("Access-Control-Expose-Headers", "Grpc-Status, Grpc-Message, Grpc-Status-Details-Bin, Connect-Content-Encoding")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		var req struct {
-			MachineID string `json:"machine_id"`
-			Strategy  string `json:"strategy"`
-			Version   string `json:"version"`
-			Digest    string `json:"digest"`
-			URI       string `json:"uri"`
-			Remove    bool   `json:"remove"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		var spec *pb.StrategyAssignmentSpec
-		if !req.Remove {
-			spec = &pb.StrategyAssignmentSpec{
-				Strategy: req.Strategy,
-				Artifact: &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY, Version: req.Version, Digest: req.Digest, Uri: req.URI},
-				DeployPolicy: &pb.DeployPolicy{Startsecs: 2, HealthWindowSeconds: 10, MaxCrashesInWindow: 3, StopGraceSeconds: 5, EnableAutoRollback: true},
-			}
-		}
-		gen, err := st.SetAssignment(req.MachineID, req.Strategy, spec)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		srv.Notify(req.MachineID)
-		_ = json.NewEncoder(w).Encode(map[string]int64{"generation": gen})
+		next.ServeHTTP(w, r)
 	})
 }

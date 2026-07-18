@@ -13,35 +13,53 @@ import (
 // Memory is an in-memory Store. It is safe for concurrent use; the control
 // plane serves many agent streams and human API calls concurrently.
 type Memory struct {
-	mu       sync.RWMutex
-	machines map[string]*MachineRecord
-	audit    []*pb.AuditEntry
+	mu        sync.RWMutex
+	machines  map[string]*MachineRecord
+	artifacts map[string]*pb.ArtifactRef // key = name + "\x00" + version
+	audit     []*pb.AuditEntry
+	hub       *Hub
 }
 
-// NewMemory returns an empty in-memory store.
-func NewMemory() *Memory {
-	return &Memory{machines: map[string]*MachineRecord{}}
+// NewMemory returns an empty in-memory store that notifies hub on changes.
+// hub may be nil (no fan-out).
+func NewMemory(hub *Hub) *Memory {
+	return &Memory{
+		machines:  map[string]*MachineRecord{},
+		artifacts: map[string]*pb.ArtifactRef{},
+		hub:       hub,
+	}
 }
+
+func (m *Memory) notify(machineID string) {
+	if m.hub != nil && machineID != "" {
+		m.hub.Notify(machineID)
+	}
+}
+
+func artifactKey(name, version string) string { return name + "\x00" + version }
 
 func (m *Memory) UpsertMachine(reg *pb.Register) (*MachineRecord, error) {
 	if reg.GetMachineId() == "" {
 		return nil, fmt.Errorf("upsert: empty machine_id")
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	rec := m.machines[reg.GetMachineId()]
 	if rec == nil {
 		rec = &MachineRecord{
-			MachineID:   reg.GetMachineId(),
-			Assignments: map[string]*pb.StrategyAssignmentSpec{},
-			Status:      map[string]*pb.StrategyAssignmentStatus{},
+			MachineID:         reg.GetMachineId(),
+			Assignments:       map[string]*pb.StrategyAssignmentSpec{},
+			Status:            map[string]*pb.StrategyAssignmentStatus{},
+			PreviousArtifacts: map[string]*pb.ArtifactRef{},
 		}
 		m.machines[reg.GetMachineId()] = rec
 	}
 	rec.Register = proto.Clone(reg).(*pb.Register)
 	rec.AgentVersion = reg.GetAgentVersion()
 	rec.Reachable = true
-	return snapshotMachine(rec), nil
+	snap := snapshotMachine(rec)
+	m.mu.Unlock()
+	m.notify(reg.GetMachineId())
+	return snap, nil
 }
 
 func (m *Memory) GetMachine(machineID string) (*MachineRecord, bool) {
@@ -81,25 +99,35 @@ func (m *Memory) DesiredState(machineID string) (*pb.DesiredState, bool) {
 
 func (m *Memory) SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	rec, ok := m.machines[machineID]
 	if !ok {
+		m.mu.Unlock()
 		return 0, fmt.Errorf("set assignment: unknown machine %s", machineID)
 	}
 	if spec == nil {
 		delete(rec.Assignments, strategy)
+		delete(rec.PreviousArtifacts, strategy)
+		delete(rec.Status, strategy)
 	} else {
+		if old := rec.Assignments[strategy]; old != nil &&
+			old.GetArtifact().GetDigest() != "" &&
+			old.GetArtifact().GetDigest() != spec.GetArtifact().GetDigest() {
+			rec.PreviousArtifacts[strategy] = proto.Clone(old.GetArtifact()).(*pb.ArtifactRef)
+		}
 		rec.Assignments[strategy] = proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	}
 	rec.Generation++ // monotonic bump on every spec change (PROTOCOL §1)
-	return rec.Generation, nil
+	gen := rec.Generation
+	m.mu.Unlock()
+	m.notify(machineID)
+	return gen, nil
 }
 
 func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	rec, ok := m.machines[machineID]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("apply status: unknown machine %s", machineID)
 	}
 	for _, a := range report.GetAssignments() {
@@ -108,14 +136,16 @@ func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	if report.GetObservedGeneration() > rec.ObservedGen {
 		rec.ObservedGen = report.GetObservedGeneration()
 	}
+	m.mu.Unlock()
+	m.notify(machineID)
 	return nil
 }
 
 func (m *Memory) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	rec, ok := m.machines[machineID]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("apply heartbeat: unknown machine %s", machineID)
 	}
 	if hb.GetResources() != nil {
@@ -127,17 +157,21 @@ func (m *Memory) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64
 	if hb.GetObservedGeneration() > rec.ObservedGen {
 		rec.ObservedGen = hb.GetObservedGeneration()
 	}
+	m.mu.Unlock()
+	m.notify(machineID)
 	return nil
 }
 
 func (m *Memory) SetReachable(machineID string, reachable bool) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	rec, ok := m.machines[machineID]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("set reachable: unknown machine %s", machineID)
 	}
 	rec.Reachable = reachable
+	m.mu.Unlock()
+	m.notify(machineID)
 	return nil
 }
 
@@ -168,6 +202,59 @@ func (m *Memory) ListAudit(machineID, strategy string) []*pb.AuditEntry {
 	return out
 }
 
+func (m *Memory) RegisterArtifact(ref *pb.ArtifactRef) error {
+	if ref.GetName() == "" || ref.GetVersion() == "" || ref.GetDigest() == "" {
+		return fmt.Errorf("register artifact: name, version, and digest are required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.artifacts[artifactKey(ref.GetName(), ref.GetVersion())] = proto.Clone(ref).(*pb.ArtifactRef)
+	return nil
+}
+
+func (m *Memory) GetArtifact(name, version string) (*pb.ArtifactRef, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	ref, ok := m.artifacts[artifactKey(name, version)]
+	if !ok {
+		return nil, false
+	}
+	return proto.Clone(ref).(*pb.ArtifactRef), true
+}
+
+func (m *Memory) ListArtifacts(name string) []*pb.ArtifactRef {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]*pb.ArtifactRef, 0, len(m.artifacts))
+	for _, ref := range m.artifacts {
+		if name != "" && ref.GetName() != name {
+			continue
+		}
+		out = append(out, proto.Clone(ref).(*pb.ArtifactRef))
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].GetName() != out[j].GetName() {
+			return out[i].GetName() < out[j].GetName()
+		}
+		return out[i].GetVersion() < out[j].GetVersion()
+	})
+	return out
+}
+
+func (m *Memory) PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	rec, ok := m.machines[machineID]
+	if !ok {
+		return nil, false
+	}
+	ref, ok := rec.PreviousArtifacts[strategy]
+	if !ok || ref == nil {
+		return nil, false
+	}
+	return proto.Clone(ref).(*pb.ArtifactRef), true
+}
+
 // buildDesiredState renders the full snapshot for a machine (caller holds lock).
 func buildDesiredState(rec *MachineRecord) *pb.DesiredState {
 	names := make([]string, 0, len(rec.Assignments))
@@ -189,14 +276,15 @@ func buildDesiredState(rec *MachineRecord) *pb.DesiredState {
 // snapshotMachine returns a deep copy (caller holds lock).
 func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	cp := &MachineRecord{
-		MachineID:     rec.MachineID,
-		Reachable:     rec.Reachable,
-		AgentVersion:  rec.AgentVersion,
-		LastHeartbeat: rec.LastHeartbeat,
-		Generation:    rec.Generation,
-		ObservedGen:   rec.ObservedGen,
-		Assignments:   map[string]*pb.StrategyAssignmentSpec{},
-		Status:        map[string]*pb.StrategyAssignmentStatus{},
+		MachineID:         rec.MachineID,
+		Reachable:         rec.Reachable,
+		AgentVersion:      rec.AgentVersion,
+		LastHeartbeat:     rec.LastHeartbeat,
+		Generation:        rec.Generation,
+		ObservedGen:       rec.ObservedGen,
+		Assignments:       map[string]*pb.StrategyAssignmentSpec{},
+		Status:            map[string]*pb.StrategyAssignmentStatus{},
+		PreviousArtifacts: map[string]*pb.ArtifactRef{},
 	}
 	if rec.Register != nil {
 		cp.Register = proto.Clone(rec.Register).(*pb.Register)
@@ -209,6 +297,9 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	}
 	for k, v := range rec.Status {
 		cp.Status[k] = proto.Clone(v).(*pb.StrategyAssignmentStatus)
+	}
+	for k, v := range rec.PreviousArtifacts {
+		cp.PreviousArtifacts[k] = proto.Clone(v).(*pb.ArtifactRef)
 	}
 	return cp
 }

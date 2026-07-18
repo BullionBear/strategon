@@ -54,18 +54,26 @@ const (
 	// ControlPlaneServiceListAuditProcedure is the fully-qualified name of the ControlPlaneService's
 	// ListAudit RPC.
 	ControlPlaneServiceListAuditProcedure = "/strategyplatform.v1.ControlPlaneService/ListAudit"
+	// ControlPlaneServiceRegisterArtifactProcedure is the fully-qualified name of the
+	// ControlPlaneService's RegisterArtifact RPC.
+	ControlPlaneServiceRegisterArtifactProcedure = "/strategyplatform.v1.ControlPlaneService/RegisterArtifact"
+	// ControlPlaneServiceListArtifactsProcedure is the fully-qualified name of the
+	// ControlPlaneService's ListArtifacts RPC.
+	ControlPlaneServiceListArtifactsProcedure = "/strategyplatform.v1.ControlPlaneService/ListArtifacts"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	controlPlaneServiceServiceDescriptor            = v1.File_strategyplatform_v1_control_service_proto.Services().ByName("ControlPlaneService")
-	controlPlaneServiceListMachinesMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("ListMachines")
-	controlPlaneServiceGetMachineMethodDescriptor   = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachine")
-	controlPlaneServiceDeployMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("Deploy")
-	controlPlaneServiceRollbackMethodDescriptor     = controlPlaneServiceServiceDescriptor.Methods().ByName("Rollback")
-	controlPlaneServiceSetScheduleMethodDescriptor  = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSchedule")
-	controlPlaneServiceWatchMachineMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("WatchMachine")
-	controlPlaneServiceListAuditMethodDescriptor    = controlPlaneServiceServiceDescriptor.Methods().ByName("ListAudit")
+	controlPlaneServiceServiceDescriptor                = v1.File_strategyplatform_v1_control_service_proto.Services().ByName("ControlPlaneService")
+	controlPlaneServiceListMachinesMethodDescriptor     = controlPlaneServiceServiceDescriptor.Methods().ByName("ListMachines")
+	controlPlaneServiceGetMachineMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachine")
+	controlPlaneServiceDeployMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("Deploy")
+	controlPlaneServiceRollbackMethodDescriptor         = controlPlaneServiceServiceDescriptor.Methods().ByName("Rollback")
+	controlPlaneServiceSetScheduleMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSchedule")
+	controlPlaneServiceWatchMachineMethodDescriptor     = controlPlaneServiceServiceDescriptor.Methods().ByName("WatchMachine")
+	controlPlaneServiceListAuditMethodDescriptor        = controlPlaneServiceServiceDescriptor.Methods().ByName("ListAudit")
+	controlPlaneServiceRegisterArtifactMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("RegisterArtifact")
+	controlPlaneServiceListArtifactsMethodDescriptor    = controlPlaneServiceServiceDescriptor.Methods().ByName("ListArtifacts")
 )
 
 // ControlPlaneServiceClient is a client for the strategyplatform.v1.ControlPlaneService service.
@@ -78,6 +86,8 @@ type ControlPlaneServiceClient interface {
 	// UI real-time panel: machine status and deploy progress push.
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest]) (*connect.ServerStreamForClient[v1.MachineStatusEvent], error)
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
+	RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error)
+	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 }
 
 // NewControlPlaneServiceClient constructs a client for the strategyplatform.v1.ControlPlaneService
@@ -132,18 +142,32 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceListAuditMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		registerArtifact: connect.NewClient[v1.RegisterArtifactRequest, v1.RegisterArtifactResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceRegisterArtifactProcedure,
+			connect.WithSchema(controlPlaneServiceRegisterArtifactMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		listArtifacts: connect.NewClient[v1.ListArtifactsRequest, v1.ListArtifactsResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceListArtifactsProcedure,
+			connect.WithSchema(controlPlaneServiceListArtifactsMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // controlPlaneServiceClient implements ControlPlaneServiceClient.
 type controlPlaneServiceClient struct {
-	listMachines *connect.Client[v1.ListMachinesRequest, v1.ListMachinesResponse]
-	getMachine   *connect.Client[v1.GetMachineRequest, v1.Machine]
-	deploy       *connect.Client[v1.DeployRequest, v1.DeployResponse]
-	rollback     *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
-	setSchedule  *connect.Client[v1.SetScheduleRequest, v1.SetScheduleResponse]
-	watchMachine *connect.Client[v1.GetMachineRequest, v1.MachineStatusEvent]
-	listAudit    *connect.Client[v1.ListAuditRequest, v1.ListAuditResponse]
+	listMachines     *connect.Client[v1.ListMachinesRequest, v1.ListMachinesResponse]
+	getMachine       *connect.Client[v1.GetMachineRequest, v1.Machine]
+	deploy           *connect.Client[v1.DeployRequest, v1.DeployResponse]
+	rollback         *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
+	setSchedule      *connect.Client[v1.SetScheduleRequest, v1.SetScheduleResponse]
+	watchMachine     *connect.Client[v1.GetMachineRequest, v1.MachineStatusEvent]
+	listAudit        *connect.Client[v1.ListAuditRequest, v1.ListAuditResponse]
+	registerArtifact *connect.Client[v1.RegisterArtifactRequest, v1.RegisterArtifactResponse]
+	listArtifacts    *connect.Client[v1.ListArtifactsRequest, v1.ListArtifactsResponse]
 }
 
 // ListMachines calls strategyplatform.v1.ControlPlaneService.ListMachines.
@@ -181,6 +205,16 @@ func (c *controlPlaneServiceClient) ListAudit(ctx context.Context, req *connect.
 	return c.listAudit.CallUnary(ctx, req)
 }
 
+// RegisterArtifact calls strategyplatform.v1.ControlPlaneService.RegisterArtifact.
+func (c *controlPlaneServiceClient) RegisterArtifact(ctx context.Context, req *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error) {
+	return c.registerArtifact.CallUnary(ctx, req)
+}
+
+// ListArtifacts calls strategyplatform.v1.ControlPlaneService.ListArtifacts.
+func (c *controlPlaneServiceClient) ListArtifacts(ctx context.Context, req *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error) {
+	return c.listArtifacts.CallUnary(ctx, req)
+}
+
 // ControlPlaneServiceHandler is an implementation of the strategyplatform.v1.ControlPlaneService
 // service.
 type ControlPlaneServiceHandler interface {
@@ -192,6 +226,8 @@ type ControlPlaneServiceHandler interface {
 	// UI real-time panel: machine status and deploy progress push.
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest], *connect.ServerStream[v1.MachineStatusEvent]) error
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
+	RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error)
+	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 }
 
 // NewControlPlaneServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -242,6 +278,18 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceListAuditMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceRegisterArtifactHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceRegisterArtifactProcedure,
+		svc.RegisterArtifact,
+		connect.WithSchema(controlPlaneServiceRegisterArtifactMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceListArtifactsHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceListArtifactsProcedure,
+		svc.ListArtifacts,
+		connect.WithSchema(controlPlaneServiceListArtifactsMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/strategyplatform.v1.ControlPlaneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ControlPlaneServiceListMachinesProcedure:
@@ -258,6 +306,10 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceWatchMachineHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceListAuditProcedure:
 			controlPlaneServiceListAuditHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceRegisterArtifactProcedure:
+			controlPlaneServiceRegisterArtifactHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceListArtifactsProcedure:
+			controlPlaneServiceListArtifactsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -293,4 +345,12 @@ func (UnimplementedControlPlaneServiceHandler) WatchMachine(context.Context, *co
 
 func (UnimplementedControlPlaneServiceHandler) ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListAudit is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.RegisterArtifact is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListArtifacts is not implemented"))
 }

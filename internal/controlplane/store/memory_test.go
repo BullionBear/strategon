@@ -7,7 +7,7 @@ import (
 )
 
 func TestGenerationMonotonicAndDesiredSnapshot(t *testing.T) {
-	s := NewMemory()
+	s := NewMemory(nil)
 	if _, err := s.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 1}); err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestGenerationMonotonicAndDesiredSnapshot(t *testing.T) {
 }
 
 func TestApplyStatusAndHeartbeat(t *testing.T) {
-	s := NewMemory()
+	s := NewMemory(nil)
 	s.UpsertMachine(&pb.Register{MachineId: "m1"})
 	if err := s.ApplyStatus("m1", &pb.StatusReport{ObservedGeneration: 5}); err != nil {
 		t.Fatal(err)

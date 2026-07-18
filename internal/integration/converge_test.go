@@ -42,7 +42,8 @@ func TestChangeDesiredConvergesThenRetires(t *testing.T) {
 	}
 
 	// --- Control plane over h2c ---
-	st := store.NewMemory()
+	hub := store.NewHub()
+	st := store.NewMemory(hub)
 	srv := grpcstream.New(st, grpcstream.WithResync(500*time.Millisecond))
 	mux := http.NewServeMux()
 	path, handler := strategyplatformv1connect.NewAgentServiceHandler(srv)

@@ -1,6 +1,7 @@
 // Package store is the control plane's state boundary: desired state (spec),
-// observed state (status), machine registry, and audit log. spec is written
-// ONLY by the control plane; status is written ONLY by agents (PROTOCOL.md §0).
+// observed state (status), machine registry, artifact catalog, and audit log.
+// spec is written ONLY by the control plane; status is written ONLY by agents
+// (PROTOCOL.md §0).
 //
 // The interface keeps the backing store swappable; the v1 implementation is
 // in-memory (Postgres/sqlc is a deferred follow-up, ARCHITECTURE.md §16.3).
@@ -23,7 +24,10 @@ type MachineRecord struct {
 	Generation    int64
 	Assignments   map[string]*pb.StrategyAssignmentSpec // strategy -> spec
 	Status        map[string]*pb.StrategyAssignmentStatus
-	ObservedGen   int64
+	// PreviousArtifacts tracks the last replaced artifact per strategy so
+	// Rollback with empty target_version can re-point desired state (FRONTEND.md §2.2).
+	PreviousArtifacts map[string]*pb.ArtifactRef
+	ObservedGen       int64
 }
 
 // Store is the control-plane persistence boundary.
@@ -59,4 +63,17 @@ type Store interface {
 
 	// ListAudit returns audit entries, newest first (optionally filtered).
 	ListAudit(machineID, strategy string) []*pb.AuditEntry
+
+	// RegisterArtifact upserts an artifact into the catalog (keyed by name+version).
+	RegisterArtifact(ref *pb.ArtifactRef) error
+
+	// GetArtifact looks up a registered artifact by name and version.
+	GetArtifact(name, version string) (*pb.ArtifactRef, bool)
+
+	// ListArtifacts returns registered artifacts, optionally filtered by name.
+	ListArtifacts(name string) []*pb.ArtifactRef
+
+	// PreviousArtifact returns the artifact that was replaced by the last Deploy
+	// for the given machine/strategy (for empty-target Rollback).
+	PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef, bool)
 }
