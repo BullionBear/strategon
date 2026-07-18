@@ -1,0 +1,62 @@
+// Package store is the control plane's state boundary: desired state (spec),
+// observed state (status), machine registry, and audit log. spec is written
+// ONLY by the control plane; status is written ONLY by agents (PROTOCOL.md §0).
+//
+// The interface keeps the backing store swappable; the v1 implementation is
+// in-memory (Postgres/sqlc is a deferred follow-up, ARCHITECTURE.md §16.3).
+// Every spec mutation bumps a per-machine monotonically increasing generation,
+// the sole coupling between desired and observed.
+package store
+
+import (
+	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+)
+
+// MachineRecord is the control plane's view of a machine.
+type MachineRecord struct {
+	MachineID     string
+	Register      *pb.Register
+	Reachable     bool
+	AgentVersion  int32
+	LastResources *pb.MachineResources
+	LastHeartbeat int64 // unix seconds; 0 = never
+	Generation    int64
+	Assignments   map[string]*pb.StrategyAssignmentSpec // strategy -> spec
+	Status        map[string]*pb.StrategyAssignmentStatus
+	ObservedGen   int64
+}
+
+// Store is the control-plane persistence boundary.
+type Store interface {
+	// UpsertMachine registers or updates a machine on (re)connect. Returns the
+	// current record.
+	UpsertMachine(reg *pb.Register) (*MachineRecord, error)
+
+	// GetMachine returns a snapshot copy of the machine record.
+	GetMachine(machineID string) (*MachineRecord, bool)
+
+	// ListMachines returns snapshot copies of all machine records.
+	ListMachines() []*MachineRecord
+
+	// DesiredState builds the current full DesiredState snapshot for a machine.
+	DesiredState(machineID string) (*pb.DesiredState, bool)
+
+	// SetAssignment sets (or, with nil spec, removes) a strategy assignment and
+	// bumps the machine generation. Returns the new generation.
+	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error)
+
+	// ApplyStatus records an agent-reported StatusReport.
+	ApplyStatus(machineID string, report *pb.StatusReport) error
+
+	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent version).
+	ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64) error
+
+	// SetReachable marks a machine reachable/unreachable.
+	SetReachable(machineID string, reachable bool) error
+
+	// AppendAudit records an audit entry (deploy/rollback/config change).
+	AppendAudit(entry *pb.AuditEntry) error
+
+	// ListAudit returns audit entries, newest first (optionally filtered).
+	ListAudit(machineID, strategy string) []*pb.AuditEntry
+}
