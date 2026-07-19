@@ -15,6 +15,10 @@ go.work.sum
 # Local runtime artifacts (strategy release trees created during tests/runs)
 /tmp/strategon-*
 
+# Local mTLS material from strategon-ca (never commit private keys)
+/ca/
+/certs/
+
 # Frontend
 web/node_modules/
 web/.svelte-kit/

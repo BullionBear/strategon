@@ -8,6 +8,7 @@ package grpcstream
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/clock"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"github.com/bullionbear/strategon/internal/mtls"
 )
 
 // Server implements strategyplatformv1connect.AgentServiceHandler.
@@ -72,12 +74,12 @@ func (s *Server) Notify(machineID string) {
 	}
 }
 
-// Enroll is the bootstrap credential exchange. mTLS enrollment is a deferred
-// security-phase follow-up (ARCHITECTURE §5, SAFETY §6); for now the endpoint
-// is explicitly unimplemented rather than issuing insecure certs.
+// Enroll is the online token→CSR bootstrap (PROTOCOL §6). Offline CA issuance
+// via strategon-ca covers the current mTLS path; online enrollment remains
+// unimplemented so we never mint insecure certs from this RPC.
 func (s *Server) Enroll(context.Context, *connect.Request[pb.EnrollRequest]) (*connect.Response[pb.EnrollResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented,
-		errors.New("enrollment (mTLS bootstrap) is not implemented in the foundation build"))
+		errors.New("online enrollment (token→CSR) is not implemented; use strategon-ca for offline mTLS certs"))
 }
 
 // Connect handles the agent's bidi stream for its whole session.
@@ -91,6 +93,10 @@ func (s *Server) Connect(ctx context.Context, stream *connect.BidiStream[pb.Agen
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("first message must be Register"))
 	}
 	machineID := reg.GetMachineId()
+	if peerCN, ok := mtls.PeerCN(ctx); ok && peerCN != machineID {
+		return connect.NewError(connect.CodePermissionDenied,
+			fmt.Errorf("Register.machine_id %q does not match client certificate CN %q", machineID, peerCN))
+	}
 	if _, err := s.store.UpsertMachine(reg); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
@@ -162,8 +168,9 @@ func (s *Server) handleAgentMessage(machineID string, msg *pb.AgentMessage) {
 		s.logger.Warn("agent nack", "machine_id", machineID,
 			"in_reply_to", p.Nack.GetInReplyTo(), "reason", p.Nack.GetReason())
 	case *pb.AgentMessage_LeaseRequest, *pb.AgentMessage_LeaseRenew:
-		// Fencing lease is a deferred safety-phase follow-up (SAFETY.md).
-		s.logger.Debug("lease message ignored (deferred)", "machine_id", machineID)
+		// Lease lifecycle is owned by the strategy SDK via LeaseService
+		// (IMPROVEMENT A1); the agent stream does not participate.
+		s.logger.Debug("lease stream message ignored (SDK-owned)", "machine_id", machineID)
 	default:
 		s.logger.Warn("unhandled agent message", "machine_id", machineID)
 	}

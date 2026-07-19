@@ -68,6 +68,10 @@ func (f *fakeDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*dri
 	if startTime != 0 && startTime != uint64(pid) {
 		return nil, errors.New("starttime mismatch")
 	}
+	// Keep WatchExit blocked until kill(); recreate channel if missing.
+	if f.exitCh[pid] == nil {
+		f.exitCh[pid] = make(chan struct{})
+	}
 	return &driver.Process{PID: pid, StartTime: uint64(pid), PGID: pid, StartedAt: startedAt}, nil
 }
 

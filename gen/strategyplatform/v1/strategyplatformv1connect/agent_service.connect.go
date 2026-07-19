@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// AgentServiceName is the fully-qualified name of the AgentService service.
 	AgentServiceName = "strategyplatform.v1.AgentService"
+	// LeaseServiceName is the fully-qualified name of the LeaseService service.
+	LeaseServiceName = "strategyplatform.v1.LeaseService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -37,6 +39,10 @@ const (
 	AgentServiceEnrollProcedure = "/strategyplatform.v1.AgentService/Enroll"
 	// AgentServiceConnectProcedure is the fully-qualified name of the AgentService's Connect RPC.
 	AgentServiceConnectProcedure = "/strategyplatform.v1.AgentService/Connect"
+	// LeaseServiceAcquireProcedure is the fully-qualified name of the LeaseService's Acquire RPC.
+	LeaseServiceAcquireProcedure = "/strategyplatform.v1.LeaseService/Acquire"
+	// LeaseServiceRenewProcedure is the fully-qualified name of the LeaseService's Renew RPC.
+	LeaseServiceRenewProcedure = "/strategyplatform.v1.LeaseService/Renew"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -44,6 +50,9 @@ var (
 	agentServiceServiceDescriptor       = v1.File_strategyplatform_v1_agent_service_proto.Services().ByName("AgentService")
 	agentServiceEnrollMethodDescriptor  = agentServiceServiceDescriptor.Methods().ByName("Enroll")
 	agentServiceConnectMethodDescriptor = agentServiceServiceDescriptor.Methods().ByName("Connect")
+	leaseServiceServiceDescriptor       = v1.File_strategyplatform_v1_agent_service_proto.Services().ByName("LeaseService")
+	leaseServiceAcquireMethodDescriptor = leaseServiceServiceDescriptor.Methods().ByName("Acquire")
+	leaseServiceRenewMethodDescriptor   = leaseServiceServiceDescriptor.Methods().ByName("Renew")
 )
 
 // AgentServiceClient is a client for the strategyplatform.v1.AgentService service.
@@ -148,4 +157,98 @@ func (UnimplementedAgentServiceHandler) Enroll(context.Context, *connect.Request
 
 func (UnimplementedAgentServiceHandler) Connect(context.Context, *connect.BidiStream[v1.AgentMessage, v1.ControlMessage]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.AgentService.Connect is not implemented"))
+}
+
+// LeaseServiceClient is a client for the strategyplatform.v1.LeaseService service.
+type LeaseServiceClient interface {
+	Acquire(context.Context, *connect.Request[v1.LeaseRequest]) (*connect.Response[v1.LeaseResponse], error)
+	Renew(context.Context, *connect.Request[v1.LeaseRenew]) (*connect.Response[v1.LeaseResponse], error)
+}
+
+// NewLeaseServiceClient constructs a client for the strategyplatform.v1.LeaseService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewLeaseServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) LeaseServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	return &leaseServiceClient{
+		acquire: connect.NewClient[v1.LeaseRequest, v1.LeaseResponse](
+			httpClient,
+			baseURL+LeaseServiceAcquireProcedure,
+			connect.WithSchema(leaseServiceAcquireMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		renew: connect.NewClient[v1.LeaseRenew, v1.LeaseResponse](
+			httpClient,
+			baseURL+LeaseServiceRenewProcedure,
+			connect.WithSchema(leaseServiceRenewMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// leaseServiceClient implements LeaseServiceClient.
+type leaseServiceClient struct {
+	acquire *connect.Client[v1.LeaseRequest, v1.LeaseResponse]
+	renew   *connect.Client[v1.LeaseRenew, v1.LeaseResponse]
+}
+
+// Acquire calls strategyplatform.v1.LeaseService.Acquire.
+func (c *leaseServiceClient) Acquire(ctx context.Context, req *connect.Request[v1.LeaseRequest]) (*connect.Response[v1.LeaseResponse], error) {
+	return c.acquire.CallUnary(ctx, req)
+}
+
+// Renew calls strategyplatform.v1.LeaseService.Renew.
+func (c *leaseServiceClient) Renew(ctx context.Context, req *connect.Request[v1.LeaseRenew]) (*connect.Response[v1.LeaseResponse], error) {
+	return c.renew.CallUnary(ctx, req)
+}
+
+// LeaseServiceHandler is an implementation of the strategyplatform.v1.LeaseService service.
+type LeaseServiceHandler interface {
+	Acquire(context.Context, *connect.Request[v1.LeaseRequest]) (*connect.Response[v1.LeaseResponse], error)
+	Renew(context.Context, *connect.Request[v1.LeaseRenew]) (*connect.Response[v1.LeaseResponse], error)
+}
+
+// NewLeaseServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewLeaseServiceHandler(svc LeaseServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	leaseServiceAcquireHandler := connect.NewUnaryHandler(
+		LeaseServiceAcquireProcedure,
+		svc.Acquire,
+		connect.WithSchema(leaseServiceAcquireMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	leaseServiceRenewHandler := connect.NewUnaryHandler(
+		LeaseServiceRenewProcedure,
+		svc.Renew,
+		connect.WithSchema(leaseServiceRenewMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/strategyplatform.v1.LeaseService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case LeaseServiceAcquireProcedure:
+			leaseServiceAcquireHandler.ServeHTTP(w, r)
+		case LeaseServiceRenewProcedure:
+			leaseServiceRenewHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedLeaseServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedLeaseServiceHandler struct{}
+
+func (UnimplementedLeaseServiceHandler) Acquire(context.Context, *connect.Request[v1.LeaseRequest]) (*connect.Response[v1.LeaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.LeaseService.Acquire is not implemented"))
+}
+
+func (UnimplementedLeaseServiceHandler) Renew(context.Context, *connect.Request[v1.LeaseRenew]) (*connect.Response[v1.LeaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.LeaseService.Renew is not implemented"))
 }

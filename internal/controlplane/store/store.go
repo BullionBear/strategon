@@ -10,6 +10,8 @@
 package store
 
 import (
+	"time"
+
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
 
@@ -76,4 +78,18 @@ type Store interface {
 	// PreviousArtifact returns the artifact that was replaced by the last Deploy
 	// for the given machine/strategy (for empty-target Rollback).
 	PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef, bool)
+
+	// AcquireLease grants or refreshes a fencing lease for strategy on machineID
+	// (PROTOCOL §10.4). Denied when another machine holds an unexpired lease
+	// (including margin_cp).
+	AcquireLease(machineID, strategy string, ttl time.Duration) (LeaseResult, error)
+
+	// RenewLease extends a lease; only the current holder with matching lease_id.
+	RenewLease(machineID, strategy, leaseID string, ttl time.Duration) (LeaseResult, error)
+
+	// GetLease returns the current lease record for strategy, if any.
+	GetLease(strategy string) (LeaseInfo, bool)
+
+	// LeaseMarginCP returns the control-plane expiry margin (SAFETY §2).
+	LeaseMarginCP() time.Duration
 }

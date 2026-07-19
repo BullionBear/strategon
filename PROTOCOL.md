@@ -303,6 +303,10 @@ message Register {
 
 ### 7.1 Lease 訊息
 
+> **客戶端是策略 SDK**,不是 agent(IMPROVEMENT A1)。生產路徑走 agent port 上的 unary
+> `LeaseService.{Acquire,Renew}`;`AgentMessage` / `ControlMessage` 裡的 lease
+> 欄位保留相容,agent 串流實作忽略它們。
+
 ```proto
 message LeaseRequest {
   string request_id = 1;
@@ -322,6 +326,11 @@ message LeaseResponse {
   string lease_id = 3;
   google.protobuf.Timestamp expires_at = 4;
   string deny_reason = 5;                         // 如 "held by machine M2 until T"
+}
+
+service LeaseService {
+  rpc Acquire(LeaseRequest) returns (LeaseResponse);
+  rpc Renew(LeaseRenew) returns (LeaseResponse);
 }
 ```
 
@@ -556,15 +565,15 @@ Control Plane 標記 v42 為 bad（後續收斂不再拉起）、告警
 ### 10.4 Fencing lease（防雙開）
 
 ```
-新機器 M2 欲啟動策略 S（M1 疑似網路分區）:
-  M2 ──AgentMessage{LeaseRequest(S, ttl)}──▶ Control Plane
+新機器 M2 上的策略 SDK 欲為 S 取 lease（M1 疑似網路分區）:
+  M2 strategy ──LeaseService.Acquire(S, ttl)──▶ Control Plane
                                              │ 檢查 S 的現有 lease
-                                             │  ├ M1 lease 未過期 → LeaseResponse{granted:false,
-                                             │  │                    deny_reason:"held by M1 until T"}
-                                             │  │  → M2 不啟動 S
-                                             │  └ M1 lease 已過期 → LeaseResponse{granted:true, lease_id, expires_at}
-                                             │                    → M2 啟動 S，並定期 LeaseRenew
-  同時 M1（若其實還活著）續 lease 失敗 → 策略自殺（LeaseSuicide 事件）
+                                             │  ├ M1 lease 未過期(+margin_cp) → granted=false,
+                                             │  │                    deny_reason:"held by M1 until T"
+                                             │  │  → M2 策略不得交易；Deploy 到 M2 亦被互鎖拒絕
+                                             │  └ M1 lease 已過期 → granted=true, lease_id, expires_at
+                                             │                    → M2 SDK 定期 Renew + CheckBeforeOrder
+  同時 M1（若其實還活著）續約失敗 → 策略本地自殺（CheckBeforeOrder / renew 失敗）
 ```
 
 ### 10.5 定期 resync（對抗靜默偏差）

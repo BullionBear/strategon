@@ -116,3 +116,11 @@ service AgentService {
   // never initiates an inbound connection to the agent.
   rpc Connect(stream AgentMessage) returns (stream ControlMessage);
 }
+
+// LeaseService is the fencing-lease authority (IMPROVEMENT A1 / SAFETY).
+// Strategy SDKs call these unary RPCs on the agent port (mTLS/h2c); the agent
+// bidi stream does not participate in lease acquire/renew.
+service LeaseService {
+  rpc Acquire(LeaseRequest) returns (LeaseResponse);
+  rpc Renew(LeaseRenew) returns (LeaseResponse);
+}

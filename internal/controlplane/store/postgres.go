@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"sync"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
@@ -25,9 +26,16 @@ var migrationsFS embed.FS
 // (per-machine monotonic generation, spec/status write ownership, empty-target
 // rollback via previous_artifacts) with durable storage, so the control plane
 // can restart without losing desired state, status, catalog, or audit.
+//
+// Fencing leases are held in-process for now (same semantics as Memory); a
+// durable leases table lands with B2 HA work.
 type Postgres struct {
-	pool *pgxpool.Pool
-	hub  *Hub
+	pool        *pgxpool.Pool
+	hub         *Hub
+	leaseMu     sync.Mutex
+	leases      map[string]*LeaseInfo
+	leaseMargin time.Duration
+	now         func() time.Time
 }
 
 // querier is satisfied by both *pgxpool.Pool and pgx.Tx, so read helpers work
@@ -49,7 +57,13 @@ func NewPostgres(ctx context.Context, dsn string, hub *Hub) (*Postgres, error) {
 		pool.Close()
 		return nil, fmt.Errorf("postgres: ping: %w", err)
 	}
-	p := &Postgres{pool: pool, hub: hub}
+	p := &Postgres{
+		pool:        pool,
+		hub:         hub,
+		leases:      map[string]*LeaseInfo{},
+		leaseMargin: DefaultLeaseMarginCP,
+		now:         time.Now,
+	}
 	if err := p.migrate(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("postgres: migrate: %w", err)
@@ -562,6 +576,92 @@ func (p *Postgres) PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef
 		return nil, false
 	}
 	return ref, true
+}
+
+// SetLeaseMarginCP sets the control-plane lease expiry margin.
+func (p *Postgres) SetLeaseMarginCP(d time.Duration) {
+	p.leaseMu.Lock()
+	defer p.leaseMu.Unlock()
+	if d < 0 {
+		d = 0
+	}
+	p.leaseMargin = d
+}
+
+func (p *Postgres) LeaseMarginCP() time.Duration {
+	p.leaseMu.Lock()
+	defer p.leaseMu.Unlock()
+	return p.leaseMargin
+}
+
+func (p *Postgres) GetLease(strategy string) (LeaseInfo, bool) {
+	p.leaseMu.Lock()
+	defer p.leaseMu.Unlock()
+	info, ok := p.leases[strategy]
+	if !ok || info == nil {
+		return LeaseInfo{}, false
+	}
+	return *info, true
+}
+
+func (p *Postgres) AcquireLease(machineID, strategy string, ttl time.Duration) (LeaseResult, error) {
+	if machineID == "" || strategy == "" {
+		return LeaseResult{}, fmt.Errorf("acquire: machine_id and strategy are required")
+	}
+	if ttl <= 0 {
+		return LeaseResult{}, fmt.Errorf("acquire: ttl must be positive")
+	}
+	p.leaseMu.Lock()
+	defer p.leaseMu.Unlock()
+	now := p.now()
+	cur := p.leases[strategy]
+	if free, deny := leaseFreeFor(cur, machineID, now, p.leaseMargin); !free {
+		return LeaseResult{DenyReason: deny}, nil
+	}
+	id, err := newLeaseID()
+	if err != nil {
+		return LeaseResult{}, err
+	}
+	exp := now.Add(ttl)
+	p.leases[strategy] = &LeaseInfo{
+		Strategy:  strategy,
+		MachineID: machineID,
+		LeaseID:   id,
+		ExpiresAt: exp,
+		TTL:       ttl,
+	}
+	p.notify(machineID)
+	return LeaseResult{Granted: true, LeaseID: id, ExpiresAt: exp}, nil
+}
+
+func (p *Postgres) RenewLease(machineID, strategy, leaseID string, ttl time.Duration) (LeaseResult, error) {
+	if machineID == "" || strategy == "" || leaseID == "" {
+		return LeaseResult{}, fmt.Errorf("renew: machine_id, strategy, and lease_id are required")
+	}
+	p.leaseMu.Lock()
+	defer p.leaseMu.Unlock()
+	now := p.now()
+	cur := p.leases[strategy]
+	if cur == nil {
+		return LeaseResult{DenyReason: "no lease"}, nil
+	}
+	if cur.MachineID != machineID || cur.LeaseID != leaseID {
+		return LeaseResult{DenyReason: denyHeld(cur.MachineID, cur.ExpiresAt.Add(p.leaseMargin))}, nil
+	}
+	if !now.Before(cur.ExpiresAt) {
+		return LeaseResult{DenyReason: "lease expired"}, nil
+	}
+	if ttl <= 0 {
+		ttl = cur.TTL
+	}
+	if ttl <= 0 {
+		ttl = 30 * time.Second
+	}
+	exp := now.Add(ttl)
+	cur.ExpiresAt = exp
+	cur.TTL = ttl
+	p.notify(machineID)
+	return LeaseResult{Granted: true, LeaseID: leaseID, ExpiresAt: exp}, nil
 }
 
 // Compile-time assertions that both stores satisfy the interface.

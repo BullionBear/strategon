@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/artifacturi"
@@ -14,21 +15,47 @@ import (
 // Memory is an in-memory Store. It is safe for concurrent use; the control
 // plane serves many agent streams and human API calls concurrently.
 type Memory struct {
-	mu        sync.RWMutex
-	machines  map[string]*MachineRecord
-	artifacts map[string]*pb.ArtifactRef // key = name + "\x00" + version
-	audit     []*pb.AuditEntry
-	hub       *Hub
+	mu          sync.RWMutex
+	machines    map[string]*MachineRecord
+	artifacts   map[string]*pb.ArtifactRef // key = name + "\x00" + version
+	audit       []*pb.AuditEntry
+	leases      map[string]*LeaseInfo // strategy -> lease
+	leaseMargin time.Duration
+	now         func() time.Time // injectable for tests
+	hub         *Hub
 }
 
 // NewMemory returns an empty in-memory store that notifies hub on changes.
 // hub may be nil (no fan-out).
 func NewMemory(hub *Hub) *Memory {
 	return &Memory{
-		machines:  map[string]*MachineRecord{},
-		artifacts: map[string]*pb.ArtifactRef{},
-		hub:       hub,
+		machines:    map[string]*MachineRecord{},
+		artifacts:   map[string]*pb.ArtifactRef{},
+		leases:      map[string]*LeaseInfo{},
+		leaseMargin: DefaultLeaseMarginCP,
+		now:         time.Now,
+		hub:         hub,
 	}
+}
+
+// SetLeaseMarginCP sets the control-plane lease expiry margin (SAFETY §2).
+func (m *Memory) SetLeaseMarginCP(d time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if d < 0 {
+		d = 0
+	}
+	m.leaseMargin = d
+}
+
+// SetClock injects a clock for lease expiry tests.
+func (m *Memory) SetClock(now func() time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if now == nil {
+		now = time.Now
+	}
+	m.now = now
 }
 
 func (m *Memory) notify(machineID string) {
@@ -260,6 +287,82 @@ func (m *Memory) PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef, 
 		return nil, false
 	}
 	return proto.Clone(ref).(*pb.ArtifactRef), true
+}
+
+func (m *Memory) LeaseMarginCP() time.Duration {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.leaseMargin
+}
+
+func (m *Memory) GetLease(strategy string) (LeaseInfo, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	info, ok := m.leases[strategy]
+	if !ok || info == nil {
+		return LeaseInfo{}, false
+	}
+	return *info, true
+}
+
+func (m *Memory) AcquireLease(machineID, strategy string, ttl time.Duration) (LeaseResult, error) {
+	if machineID == "" || strategy == "" {
+		return LeaseResult{}, fmt.Errorf("acquire: machine_id and strategy are required")
+	}
+	if ttl <= 0 {
+		return LeaseResult{}, fmt.Errorf("acquire: ttl must be positive")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	cur := m.leases[strategy]
+	if free, deny := leaseFreeFor(cur, machineID, now, m.leaseMargin); !free {
+		return LeaseResult{DenyReason: deny}, nil
+	}
+	id, err := newLeaseID()
+	if err != nil {
+		return LeaseResult{}, err
+	}
+	exp := now.Add(ttl)
+	m.leases[strategy] = &LeaseInfo{
+		Strategy:  strategy,
+		MachineID: machineID,
+		LeaseID:   id,
+		ExpiresAt: exp,
+		TTL:       ttl,
+	}
+	m.notify(machineID)
+	return LeaseResult{Granted: true, LeaseID: id, ExpiresAt: exp}, nil
+}
+
+func (m *Memory) RenewLease(machineID, strategy, leaseID string, ttl time.Duration) (LeaseResult, error) {
+	if machineID == "" || strategy == "" || leaseID == "" {
+		return LeaseResult{}, fmt.Errorf("renew: machine_id, strategy, and lease_id are required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	now := m.now()
+	cur := m.leases[strategy]
+	if cur == nil {
+		return LeaseResult{DenyReason: "no lease"}, nil
+	}
+	if cur.MachineID != machineID || cur.LeaseID != leaseID {
+		return LeaseResult{DenyReason: denyHeld(cur.MachineID, cur.ExpiresAt.Add(m.leaseMargin))}, nil
+	}
+	if !now.Before(cur.ExpiresAt) {
+		return LeaseResult{DenyReason: "lease expired"}, nil
+	}
+	if ttl <= 0 {
+		ttl = cur.TTL
+	}
+	if ttl <= 0 {
+		ttl = 30 * time.Second
+	}
+	exp := now.Add(ttl)
+	cur.ExpiresAt = exp
+	cur.TTL = ttl
+	m.notify(machineID)
+	return LeaseResult{Granted: true, LeaseID: leaseID, ExpiresAt: exp}, nil
 }
 
 // buildDesiredState renders the full snapshot for a machine (caller holds lock).

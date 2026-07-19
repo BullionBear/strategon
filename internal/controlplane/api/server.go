@@ -43,7 +43,7 @@ func (s *Server) ListMachines(_ context.Context, req *connect.Request[pb.ListMac
 	recs := s.store.ListMachines()
 	machines := make([]*pb.Machine, 0, len(recs))
 	for _, rec := range recs {
-		machines = append(machines, BuildMachine(rec))
+		machines = append(machines, BuildMachine(rec, s.store))
 	}
 	// page_token is a stub; in-memory fleet sizes are tiny.
 	_ = req
@@ -55,7 +55,7 @@ func (s *Server) GetMachine(_ context.Context, req *connect.Request[pb.GetMachin
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", req.Msg.GetMachineId()))
 	}
-	return connect.NewResponse(BuildMachine(rec)), nil
+	return connect.NewResponse(BuildMachine(rec, s.store)), nil
 }
 
 func (s *Server) Deploy(_ context.Context, req *connect.Request[pb.DeployRequest]) (*connect.Response[pb.DeployResponse], error) {
@@ -95,6 +95,11 @@ func (s *Server) Deploy(_ context.Context, req *connect.Request[pb.DeployRequest
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("config version %q not registered", cv))
 		}
 		spec.Config = cfg
+	}
+
+	if blocked, reason := store.DeploymentBlockedByLease(s.store, msg.GetMachineId(), msg.GetStrategy()); blocked {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("migration interlocking: lease for %q %s", msg.GetStrategy(), reason))
 	}
 
 	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), spec)
@@ -266,7 +271,7 @@ func (s *Server) sendMachineEvent(stream *connect.ServerStream[pb.MachineStatusE
 	}
 	return stream.Send(&pb.MachineStatusEvent{
 		MachineId: machineID,
-		Machine:   BuildMachine(rec),
+		Machine:   BuildMachine(rec, s.store),
 		At:        timestamppb.Now(),
 	})
 }
@@ -299,11 +304,11 @@ func defaultOrCloneSpec(existing *pb.StrategyAssignmentSpec, strategy string) *p
 		Strategy: strategy,
 		Driver:   pb.ExecutionDriver_EXECUTION_DRIVER_EXEC,
 		DeployPolicy: &pb.DeployPolicy{
-			Startsecs:            2,
-			HealthWindowSeconds:  30,
-			MaxCrashesInWindow:   3,
-			StopGraceSeconds:     10,
-			EnableAutoRollback:   true,
+			Startsecs:           2,
+			HealthWindowSeconds: 30,
+			MaxCrashesInWindow:  3,
+			StopGraceSeconds:    10,
+			EnableAutoRollback:  true,
 		},
 	}
 }
