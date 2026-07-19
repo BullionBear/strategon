@@ -67,7 +67,10 @@
 		<p class="muted" style="margin-top:1rem">Connecting…</p>
 	{:else}
 		<div class="meta muted mono" style="margin-top:0.5rem">
-			agent v{machine.agentVersion} · generation {machine.metadata?.generation ?? 0} ·
+			agent v{machine.agentVersion}
+			{#if machine.agentBuildVersion}
+				· build {machine.agentBuildVersion}{/if}
+			· generation {machine.metadata?.generation ?? 0} ·
 			{machine.reachable ? 'reachable' : 'unreachable'}
 		</div>
 

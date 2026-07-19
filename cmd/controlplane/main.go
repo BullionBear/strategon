@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
+	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/api"
 	"github.com/bullionbear/strategon/internal/controlplane/grpcstream"
 	cpLease "github.com/bullionbear/strategon/internal/controlplane/lease"
@@ -88,7 +89,8 @@ func main() {
 		}
 	}()
 
-	logger.Info("human API listening", "addr", *humanAddr)
+	logger.Info("human API listening", "addr", *humanAddr,
+		"build_version", buildinfo.Version, "commit", buildinfo.CommitHash, "build_time", buildinfo.BuildTime)
 	humanHTTP := &http.Server{Addr: *humanAddr, Handler: h2c.NewHandler(humanMux, h2s)}
 	if err := humanHTTP.ListenAndServe(); err != nil {
 		logger.Error("human server exited", "err", err)

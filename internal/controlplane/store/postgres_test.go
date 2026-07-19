@@ -32,7 +32,7 @@ func newTestPostgres(t *testing.T, hub *Hub) *Postgres {
 
 func TestPostgresGenerationBumpAndDesired(t *testing.T) {
 	p := newTestPostgres(t, nil)
-	if _, err := p.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 2}); err != nil {
+	if _, err := p.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 2, AgentBuildVersion: "dev"}); err != nil {
 		t.Fatal(err)
 	}
 	spec := &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:aaa"}}
@@ -107,11 +107,14 @@ func TestPostgresStatusHeartbeatReachable(t *testing.T) {
 	if rec.ObservedGen != 3 {
 		t.Fatalf("observed_gen regressed to %d", rec.ObservedGen)
 	}
-	if err := p.ApplyHeartbeat("m1", &pb.Heartbeat{AgentVersion: 7, ObservedGeneration: 5}, 1000); err != nil {
+	if err := p.ApplyHeartbeat("m1", &pb.Heartbeat{
+		AgentVersion: 7, AgentBuildVersion: "v9", ObservedGeneration: 5,
+	}, 1000); err != nil {
 		t.Fatal(err)
 	}
 	rec, _ = p.GetMachine("m1")
-	if rec.LastHeartbeat != 1000 || rec.AgentVersion != 7 || rec.ObservedGen != 5 || !rec.Reachable {
+	if rec.LastHeartbeat != 1000 || rec.AgentVersion != 7 || rec.AgentBuildVersion != "v9" ||
+		rec.ObservedGen != 5 || !rec.Reachable {
 		t.Fatalf("heartbeat not recorded: %+v", rec)
 	}
 	p.SetReachable("m1", false)

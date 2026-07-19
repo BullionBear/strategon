@@ -83,6 +83,7 @@ func (m *Memory) UpsertMachine(reg *pb.Register) (*MachineRecord, error) {
 	}
 	rec.Register = proto.Clone(reg).(*pb.Register)
 	rec.AgentVersion = reg.GetAgentVersion()
+	rec.AgentBuildVersion = reg.GetAgentBuildVersion()
 	rec.Reachable = true
 	snap := snapshotMachine(rec)
 	m.mu.Unlock()
@@ -181,6 +182,7 @@ func (m *Memory) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64
 	}
 	rec.LastHeartbeat = atUnix
 	rec.AgentVersion = hb.GetAgentVersion()
+	rec.AgentBuildVersion = hb.GetAgentBuildVersion()
 	rec.Reachable = true
 	if hb.GetObservedGeneration() > rec.ObservedGen {
 		rec.ObservedGen = hb.GetObservedGeneration()
@@ -389,6 +391,7 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 		MachineID:         rec.MachineID,
 		Reachable:         rec.Reachable,
 		AgentVersion:      rec.AgentVersion,
+		AgentBuildVersion: rec.AgentBuildVersion,
 		LastHeartbeat:     rec.LastHeartbeat,
 		Generation:        rec.Generation,
 		ObservedGen:       rec.ObservedGen,

@@ -68,15 +68,31 @@ func TestRegisterArtifactRejectsRelativeFileURI(t *testing.T) {
 
 func TestApplyStatusAndHeartbeat(t *testing.T) {
 	s := NewMemory(nil)
-	s.UpsertMachine(&pb.Register{MachineId: "m1"})
+	s.UpsertMachine(&pb.Register{MachineId: "m1", AgentBuildVersion: "v1.0.0"})
 	if err := s.ApplyStatus("m1", &pb.StatusReport{ObservedGeneration: 5}); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.ApplyHeartbeat("m1", &pb.Heartbeat{ObservedGeneration: 7, AgentVersion: 3}, 100); err != nil {
+	if err := s.ApplyHeartbeat("m1", &pb.Heartbeat{
+		ObservedGeneration: 7, AgentVersion: 3, AgentBuildVersion: "v1.0.1-dirty",
+	}, 100); err != nil {
 		t.Fatal(err)
 	}
 	rec, _ := s.GetMachine("m1")
-	if rec.ObservedGen != 7 || rec.AgentVersion != 3 || rec.LastHeartbeat != 100 {
+	if rec.ObservedGen != 7 || rec.AgentVersion != 3 || rec.LastHeartbeat != 100 ||
+		rec.AgentBuildVersion != "v1.0.1-dirty" {
 		t.Fatalf("unexpected record: %+v", rec)
+	}
+}
+
+func TestUpsertMachineStoresBuildVersion(t *testing.T) {
+	s := NewMemory(nil)
+	if _, err := s.UpsertMachine(&pb.Register{
+		MachineId: "m1", AgentVersion: 2, AgentBuildVersion: "v1.4.2-3-gabc1234",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec, ok := s.GetMachine("m1")
+	if !ok || rec.AgentVersion != 2 || rec.AgentBuildVersion != "v1.4.2-3-gabc1234" {
+		t.Fatalf("unexpected record: ok=%v %+v", ok, rec)
 	}
 }

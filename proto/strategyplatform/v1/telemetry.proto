@@ -34,5 +34,7 @@ message Heartbeat {
   MachineResources resources = 1;
   repeated ProcessMetrics processes = 2;
   int64 observed_generation = 3; // snapshot the agent has fully converged to
-  int32 agent_version = 4; // reported every beat for drift tracking
+  int32 agent_version = 4; // capability version; reported every beat
+  // buildinfo.Version — display only; not for compatibility checks
+  string agent_build_version = 5;
 }

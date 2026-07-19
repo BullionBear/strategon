@@ -84,7 +84,8 @@ h3 {
 
 .topbar {
 	display: flex;
-	align-items: baseline;
+	align-items: center;
+	flex-wrap: wrap;
 	gap: 1.5rem;
 	padding: 0.75rem 0 1.25rem;
 	border-bottom: 1px solid var(--line);
@@ -204,6 +205,12 @@ label {
 }
 .pill.off {
 	color: var(--ink-muted);
+}
+/* Display-only reminder: build differs from fleet majority. Never blocks actions. */
+.pill.drift {
+	border-color: #c4b5e0;
+	color: #6b4f9a;
+	background: #f5f0fc;
 }
 
 .grid {

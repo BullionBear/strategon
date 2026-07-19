@@ -253,14 +253,16 @@ func (x *EnrollResponse) GetAssignedMachineId() string {
 
 // Register is the first AgentMessage after the stream is established.
 type Register struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	MachineId     string                 `protobuf:"bytes,1,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
-	Hostname      string                 `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
-	Spec          *MachineSpec           `protobuf:"bytes,3,opt,name=spec,proto3" json:"spec,omitempty"`
-	AgentVersion  int32                  `protobuf:"varint,4,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`
-	AgentSemver   string                 `protobuf:"bytes,5,opt,name=agent_semver,json=agentSemver,proto3" json:"agent_semver,omitempty"` // human-readable, e.g. "1.4.2"
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	MachineId    string                 `protobuf:"bytes,1,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
+	Hostname     string                 `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
+	Spec         *MachineSpec           `protobuf:"bytes,3,opt,name=spec,proto3" json:"spec,omitempty"`
+	AgentVersion int32                  `protobuf:"varint,4,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"` // capability version (monotonic); used for compatibility
+	AgentSemver  string                 `protobuf:"bytes,5,opt,name=agent_semver,json=agentSemver,proto3" json:"agent_semver,omitempty"`     // human-readable, e.g. "1.4.2"
+	// buildinfo.Version — display only (git describe); not for compatibility checks
+	AgentBuildVersion string `protobuf:"bytes,6,opt,name=agent_build_version,json=agentBuildVersion,proto3" json:"agent_build_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Register) Reset() {
@@ -328,6 +330,13 @@ func (x *Register) GetAgentSemver() string {
 	return ""
 }
 
+func (x *Register) GetAgentBuildVersion() string {
+	if x != nil {
+		return x.AgentBuildVersion
+	}
+	return ""
+}
+
 var File_strategyplatform_v1_enrollment_proto protoreflect.FileDescriptor
 
 const file_strategyplatform_v1_enrollment_proto_rawDesc = "" +
@@ -350,14 +359,15 @@ const file_strategyplatform_v1_enrollment_proto_rawDesc = "" +
 	"\x0eEnrollResponse\x12 \n" +
 	"\vcertificate\x18\x01 \x01(\fR\vcertificate\x12\x1b\n" +
 	"\tca_bundle\x18\x02 \x01(\fR\bcaBundle\x12.\n" +
-	"\x13assigned_machine_id\x18\x03 \x01(\tR\x11assignedMachineId\"\xc3\x01\n" +
+	"\x13assigned_machine_id\x18\x03 \x01(\tR\x11assignedMachineId\"\xf3\x01\n" +
 	"\bRegister\x12\x1d\n" +
 	"\n" +
 	"machine_id\x18\x01 \x01(\tR\tmachineId\x12\x1a\n" +
 	"\bhostname\x18\x02 \x01(\tR\bhostname\x124\n" +
 	"\x04spec\x18\x03 \x01(\v2 .strategyplatform.v1.MachineSpecR\x04spec\x12#\n" +
 	"\ragent_version\x18\x04 \x01(\x05R\fagentVersion\x12!\n" +
-	"\fagent_semver\x18\x05 \x01(\tR\vagentSemverBMZKgithub.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1b\x06proto3"
+	"\fagent_semver\x18\x05 \x01(\tR\vagentSemver\x12.\n" +
+	"\x13agent_build_version\x18\x06 \x01(\tR\x11agentBuildVersionBMZKgithub.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1b\x06proto3"
 
 var (
 	file_strategyplatform_v1_enrollment_proto_rawDescOnce sync.Once

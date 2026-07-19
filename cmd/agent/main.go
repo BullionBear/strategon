@@ -26,6 +26,7 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/health"
 	"github.com/bullionbear/strategon/internal/agent/reconciler"
 	"github.com/bullionbear/strategon/internal/agent/stream"
+	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/clock"
 	"github.com/bullionbear/strategon/internal/mtls"
 	"golang.org/x/net/http2"
@@ -88,10 +89,11 @@ func main() {
 
 	client := &stream.Client{
 		Register: &pb.Register{
-			MachineId:    *machineID,
-			Hostname:     hostname,
-			AgentVersion: int32(*agentVersion),
-			Spec:         &pb.MachineSpec{Os: "linux", SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC}},
+			MachineId:         *machineID,
+			Hostname:          hostname,
+			AgentVersion:      int32(*agentVersion),
+			AgentBuildVersion: buildinfo.Version,
+			Spec:              &pb.MachineSpec{Os: "linux", SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC}},
 		},
 		Client:      strategyplatformv1connect.NewAgentServiceClient(httpClient, *controlURL, connect.WithGRPC()),
 		Out:         out,
@@ -103,7 +105,8 @@ func main() {
 	}
 
 	go rec.Run(ctx)
-	logger.Info("agent started", "machine_id", *machineID, "control_plane", *controlURL, "mtls", *tlsCert != "")
+	logger.Info("agent started", "machine_id", *machineID, "control_plane", *controlURL,
+		"mtls", *tlsCert != "", "build_version", buildinfo.Version)
 	if err := client.Run(ctx); err != nil && ctx.Err() == nil {
 		logger.Error("stream client exited", "err", err)
 		os.Exit(1)

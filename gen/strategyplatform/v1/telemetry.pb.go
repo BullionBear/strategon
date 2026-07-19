@@ -229,9 +229,11 @@ type Heartbeat struct {
 	Resources          *MachineResources      `protobuf:"bytes,1,opt,name=resources,proto3" json:"resources,omitempty"`
 	Processes          []*ProcessMetrics      `protobuf:"bytes,2,rep,name=processes,proto3" json:"processes,omitempty"`
 	ObservedGeneration int64                  `protobuf:"varint,3,opt,name=observed_generation,json=observedGeneration,proto3" json:"observed_generation,omitempty"` // snapshot the agent has fully converged to
-	AgentVersion       int32                  `protobuf:"varint,4,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`                   // reported every beat for drift tracking
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	AgentVersion       int32                  `protobuf:"varint,4,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"`                   // capability version; reported every beat
+	// buildinfo.Version — display only; not for compatibility checks
+	AgentBuildVersion string `protobuf:"bytes,5,opt,name=agent_build_version,json=agentBuildVersion,proto3" json:"agent_build_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Heartbeat) Reset() {
@@ -292,6 +294,13 @@ func (x *Heartbeat) GetAgentVersion() int32 {
 	return 0
 }
 
+func (x *Heartbeat) GetAgentBuildVersion() string {
+	if x != nil {
+		return x.AgentBuildVersion
+	}
+	return ""
+}
+
 var File_strategyplatform_v1_telemetry_proto protoreflect.FileDescriptor
 
 const file_strategyplatform_v1_telemetry_proto_rawDesc = "" +
@@ -318,12 +327,13 @@ const file_strategyplatform_v1_telemetry_proto_rawDesc = "" +
 	"\anum_fds\x18\x05 \x01(\x05R\x06numFds\x12\x1f\n" +
 	"\vcpu_percent\x18\x06 \x01(\x01R\n" +
 	"cpuPercent\x12#\n" +
-	"\rrestart_count\x18\a \x01(\x05R\frestartCount\"\xe9\x01\n" +
+	"\rrestart_count\x18\a \x01(\x05R\frestartCount\"\x99\x02\n" +
 	"\tHeartbeat\x12C\n" +
 	"\tresources\x18\x01 \x01(\v2%.strategyplatform.v1.MachineResourcesR\tresources\x12A\n" +
 	"\tprocesses\x18\x02 \x03(\v2#.strategyplatform.v1.ProcessMetricsR\tprocesses\x12/\n" +
 	"\x13observed_generation\x18\x03 \x01(\x03R\x12observedGeneration\x12#\n" +
-	"\ragent_version\x18\x04 \x01(\x05R\fagentVersionBMZKgithub.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1b\x06proto3"
+	"\ragent_version\x18\x04 \x01(\x05R\fagentVersion\x12.\n" +
+	"\x13agent_build_version\x18\x05 \x01(\tR\x11agentBuildVersionBMZKgithub.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1b\x06proto3"
 
 var (
 	file_strategyplatform_v1_telemetry_proto_rawDescOnce sync.Once
