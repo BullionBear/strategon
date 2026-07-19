@@ -1,13 +1,14 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { watchMachine } from '$lib/api';
+	import { client, watchMachine } from '$lib/api';
 	import type { Machine } from '$lib/gen/strategyplatform/v1/control_service_pb';
 	import { phaseLabel, isFailPhase } from '$lib/phases';
 
 	let machine = $state<Machine | null>(null);
 	let live = $state(false);
 	let error = $state('');
+	let busy = $state('');
 
 	const id = $derived(page.params.id ?? '');
 
@@ -26,6 +27,25 @@
 		});
 		return () => ac.abort();
 	});
+
+	async function undeploy(strategy: string) {
+		if (
+			!confirm(
+				`Undeploy ${strategy} from ${id}? The process will drain and the lease will be released.`
+			)
+		) {
+			return;
+		}
+		busy = strategy;
+		error = '';
+		try {
+			await client.undeploy({ machineId: id, strategy });
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = '';
+		}
+	}
 </script>
 
 <section class="fade-in">
@@ -59,13 +79,11 @@
 		{:else}
 			<div class="grid" style="margin-top:1rem">
 				{#each machine.strategies as s (s.strategy)}
-					<a
-						class="panel strat"
-						class:diverging={!s.converged}
-						href="/machines/{id}/{s.strategy}"
-					>
+					<div class="panel strat" class:diverging={!s.converged}>
 						<div class="row">
-							<strong class="mono">{s.strategy}</strong>
+							<a class="title" href="/machines/{id}/{s.strategy}">
+								<strong class="mono">{s.strategy}</strong>
+							</a>
 							{#if s.converged}
 								<span class="pill ok">converged</span>
 							{:else if isFailPhase(s.phase)}
@@ -74,25 +92,38 @@
 								<span class="pill lag">{phaseLabel(s.phase)}</span>
 							{/if}
 						</div>
-						<div class="vs">
-							<div>
-								<span class="lbl">Desired</span>
-								<span class="mono">{s.desiredArtifact?.version || '—'}</span>
-								<span class="muted mono tiny">spec gen {s.specGeneration}</span>
+						<a class="body" href="/machines/{id}/{s.strategy}">
+							<div class="vs">
+								<div>
+									<span class="lbl">Desired</span>
+									<span class="mono">{s.desiredArtifact?.version || '—'}</span>
+									<span class="muted mono tiny">spec gen {s.specGeneration}</span>
+								</div>
+								<div class:mismatch={!s.converged}>
+									<span class="lbl">Actual</span>
+									<span class="mono">{s.runningArtifact?.version || '—'}</span>
+									<span class="muted mono tiny">obs gen {s.observedGeneration}</span>
+								</div>
 							</div>
-							<div class:mismatch={!s.converged}>
-								<span class="lbl">Actual</span>
-								<span class="mono">{s.runningArtifact?.version || '—'}</span>
-								<span class="muted mono tiny">obs gen {s.observedGeneration}</span>
-							</div>
+							{#if s.lastError}
+								<p class="err mono">{s.lastError}</p>
+							{/if}
+							{#if s.pid}
+								<p class="muted mono tiny" style="margin:0.5rem 0 0">
+									pid {s.pid} · restarts {s.restartCount}
+								</p>
+							{/if}
+						</a>
+						<div class="actions">
+							<button
+								class="btn secondary"
+								disabled={busy === s.strategy}
+								onclick={() => undeploy(s.strategy)}
+							>
+								Undeploy
+							</button>
 						</div>
-						{#if s.lastError}
-							<p class="err mono">{s.lastError}</p>
-						{/if}
-						{#if s.pid}
-							<p class="muted mono tiny" style="margin:0.5rem 0 0">pid {s.pid} · restarts {s.restartCount}</p>
-						{/if}
-					</a>
+					</div>
 				{/each}
 			</div>
 		{/if}
@@ -107,23 +138,36 @@
 		margin-top: 0.35rem;
 	}
 	.strat {
-		display: block;
-		color: inherit;
-		text-decoration: none;
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
 		transition: border-color 0.15s;
 	}
 	.strat:hover {
 		border-color: var(--accent);
-		text-decoration: none;
 	}
 	.strat.diverging {
 		border-color: #e6c98a;
 		background: linear-gradient(180deg, #fffaf0, var(--surface));
 	}
+	.strat a.title,
+	.strat a.body {
+		color: inherit;
+		text-decoration: none;
+	}
+	.strat a.title:hover,
+	.strat a.body:hover {
+		text-decoration: none;
+	}
 	.row {
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+	}
+	.actions {
+		display: flex;
+		justify-content: flex-end;
+		margin-top: 0.35rem;
 	}
 	.vs {
 		display: grid;

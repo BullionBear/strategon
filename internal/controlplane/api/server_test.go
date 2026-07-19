@@ -226,6 +226,79 @@ func TestUndeployRemovesAssignment(t *testing.T) {
 	}
 }
 
+func TestSetDeploymentSetsArgsEnvAndConfig(t *testing.T) {
+	client, st, _, agents := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s-config", Version: "c17", Digest: "sha256:cfg", Uri: "file:///c.yml"},
+	}))
+
+	resp, err := client.SetDeployment(ctx, connect.NewRequest(&pb.SetDeploymentRequest{
+		MachineId:       "m1",
+		Strategy:        "s",
+		ArtifactVersion: "v1",
+		ConfigVersion:   "c17",
+		Args:            []string{"-c", "${CONFIG}"},
+		Env:             map[string]string{"FOO": "bar"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.GetGeneration() != 1 {
+		t.Fatalf("generation = %d, want 1", resp.Msg.GetGeneration())
+	}
+	if agents.n != 1 {
+		t.Fatalf("agent notify count = %d, want 1", agents.n)
+	}
+
+	rec, ok := st.GetMachine("m1")
+	if !ok {
+		t.Fatal("machine missing")
+	}
+	spec := rec.Assignments["s"]
+	if spec == nil {
+		t.Fatal("assignment missing")
+	}
+	if spec.GetArtifact().GetVersion() != "v1" {
+		t.Fatalf("artifact = %q", spec.GetArtifact().GetVersion())
+	}
+	if spec.GetConfig().GetVersion() != "c17" {
+		t.Fatalf("config = %q", spec.GetConfig().GetVersion())
+	}
+	if len(spec.GetArgs()) != 2 || spec.GetArgs()[0] != "-c" || spec.GetArgs()[1] != "${CONFIG}" {
+		t.Fatalf("args = %#v", spec.GetArgs())
+	}
+	if spec.GetEnv()["FOO"] != "bar" {
+		t.Fatalf("env = %#v", spec.GetEnv())
+	}
+
+	// Deploy (version-only) must preserve args/env.
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v2", Digest: "sha256:bbb", Uri: "file:///b"},
+	}))
+	_, err = client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v2",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	spec = rec.Assignments["s"]
+	if spec.GetArtifact().GetVersion() != "v2" {
+		t.Fatalf("after Deploy artifact = %q", spec.GetArtifact().GetVersion())
+	}
+	if len(spec.GetArgs()) != 2 || spec.GetArgs()[1] != "${CONFIG}" || spec.GetEnv()["FOO"] != "bar" {
+		t.Fatalf("Deploy should preserve args/env, got args=%#v env=%#v", spec.GetArgs(), spec.GetEnv())
+	}
+	if spec.GetConfig().GetVersion() != "c17" {
+		t.Fatalf("Deploy should keep config, got %q", spec.GetConfig().GetVersion())
+	}
+}
+
 func TestUndeployUnassignedFails(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()

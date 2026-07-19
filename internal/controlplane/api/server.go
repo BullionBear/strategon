@@ -60,67 +60,111 @@ func (s *Server) GetMachine(_ context.Context, req *connect.Request[pb.GetMachin
 
 func (s *Server) Deploy(_ context.Context, req *connect.Request[pb.DeployRequest]) (*connect.Response[pb.DeployResponse], error) {
 	msg := req.Msg
-	if msg.GetMachineId() == "" || msg.GetStrategy() == "" || msg.GetArtifactVersion() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id, strategy, and artifact_version are required"))
-	}
-	rec, ok := s.store.GetMachine(msg.GetMachineId())
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", msg.GetMachineId()))
-	}
-
-	artName := msg.GetStrategy()
-	if existing := rec.Assignments[msg.GetStrategy()]; existing != nil && existing.GetArtifact().GetName() != "" {
-		artName = existing.GetArtifact().GetName()
-	}
-	art, ok := s.store.GetArtifact(artName, msg.GetArtifactVersion())
-	if !ok {
-		// Fall back: try strategy name as artifact name (common convention).
-		art, ok = s.store.GetArtifact(msg.GetStrategy(), msg.GetArtifactVersion())
-	}
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("artifact %q version %q not registered; call RegisterArtifact first", artName, msg.GetArtifactVersion()))
-	}
-
-	spec := defaultOrCloneSpec(rec.Assignments[msg.GetStrategy()], msg.GetStrategy())
-	fromVersion := spec.GetArtifact().GetVersion()
-	spec.Artifact = art
-
-	if cv := msg.GetConfigVersion(); cv != "" {
-		cfg, ok := s.store.GetArtifact(art.GetName()+"-config", cv)
-		if !ok {
-			cfg, ok = s.store.GetArtifact(msg.GetStrategy()+"-config", cv)
-		}
-		if !ok {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("config version %q not registered", cv))
-		}
-		spec.Config = cfg
-	}
-
-	if blocked, reason := store.DeploymentBlockedByLease(s.store, msg.GetMachineId(), msg.GetStrategy()); blocked {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("migration interlocking: lease for %q %s", msg.GetStrategy(), reason))
-	}
-
-	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), spec)
+	spec, art, fromVersion, err := s.buildDeploymentSpec(msg.GetMachineId(), msg.GetStrategy(), msg.GetArtifactVersion(), msg.GetConfigVersion(), nil, nil, false)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, err
 	}
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp:   timestamppb.Now(),
-		Actor:       "local",
-		Action:      "Deploy",
-		MachineId:   msg.GetMachineId(),
-		Strategy:    msg.GetStrategy(),
-		FromVersion: fromVersion,
-		ToVersion:   art.GetVersion(),
-	})
-	if s.agents != nil {
-		s.agents.Notify(msg.GetMachineId())
+	gen, err := s.commitAssignment(msg.GetMachineId(), msg.GetStrategy(), spec, "Deploy", fromVersion, art.GetVersion())
+	if err != nil {
+		return nil, err
 	}
 	s.logger.Info("deploy", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
 		"version", art.GetVersion(), "generation", gen)
 	return connect.NewResponse(&pb.DeployResponse{Generation: gen}), nil
+}
+
+func (s *Server) SetDeployment(_ context.Context, req *connect.Request[pb.SetDeploymentRequest]) (*connect.Response[pb.SetDeploymentResponse], error) {
+	msg := req.Msg
+	spec, art, fromVersion, err := s.buildDeploymentSpec(msg.GetMachineId(), msg.GetStrategy(), msg.GetArtifactVersion(), msg.GetConfigVersion(), msg.GetArgs(), msg.GetEnv(), true)
+	if err != nil {
+		return nil, err
+	}
+	gen, err := s.commitAssignment(msg.GetMachineId(), msg.GetStrategy(), spec, "SetDeployment", fromVersion, art.GetVersion())
+	if err != nil {
+		return nil, err
+	}
+	s.logger.Info("set_deployment", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
+		"version", art.GetVersion(), "generation", gen)
+	return connect.NewResponse(&pb.SetDeploymentResponse{Generation: gen}), nil
+}
+
+// buildDeploymentSpec resolves artifact/config and assembles an assignment.
+// When setRuntime is true, args/env are replaced from the request (SetDeployment);
+// otherwise they are preserved from the existing assignment (Deploy).
+func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, configVersion string, args []string, env map[string]string, setRuntime bool) (*pb.StrategyAssignmentSpec, *pb.ArtifactRef, string, error) {
+	if machineID == "" || strategy == "" || artifactVersion == "" {
+		return nil, nil, "", connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id, strategy, and artifact_version are required"))
+	}
+	rec, ok := s.store.GetMachine(machineID)
+	if !ok {
+		return nil, nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
+	}
+
+	artName := strategy
+	if existing := rec.Assignments[strategy]; existing != nil && existing.GetArtifact().GetName() != "" {
+		artName = existing.GetArtifact().GetName()
+	}
+	art, ok := s.store.GetArtifact(artName, artifactVersion)
+	if !ok {
+		art, ok = s.store.GetArtifact(strategy, artifactVersion)
+	}
+	if !ok {
+		return nil, nil, "", connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("artifact %q version %q not registered; call RegisterArtifact first", artName, artifactVersion))
+	}
+
+	spec := defaultOrCloneSpec(rec.Assignments[strategy], strategy)
+	fromVersion := spec.GetArtifact().GetVersion()
+	spec.Artifact = art
+
+	if configVersion != "" {
+		cfg, ok := s.store.GetArtifact(art.GetName()+"-config", configVersion)
+		if !ok {
+			cfg, ok = s.store.GetArtifact(strategy+"-config", configVersion)
+		}
+		if !ok {
+			return nil, nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("config version %q not registered", configVersion))
+		}
+		spec.Config = cfg
+	}
+
+	if setRuntime {
+		spec.Args = append([]string(nil), args...)
+		if env == nil {
+			spec.Env = nil
+		} else {
+			spec.Env = make(map[string]string, len(env))
+			for k, v := range env {
+				spec.Env[k] = v
+			}
+		}
+	}
+
+	if blocked, reason := store.DeploymentBlockedByLease(s.store, machineID, strategy); blocked {
+		return nil, nil, "", connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("migration interlocking: lease for %q %s", strategy, reason))
+	}
+	return spec, art, fromVersion, nil
+}
+
+func (s *Server) commitAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec, action, fromVersion, toVersion string) (int64, error) {
+	gen, err := s.store.SetAssignment(machineID, strategy, spec)
+	if err != nil {
+		return 0, connect.NewError(connect.CodeInternal, err)
+	}
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp:   timestamppb.Now(),
+		Actor:       "local",
+		Action:      action,
+		MachineId:   machineID,
+		Strategy:    strategy,
+		FromVersion: fromVersion,
+		ToVersion:   toVersion,
+	})
+	if s.agents != nil {
+		s.agents.Notify(machineID)
+	}
+	return gen, nil
 }
 
 func (s *Server) Rollback(_ context.Context, req *connect.Request[pb.RollbackRequest]) (*connect.Response[pb.RollbackResponse], error) {

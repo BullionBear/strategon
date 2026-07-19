@@ -1,10 +1,10 @@
 // Package artifact manages the on-disk, immutable release layout and atomic
 // version switching described in ARCHITECTURE.md §8.1:
 //
-//	<base>/<strategy>/releases/<version>/bin      # the strategy binary
-//	<base>/<strategy>/releases/<version>/config   # optional config snapshot
-//	<base>/<strategy>/current -> releases/<version> # atomic switch point
-//	<base>/<strategy>/shared/                      # cross-version data
+//	<base>/<strategy>/releases/<version>/bin           # the strategy binary
+//	<base>/<strategy>/releases/<version>/config[.ext]  # optional config (ext from URI)
+//	<base>/<strategy>/current -> releases/<version>    # atomic switch point
+//	<base>/<strategy>/shared/                          # cross-version data
 //
 // Rollback is O(1): re-point the `current` symlink at an already-present
 // release, no re-download. Fetching is pluggable; the v1 Fetcher is a
@@ -64,6 +64,59 @@ func (m *Manager) CurrentBinaryPath(strategy string) string {
 	return filepath.Join(m.CurrentLink(strategy), "bin")
 }
 
+// ConfigFileName derives the on-disk config basename from an artifact URI,
+// preserving the original extension (e.g. config.yml). No extension → "config".
+func ConfigFileName(ref *pb.ArtifactRef) string {
+	if ref == nil {
+		return "config"
+	}
+	ext := filepath.Ext(uriPath(ref.GetUri()))
+	if ext == "" || ext == "." {
+		return "config"
+	}
+	return "config" + ext
+}
+
+// ConfigPath is the config file path in a specific release.
+func (m *Manager) ConfigPath(strategy, version string, ref *pb.ArtifactRef) string {
+	return filepath.Join(m.ReleaseDir(strategy, version), ConfigFileName(ref))
+}
+
+// CurrentConfigPath resolves the config file via the current symlink.
+func (m *Manager) CurrentConfigPath(strategy string, ref *pb.ArtifactRef) string {
+	return filepath.Join(m.CurrentLink(strategy), ConfigFileName(ref))
+}
+
+// CurrentReleaseDir returns the absolute path of the release directory that
+// current points at (symlink resolved).
+func (m *Manager) CurrentReleaseDir(strategy string) (string, error) {
+	link := m.CurrentLink(strategy)
+	abs, err := filepath.Abs(link)
+	if err != nil {
+		return "", err
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", err
+	}
+	return resolved, nil
+}
+
+func uriPath(uri string) string {
+	// Strip common schemes so filepath.Ext sees the real filename.
+	for _, prefix := range []string{"file://", "http://", "https://", "s3://"} {
+		if strings.HasPrefix(uri, prefix) {
+			uri = strings.TrimPrefix(uri, prefix)
+			break
+		}
+	}
+	// Drop query/fragment if present (http/s3 style).
+	if i := strings.IndexAny(uri, "?#"); i >= 0 {
+		uri = uri[:i]
+	}
+	return uri
+}
+
 // HasRelease reports whether a release version is already present locally
 // (enables O(1), no-download rollback).
 func (m *Manager) HasRelease(strategy, version string) bool {
@@ -86,7 +139,7 @@ func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, co
 		return fmt.Errorf("chmod binary: %w", err)
 	}
 	if configRef != nil && configRef.GetDigest() != "" {
-		cfg := filepath.Join(dir, "config")
+		cfg := m.ConfigPath(strategy, artifactRef.GetVersion(), configRef)
 		if err := m.Fetcher.Fetch(ctx, configRef, cfg); err != nil {
 			return fmt.Errorf("fetch config: %w", err)
 		}

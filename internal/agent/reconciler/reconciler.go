@@ -10,6 +10,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path/filepath"
+	"regexp"
 	"sync/atomic"
 	"time"
 
@@ -20,6 +22,8 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/supervisor"
 	"github.com/bullionbear/strategon/internal/clock"
 )
+
+var placeholderRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 
 const (
 	conditionLive            = "Live"
@@ -267,7 +271,13 @@ func (r *Reconciler) retireStrategy(st *strategyState) {
 // begins supervising it. Called in the main loop (RECONCILER §6.1) for
 // crash-restart and rollback; deploy STARTING happens in the worker.
 func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState) {
-	sp := r.buildStartSpec(spec)
+	sp, err := r.buildStartSpec(spec)
+	if err != nil {
+		st.lastError = err.Error()
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", err.Error())
+		return
+	}
 	proc, err := r.deps.Driver.Start(sp, r.now())
 	if err != nil {
 		st.lastError = err.Error()
@@ -296,22 +306,92 @@ func (r *Reconciler) installProcess(spec *pb.StrategyAssignmentSpec, st *strateg
 	}(st.strategy, proc)
 }
 
-func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec) driver.StartSpec {
+func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec) (driver.StartSpec, error) {
 	env := make([]string, 0, len(spec.GetEnv()))
 	for k, v := range spec.GetEnv() {
 		env = append(env, k+"="+v)
+	}
+	args, err := r.renderArgs(spec)
+	if err != nil {
+		return driver.StartSpec{}, err
 	}
 	limits := spec.GetLimits()
 	return driver.StartSpec{
 		Strategy:      spec.GetStrategy(),
 		BinaryPath:    r.deps.Artifacts.CurrentBinaryPath(spec.GetStrategy()),
-		Args:          spec.GetArgs(),
+		Args:          args,
 		Env:           env,
 		WorkDir:       r.deps.Artifacts.StrategyDir(spec.GetStrategy()),
 		CPUMillicores: limits.GetCpuMillicores(),
 		MemoryBytes:   limits.GetMemoryBytes(),
 		MaxOpenFiles:  limits.GetMaxOpenFiles(),
+	}, nil
+}
+
+// renderArgs expands ${CONFIG}/${RELEASE_DIR}/${BINARY} against the current
+// symlink. Unknown placeholders fail explicitly (PROTOCOL §9).
+func (r *Reconciler) renderArgs(spec *pb.StrategyAssignmentSpec) ([]string, error) {
+	raw := spec.GetArgs()
+	if len(raw) == 0 {
+		return nil, nil
 	}
+	vals, err := r.placeholderValues(spec)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(raw))
+	for i, arg := range raw {
+		rendered, err := expandPlaceholders(arg, vals)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = rendered
+	}
+	return out, nil
+}
+
+func (r *Reconciler) placeholderValues(spec *pb.StrategyAssignmentSpec) (map[string]string, error) {
+	strat := spec.GetStrategy()
+	releaseDir, err := r.deps.Artifacts.CurrentReleaseDir(strat)
+	if err != nil {
+		return nil, fmt.Errorf("resolve ${RELEASE_DIR}: %w", err)
+	}
+	binPath, err := filepath.Abs(r.deps.Artifacts.CurrentBinaryPath(strat))
+	if err != nil {
+		return nil, fmt.Errorf("resolve ${BINARY}: %w", err)
+	}
+	vals := map[string]string{
+		"RELEASE_DIR": releaseDir,
+		"BINARY":      binPath,
+	}
+	if cfg := spec.GetConfig(); cfg != nil && cfg.GetDigest() != "" {
+		cfgPath, err := filepath.Abs(r.deps.Artifacts.CurrentConfigPath(strat, cfg))
+		if err != nil {
+			return nil, fmt.Errorf("resolve ${CONFIG}: %w", err)
+		}
+		vals["CONFIG"] = cfgPath
+	}
+	return vals, nil
+}
+
+func expandPlaceholders(arg string, vals map[string]string) (string, error) {
+	var firstErr error
+	out := placeholderRE.ReplaceAllStringFunc(arg, func(match string) string {
+		if firstErr != nil {
+			return match
+		}
+		name := match[2 : len(match)-1] // strip ${}
+		v, ok := vals[name]
+		if !ok {
+			firstErr = fmt.Errorf("unknown placeholder ${%s}", name)
+			return match
+		}
+		return v
+	})
+	if firstErr != nil {
+		return "", firstErr
+	}
+	return out, nil
 }
 
 // handleExit processes a process-exit notification (RECONCILER §6.3).

@@ -75,7 +75,11 @@ func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentS
 	}
 
 	// STARTING: fork/exec the new version.
-	sp := r.buildStartSpec(spec)
+	sp, err := r.buildStartSpec(spec)
+	if err != nil {
+		send(pb.DeployPhase_DEPLOY_PHASE_FAILED, err, nil)
+		return
+	}
 	proc, err := r.deps.Driver.Start(sp, r.now())
 	if err != nil {
 		send(pb.DeployPhase_DEPLOY_PHASE_ROLLING_BACK, err, nil)
@@ -173,7 +177,14 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 	st.runningArtifact = st.prevArtifact
 	st.runningConfig = st.prevConfig
 
-	proc, err := r.deps.Driver.Start(r.buildStartSpec(spec), r.now())
+	sp, err := r.buildStartSpec(spec)
+	if err != nil {
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
+		st.lastError = err.Error()
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
+		return
+	}
+	proc, err := r.deps.Driver.Start(sp, r.now())
 	if err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
 		st.lastError = err.Error()

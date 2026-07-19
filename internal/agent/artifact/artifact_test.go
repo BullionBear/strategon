@@ -81,6 +81,34 @@ func TestDownloadVerifySwitchAndO1Rollback(t *testing.T) {
 	}
 }
 
+func TestConfigPreservesURIExtension(t *testing.T) {
+	src := t.TempDir()
+	base := t.TempDir()
+	mgr := NewManager(base, LocalFetcher{})
+	pBin, dBin := writeSource(t, src, "bin", "binary")
+	pCfg, dCfg := writeSource(t, src, "settings.yml", "foo: bar")
+	art := &pb.ArtifactRef{Version: "v1", Digest: dBin, Uri: "file://" + pBin}
+	cfg := &pb.ArtifactRef{Version: "c1", Digest: dCfg, Uri: "file://" + pCfg}
+
+	if err := mgr.Download(context.Background(), "s", art, cfg); err != nil {
+		t.Fatal(err)
+	}
+	got := mgr.ConfigPath("s", "v1", cfg)
+	if filepath.Base(got) != "config.yml" {
+		t.Fatalf("config path = %q, want …/config.yml", got)
+	}
+	data, err := os.ReadFile(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "foo: bar" {
+		t.Fatalf("config content = %q", data)
+	}
+	if ConfigFileName(nil) != "config" || ConfigFileName(&pb.ArtifactRef{Uri: "file:///x/config"}) != "config" {
+		t.Fatalf("no-ext basename wrong")
+	}
+}
+
 func TestVerifyRejectsBadDigest(t *testing.T) {
 	src := t.TempDir()
 	base := t.TempDir()

@@ -77,6 +77,23 @@ message DeployResponse {
   int64 generation = 1; // new spec generation, for the frontend to track convergence
 }
 
+// SetDeployment sets a full deployment combination (artifact + config + args +
+// env). Any change bumps generation — the deployment version, independent of
+// artifact versions. Deploy remains the convenience path for version-only rolls
+// that preserve args/env.
+message SetDeploymentRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  string artifact_version = 3; // required; references a registered binary artifact
+  string config_version = 4; // optional; empty = keep current config
+  repeated string args = 5; // launch args; may include ${CONFIG}/${RELEASE_DIR}/${BINARY}
+  map<string, string> env = 6; // environment variables (full replace)
+}
+
+message SetDeploymentResponse {
+  int64 generation = 1; // new deployment generation, for convergence tracking
+}
+
 message RollbackRequest {
   string machine_id = 1;
   string strategy = 2;
@@ -109,7 +126,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "Rollback" | "ConfigChange" | "Undeploy"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Undeploy"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -156,6 +173,7 @@ service ControlPlaneService {
   rpc GetMachine(GetMachineRequest) returns (Machine);
 
   rpc Deploy(DeployRequest) returns (DeployResponse);
+  rpc SetDeployment(SetDeploymentRequest) returns (SetDeploymentResponse);
   rpc Rollback(RollbackRequest) returns (RollbackResponse);
   rpc Undeploy(UndeployRequest) returns (UndeployResponse);
   rpc SetSchedule(SetScheduleRequest) returns (SetScheduleResponse);
