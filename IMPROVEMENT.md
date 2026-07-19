@@ -95,14 +95,13 @@
 
 ### B1.【虧錢項·最高】Fencing lease + 安全硬化(SAFETY.md 整份)
 
-**現狀(MVP 已落地)**:`LeaseService` unary(Acquire/Renew)在 agent port;`store` 租約授權 + `--lease-margin-cp`;Deploy 跨機互鎖;`sdk/lease` 取得/續約/`CheckBeforeOrder`(含粗粒度 clock-jump);`cmd/lease-demo`。Agent 串流 lease 訊息仍 no-op(A1)。PG 持久化 leases 表、NTP/殘餘風險標註、框架強制下單攔截、SAFETY §8 全清單**尚未**完成。
+**現狀(MVP 已落地)**:`LeaseService` unary(Acquire/Renew)在 agent port;`store` 租約授權 + `--lease-margin-cp`;Deploy 跨機互鎖;`sdk/lease` 取得/續約/`CheckBeforeOrder`(含粗粒度 clock-jump;續約不再清空跳變基準);`cmd/lease-demo`;Postgres `leases` 表持久化(控制面重啟不丟互斥)。Agent 串流 lease 訊息仍 no-op(A1)。NTP/殘餘風險標註、框架強制下單攔截、SAFETY §8 全清單**尚未**完成。
 
 **這是唯一「錯了會直接虧錢」的缺口**,單獨足以否決任何會下單的策略上線。剩餘:
 - 框架強制每筆下單必經 `CheckBeforeOrder`(不能靠策略作者自覺)。
 - 遷移互鎖完備:unreachable 後自動遷移編排仍須等 lease 過期(手動 Deploy 跨機已擋)。
 - 時鐘假設落地:NTP 同步 + 失步告警;margin 依實測設定(SAFETY §5)。
 - 誠實標註殘餘風險,按策略能否容忍分流(SAFETY §3.3/§9)。
-- 持久化 `leases` 表(現為 memory / PG 進程內 map)。
 
 **驗收**:SAFETY §8 的上線前檢查清單全過。
 

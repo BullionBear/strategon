@@ -244,12 +244,21 @@ func (c *Client) applyGrant(leaseID string, expiresAt time.Time) {
 	now := time.Now()
 	c.leaseID = leaseID
 	c.expiresAt = expiresAt
-	c.anchor = now
-	c.lastWall = time.Time{}
-	c.lastElapsed = 0
 	until := expiresAt.Sub(now) - c.margin
 	if until < 0 {
 		until = 0
 	}
-	c.deadlineMono = until
+	if c.anchor.IsZero() {
+		// First acquire: establish mono anchor and jump baseline so the first
+		// CheckBeforeOrder does not skip clock-jump detection.
+		c.anchor = now
+		c.deadlineMono = until
+		c.lastWall = now
+		c.lastElapsed = 0
+		return
+	}
+	// Renew: extend the mono deadline relative to the existing anchor. Do NOT
+	// clear lastWall/lastElapsed — resetting them opened a window where the
+	// first post-renew CheckBeforeOrder skipped jump detection (suspend blind spot).
+	c.deadlineMono = time.Since(c.anchor) + until
 }

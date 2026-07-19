@@ -25,15 +25,11 @@ var migrationsFS embed.FS
 // Postgres is a Store backed by PostgreSQL. It mirrors Memory's semantics
 // (per-machine monotonic generation, spec/status write ownership, empty-target
 // rollback via previous_artifacts) with durable storage, so the control plane
-// can restart without losing desired state, status, catalog, or audit.
-//
-// Fencing leases are held in-process for now (same semantics as Memory); a
-// durable leases table lands with B2 HA work.
+// can restart without losing desired state, status, catalog, audit, or leases.
 type Postgres struct {
 	pool        *pgxpool.Pool
 	hub         *Hub
-	leaseMu     sync.Mutex
-	leases      map[string]*LeaseInfo
+	leaseMu     sync.Mutex // guards leaseMargin only
 	leaseMargin time.Duration
 	now         func() time.Time
 }
@@ -60,7 +56,6 @@ func NewPostgres(ctx context.Context, dsn string, hub *Hub) (*Postgres, error) {
 	p := &Postgres{
 		pool:        pool,
 		hub:         hub,
-		leases:      map[string]*LeaseInfo{},
 		leaseMargin: DefaultLeaseMarginCP,
 		now:         time.Now,
 	}
@@ -595,10 +590,10 @@ func (p *Postgres) LeaseMarginCP() time.Duration {
 }
 
 func (p *Postgres) GetLease(strategy string) (LeaseInfo, bool) {
-	p.leaseMu.Lock()
-	defer p.leaseMu.Unlock()
-	info, ok := p.leases[strategy]
-	if !ok || info == nil {
+	ctx, cancel := opCtx()
+	defer cancel()
+	info, err := p.loadLease(ctx, p.pool, strategy, false)
+	if err != nil || info == nil {
 		return LeaseInfo{}, false
 	}
 	return *info, true
@@ -611,57 +606,121 @@ func (p *Postgres) AcquireLease(machineID, strategy string, ttl time.Duration) (
 	if ttl <= 0 {
 		return LeaseResult{}, fmt.Errorf("acquire: ttl must be positive")
 	}
-	p.leaseMu.Lock()
-	defer p.leaseMu.Unlock()
-	now := p.now()
-	cur := p.leases[strategy]
-	if free, deny := leaseFreeFor(cur, machineID, now, p.leaseMargin); !free {
-		return LeaseResult{DenyReason: deny}, nil
-	}
-	id, err := newLeaseID()
+	ctx, cancel := opCtx()
+	defer cancel()
+	var out LeaseResult
+	err := p.inTx(ctx, func(tx pgx.Tx) error {
+		now := p.now()
+		cur, err := p.loadLease(ctx, tx, strategy, true)
+		if err != nil {
+			return err
+		}
+		margin := p.LeaseMarginCP()
+		if free, deny := leaseFreeFor(cur, machineID, now, margin); !free {
+			out = LeaseResult{DenyReason: deny}
+			return nil
+		}
+		id, err := newLeaseID()
+		if err != nil {
+			return err
+		}
+		exp := now.Add(ttl)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO leases (strategy, machine_id, lease_id, expires_at, ttl_nanos)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (strategy) DO UPDATE SET
+				machine_id = EXCLUDED.machine_id,
+				lease_id = EXCLUDED.lease_id,
+				expires_at = EXCLUDED.expires_at,
+				ttl_nanos = EXCLUDED.ttl_nanos`,
+			strategy, machineID, id, exp.UTC(), ttl.Nanoseconds()); err != nil {
+			return err
+		}
+		out = LeaseResult{Granted: true, LeaseID: id, ExpiresAt: exp}
+		return nil
+	})
 	if err != nil {
 		return LeaseResult{}, err
 	}
-	exp := now.Add(ttl)
-	p.leases[strategy] = &LeaseInfo{
-		Strategy:  strategy,
-		MachineID: machineID,
-		LeaseID:   id,
-		ExpiresAt: exp,
-		TTL:       ttl,
+	if out.Granted {
+		p.notify(machineID)
 	}
-	p.notify(machineID)
-	return LeaseResult{Granted: true, LeaseID: id, ExpiresAt: exp}, nil
+	return out, nil
 }
 
 func (p *Postgres) RenewLease(machineID, strategy, leaseID string, ttl time.Duration) (LeaseResult, error) {
 	if machineID == "" || strategy == "" || leaseID == "" {
 		return LeaseResult{}, fmt.Errorf("renew: machine_id, strategy, and lease_id are required")
 	}
-	p.leaseMu.Lock()
-	defer p.leaseMu.Unlock()
-	now := p.now()
-	cur := p.leases[strategy]
-	if cur == nil {
-		return LeaseResult{DenyReason: "no lease"}, nil
+	ctx, cancel := opCtx()
+	defer cancel()
+	var out LeaseResult
+	err := p.inTx(ctx, func(tx pgx.Tx) error {
+		now := p.now()
+		cur, err := p.loadLease(ctx, tx, strategy, true)
+		if err != nil {
+			return err
+		}
+		if cur == nil {
+			out = LeaseResult{DenyReason: "no lease"}
+			return nil
+		}
+		margin := p.LeaseMarginCP()
+		if cur.MachineID != machineID || cur.LeaseID != leaseID {
+			out = LeaseResult{DenyReason: denyHeld(cur.MachineID, cur.ExpiresAt.Add(margin))}
+			return nil
+		}
+		if !now.Before(cur.ExpiresAt) {
+			out = LeaseResult{DenyReason: "lease expired"}
+			return nil
+		}
+		if ttl <= 0 {
+			ttl = cur.TTL
+		}
+		if ttl <= 0 {
+			ttl = 30 * time.Second
+		}
+		exp := now.Add(ttl)
+		if _, err := tx.Exec(ctx, `
+			UPDATE leases SET expires_at=$1, ttl_nanos=$2
+			WHERE strategy=$3 AND machine_id=$4 AND lease_id=$5`,
+			exp.UTC(), ttl.Nanoseconds(), strategy, machineID, leaseID); err != nil {
+			return err
+		}
+		out = LeaseResult{Granted: true, LeaseID: leaseID, ExpiresAt: exp}
+		return nil
+	})
+	if err != nil {
+		return LeaseResult{}, err
 	}
-	if cur.MachineID != machineID || cur.LeaseID != leaseID {
-		return LeaseResult{DenyReason: denyHeld(cur.MachineID, cur.ExpiresAt.Add(p.leaseMargin))}, nil
+	if out.Granted {
+		p.notify(machineID)
 	}
-	if !now.Before(cur.ExpiresAt) {
-		return LeaseResult{DenyReason: "lease expired"}, nil
+	return out, nil
+}
+
+func (p *Postgres) loadLease(ctx context.Context, q querier, strategy string, forUpdate bool) (*LeaseInfo, error) {
+	sql := `SELECT machine_id, lease_id, expires_at, ttl_nanos FROM leases WHERE strategy=$1`
+	if forUpdate {
+		sql += ` FOR UPDATE`
 	}
-	if ttl <= 0 {
-		ttl = cur.TTL
+	var machineID, leaseID string
+	var expiresAt time.Time
+	var ttlNanos int64
+	err := q.QueryRow(ctx, sql, strategy).Scan(&machineID, &leaseID, &expiresAt, &ttlNanos)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	if ttl <= 0 {
-		ttl = 30 * time.Second
-	}
-	exp := now.Add(ttl)
-	cur.ExpiresAt = exp
-	cur.TTL = ttl
-	p.notify(machineID)
-	return LeaseResult{Granted: true, LeaseID: leaseID, ExpiresAt: exp}, nil
+	return &LeaseInfo{
+		Strategy:  strategy,
+		MachineID: machineID,
+		LeaseID:   leaseID,
+		ExpiresAt: expiresAt,
+		TTL:       time.Duration(ttlNanos),
+	}, nil
 }
 
 // Compile-time assertions that both stores satisfy the interface.

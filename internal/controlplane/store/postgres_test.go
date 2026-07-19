@@ -23,7 +23,7 @@ func newTestPostgres(t *testing.T, hub *Hub) *Postgres {
 	if err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
-	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	t.Cleanup(p.Close)
@@ -191,5 +191,35 @@ func TestPostgresDurabilityAcrossReconnect(t *testing.T) {
 	ds, ok := p2.DesiredState("m1")
 	if !ok || ds.GetGeneration() != 1 || len(ds.GetAssignments()) != 1 {
 		t.Fatalf("state did not survive reconnect: %+v ok=%v", ds, ok)
+	}
+}
+
+func TestPostgresLeaseSurvivesReconnect(t *testing.T) {
+	dsn := os.Getenv("STRATEGON_TEST_DB")
+	p := newTestPostgres(t, nil)
+	res, err := p.AcquireLease("m1", "s", time.Minute)
+	if err != nil || !res.Granted {
+		t.Fatalf("acquire: %+v err=%v", res, err)
+	}
+	leaseID := res.LeaseID
+	p.Close()
+
+	p2, err := NewPostgres(context.Background(), dsn, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(p2.Close)
+
+	info, ok := p2.GetLease("s")
+	if !ok || info.MachineID != "m1" || info.LeaseID != leaseID {
+		t.Fatalf("lease lost across reconnect: %+v ok=%v", info, ok)
+	}
+	denied, err := p2.AcquireLease("m2", "s", time.Minute)
+	if err != nil || denied.Granted {
+		t.Fatalf("m2 should still be denied after CP restart: %+v err=%v", denied, err)
+	}
+	renewed, err := p2.RenewLease("m1", "s", leaseID, 0)
+	if err != nil || !renewed.Granted {
+		t.Fatalf("renew after reconnect: %+v err=%v", renewed, err)
 	}
 }
