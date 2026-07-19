@@ -45,6 +45,27 @@ func TestGenerationMonotonicAndDesiredSnapshot(t *testing.T) {
 	}
 }
 
+func TestRegisterArtifactRejectsRelativeFileURI(t *testing.T) {
+	s := NewMemory(nil)
+	err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file://tmp/myapp/strat-v1.sh",
+	})
+	if err == nil {
+		t.Fatal("expected error for file://tmp/... (two slashes)")
+	}
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/myapp/strat-v1.sh",
+	}); err != nil {
+		t.Fatalf("absolute file URI should be accepted: %v", err)
+	}
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v2", Digest: "sha256:bbb",
+		Uri: "https://github.com/org/repo/releases/download/v2/strat",
+	}); err != nil {
+		t.Fatalf("https URI should be accepted: %v", err)
+	}
+}
+
 func TestApplyStatusAndHeartbeat(t *testing.T) {
 	s := NewMemory(nil)
 	s.UpsertMachine(&pb.Register{MachineId: "m1"})

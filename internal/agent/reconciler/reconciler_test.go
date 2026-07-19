@@ -223,7 +223,139 @@ func TestAutoRollbackOnCrashLoopAndSkipBadVersion(t *testing.T) {
 	if !sawEvent(out, "SkipBadVersion") {
 		t.Fatalf("expected SkipBadVersion event")
 	}
+
+	// SkipBadVersion must be edge-triggered: repeated ticks over the same bad
+	// version emit no further events (otherwise a single auto-rollback floods
+	// the control plane forever).
+	drainEvents(out)
+	for i := 0; i < 10; i++ {
+		r.reconcile()
+	}
+	if sawEvent(out, "SkipBadVersion") {
+		t.Fatalf("SkipBadVersion must be emitted once, not on every tick")
+	}
 }
+
+// A new version that crash-exits during HEALTH_CHECKING (before the readiness
+// probe can promote it) must be restarted by reconcile() despite the deploy's
+// inflight marker still being set, so the crash-loop budget is spent and auto-
+// rollback fires. Regression: reconcileOne used to early-return on inflight,
+// freezing restartCount at 1 and stalling in HEALTH_CHECKING forever. Unlike
+// TestAutoRollbackOnCrashLoopAndSkipBadVersion this drives restarts through the
+// real reconcile() path rather than restarting the process by hand.
+func TestCrashLoopDuringHealthCheckingRestartsAndRollsBack(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, mgr, clk, _ := newTestReconciler(t, t0)
+	seedRelease(t, mgr, "s", "v1")
+	seedRelease(t, mgr, "s", "v2")
+
+	policy := &pb.DeployPolicy{Startsecs: 5, MaxCrashesInWindow: 2, EnableAutoRollback: true, HealthWindowSeconds: 120}
+	spec := assignment("s", "v2", "sha256:v2", policy)
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+
+	// Deploy of v2 has just STARTED the new process: HEALTH_CHECKING with
+	// inflight still set, a running process, and v1 available to roll back to.
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
+	st.inflight = &deployOp{target: artRef("v2", "sha256:v2"), cancel: func() {}}
+	st.runningArtifact = artRef("v2", "sha256:v2")
+	st.prevArtifact = artRef("v1", "sha256:v1")
+	st.proc = mustStart(t, fd)
+	st.proc.StartedAt = t0
+	st.healthDeadline = t0.Add(120 * time.Second)
+	r.actual["s"] = st
+
+	// Each instance crashes ~immediately (lived < Startsecs). We never call
+	// tick(), so readiness never promotes it: the only way out is crash-loop
+	// rollback, which requires reconcile() to keep restarting it.
+	for i := 0; i < 6 && st.phase != pb.DeployPhase_DEPLOY_PHASE_ROLLED_BACK; i++ {
+		r.handleExit(processExit{strategy: "s", info: exitAt(st.proc, r.now().Add(time.Second))})
+		clk.Advance(90 * time.Second) // past any backoff
+		r.reconcile()
+	}
+
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_ROLLED_BACK {
+		t.Fatalf("crash-looping new version must auto-roll-back; phase=%v restartCount=%d (inflight blocking restart?)",
+			st.phase, st.restartCount)
+	}
+	if st.runningArtifact.GetVersion() != "v1" {
+		t.Fatalf("running version = %q, want v1 after rollback", st.runningArtifact.GetVersion())
+	}
+}
+
+func TestFailedDeployDoesNotRetryUntilGenerationChanges(t *testing.T) {
+	r, _, _, _, out := newTestReconciler(t, time.Unix(1000, 0))
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{})
+	spec.Artifact.Uri = "file://tmp/missing.sh" // two-slash form; fetch would fail
+	r.generation = 3
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.inflight = &deployOp{target: spec.Artifact, cancel: func() {}}
+	r.actual["s"] = st
+
+	r.applyWorkerEvent(workerEvent{
+		strategy: "s",
+		phase:    pb.DeployPhase_DEPLOY_PHASE_FAILED,
+		err:      errString("fetch binary: open source tmp/missing.sh: no such file or directory"),
+		artifact: spec.Artifact,
+	})
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_FAILED {
+		t.Fatalf("phase = %v, want FAILED", st.phase)
+	}
+	if st.failedAtGen != 3 {
+		t.Fatalf("failedAtGen = %d, want 3", st.failedAtGen)
+	}
+	if st.inflight != nil {
+		t.Fatalf("inflight should be cleared on FAILED")
+	}
+	if !sawEvent(out, "DeployFailed") {
+		t.Fatalf("expected DeployFailed event")
+	}
+
+	// Same generation: must stay FAILED, not redeploy.
+	for i := 0; i < 5; i++ {
+		r.reconcile()
+	}
+	if st.inflight != nil {
+		t.Fatalf("FAILED must not restart deploy for the same generation")
+	}
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_FAILED {
+		t.Fatalf("phase = %v, want still FAILED", st.phase)
+	}
+
+	// New generation (e.g. redeploy after fixing URI): may retry.
+	r.generation = 4
+	r.reconcile()
+	if st.inflight == nil {
+		t.Fatalf("new generation should begin a fresh deploy")
+	}
+
+	// beginDeploy ran its pipeline in a background goroutine (it fails on the
+	// bad URI). Wait for it to finish so its release-dir writes complete before
+	// t.TempDir cleanup, rather than racing it.
+	waitWorkerPhase(t, r, pb.DeployPhase_DEPLOY_PHASE_FAILED)
+}
+
+// waitWorkerPhase drains workerCh until the given phase is observed, so tests
+// that start a real deploy goroutine can wait for it to finish deterministically.
+func waitWorkerPhase(t *testing.T, r *Reconciler, phase pb.DeployPhase) {
+	t.Helper()
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case ev := <-r.workerCh:
+			if ev.phase == phase {
+				return
+			}
+		case <-deadline:
+			t.Fatalf("deploy worker did not reach %v", phase)
+		}
+	}
+}
+
+type errString string
+
+func (e errString) Error() string { return string(e) }
 
 // --- helpers ---
 

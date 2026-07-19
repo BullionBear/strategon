@@ -66,9 +66,12 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 
 	startTime := readProcStartTime(pid)
 
-	// Release the os/exec child so the kernel does not require this agent to be
-	// the reaper; the process is setsid-detached and reaped by its
-	// session/systemd. We keep pid/pidfd for supervision.
+	// Release the os/exec bookkeeping so Go's runtime does not also try to wait
+	// for the child (that would race our pidfd-based supervision). setsid only
+	// changes the session, NOT the parent: this agent remains the process's
+	// parent and must reap it when it exits (done in WatchExit) or it lingers
+	// as a zombie. If the agent exits first (self-update), the still-running
+	// process reparents to init, which reaps it.
 	_ = cmd.Process.Release()
 
 	return &Process{
@@ -77,22 +80,56 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		PGID:      pid, // setsid makes the child a group leader: pgid == pid
 		StartedAt: now,
 		pidfd:     pidfd,
+		owned:     true, // we forked it: WatchExit reaps it
 	}, nil
 }
 
-// WatchExit blocks until the process exits using the pidfd when available,
-// otherwise polling /proc/<pid> with startTime validation.
+// WatchExit blocks until the process exits, then reaps it if we own it (Start-
+// forked) so it does not linger as a zombie — an unreaped zombie keeps its
+// /proc/<pid> entry, which makes processAlive() report it as still running and
+// would stall the reconciler (no exit ever observed). It uses the pidfd when
+// available, otherwise wait4 (owned) or /proc polling (adopted).
 func (d *ExecDriver) WatchExit(p *Process, now func() time.Time) ExitInfo {
-	if p.pidfd >= 0 {
+	code := 0
+	switch {
+	case p.pidfd >= 0:
 		pollPidfd(p.pidfd)
 		unix.Close(p.pidfd)
 		p.pidfd = -1
-	} else {
+		if p.owned {
+			code = reapChild(p.PID) // process is a zombie now; wait4 returns at once
+		}
+	case p.owned:
+		// No pidfd (kernel <5.3 or pidfd_open failed): wait4 both blocks until
+		// exit and reaps the zombie in one step.
+		code = reapChild(p.PID)
+	default:
+		// Adopted, no pidfd: not our child, so wait4 would ECHILD. Poll /proc;
+		// init reaps it when it exits.
 		for processAlive(p.PID, p.StartTime) {
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	return ExitInfo{PID: p.PID, StartTime: p.StartTime, Code: 0, At: now()}
+	return ExitInfo{PID: p.PID, StartTime: p.StartTime, Code: code, At: now()}
+}
+
+// reapChild waits for a process this agent forked to exit and reaps it,
+// clearing the zombie and returning its exit code. It is safe to call once the
+// process is already a zombie (wait4 returns immediately). Returns 0 if the
+// process is not our child (ECHILD) or on error; a signalled process reports -1
+// via WaitStatus.ExitStatus.
+func reapChild(pid int) int {
+	var ws unix.WaitStatus
+	for {
+		wpid, err := unix.Wait4(pid, &ws, 0, nil)
+		if err == unix.EINTR {
+			continue
+		}
+		if err != nil || wpid != pid {
+			return 0
+		}
+		return ws.ExitStatus()
+	}
 }
 
 // Signal sends sig to the whole process group (negative pid).
