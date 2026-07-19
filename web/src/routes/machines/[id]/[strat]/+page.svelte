@@ -111,6 +111,19 @@
 			{#if actionError}
 				<p class="err mono">{actionError}</p>
 			{/if}
+			{#if view.schedules?.length}
+				<div class="sched">
+					<span class="lbl">Schedules</span>
+					<ul>
+						{#each view.schedules as s}
+							<li class="mono tiny">
+								{s.name}: {s.cronExpr} ({s.timezone})
+							</li>
+						{/each}
+					</ul>
+					<a class="muted tiny" href="/schedules">Edit…</a>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Phase state machine visualization (FRONTEND.md §4.1) -->
@@ -187,6 +200,15 @@
 	}
 	.tiny {
 		font-size: 0.75rem;
+	}
+	.sched {
+		margin-top: 0.75rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--line, #e5e5e5);
+	}
+	.sched ul {
+		margin: 0.25rem 0;
+		padding-left: 1.1rem;
 	}
 	.err {
 		margin: 0.75rem 0 0;

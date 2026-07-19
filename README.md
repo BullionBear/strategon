@@ -42,7 +42,7 @@ flowchart LR
     `converged` computed server-side
 - **Frontend** (`web/`) — SvelteKit + Connect-ES: fleet overview, machine detail
   (WatchMachine), **deploy phase tracker** (`/machines/:id/:strat`), deploy form,
-  schedules/audit placeholders
+  schedules (local cron executor) / audit placeholders
 
 ## Requirements
 

@@ -112,7 +112,7 @@ curl -sX POST .../ControlPlaneService/Rollback \
   -d '{"machineId":"m1","strategy":"s","targetVersion":""}'
 ```
 
-**SetSchedule**（全量覆蓋該策略 cron;cron 執行器未實作前僅寫 spec）
+**SetSchedule**（全量覆蓋該策略 cron;校驗後下發,agent 本地執行）
 ```bash
 curl -sX POST .../ControlPlaneService/SetSchedule \
   -d '{"machineId":"m1","strategy":"s","schedules":[{"name":"daily-restart","cronExpr":"0 0 * * *","timezone":"UTC","action":"CRON_ACTION_RESTART","jitterSeconds":30}]}'
@@ -175,7 +175,7 @@ trader 按「Deploy v42」:
 /machines/:id         單機詳情 —— WatchMachine 串流;策略卡片(期望vs實際)、資源、事件
 /machines/:id/:strat  策略部署追蹤 —— DeployPhase 狀態機視覺化(本層最該先做)
 /deploy               發佈流程 —— 選機器/策略/版本 → Deploy → 觀察 phase 推進
-/schedules            cron 管理 —— SetSchedule(執行器未實作前僅寫 spec,UI 標示 pending)
+/schedules            cron 管理 —— SetSchedule + StrategyView.schedules 讀回
 /audit                審計 —— ListAudit(Postgres 接上前為空,UI 標示)
 ```
 

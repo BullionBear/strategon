@@ -143,8 +143,10 @@ type StrategyView struct {
 	Converged      bool                   `protobuf:"varint,13,opt,name=converged,proto3" json:"converged,omitempty"`                  // desired == running && phase == HEALTHY
 	LeaseHeld      bool                   `protobuf:"varint,14,opt,name=lease_held,json=leaseHeld,proto3" json:"lease_held,omitempty"` // agent may leave unset; UI shows unknown until SAFETY lands
 	LeaseExpiresAt *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=lease_expires_at,json=leaseExpiresAt,proto3" json:"lease_expires_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Desired cron schedules (from StrategyAssignmentSpec); read-back for UI.
+	Schedules     []*CronSchedule `protobuf:"bytes,16,rep,name=schedules,proto3" json:"schedules,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StrategyView) Reset() {
@@ -278,6 +280,13 @@ func (x *StrategyView) GetLeaseHeld() bool {
 func (x *StrategyView) GetLeaseExpiresAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.LeaseExpiresAt
+	}
+	return nil
+}
+
+func (x *StrategyView) GetSchedules() []*CronSchedule {
+	if x != nil {
+		return x.Schedules
 	}
 	return nil
 }
@@ -1207,7 +1216,7 @@ const file_strategyplatform_v1_control_service_proto_rawDesc = "" +
 	"\x0elast_heartbeat\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rlastHeartbeat\x12A\n" +
 	"\n" +
 	"strategies\x18\a \x03(\v2!.strategyplatform.v1.StrategyViewR\n" +
-	"strategies\"\x81\x06\n" +
+	"strategies\"\xc2\x06\n" +
 	"\fStrategyView\x12\x1a\n" +
 	"\bstrategy\x18\x01 \x01(\tR\bstrategy\x12K\n" +
 	"\x10desired_artifact\x18\x02 \x01(\v2 .strategyplatform.v1.ArtifactRefR\x0fdesiredArtifact\x12G\n" +
@@ -1228,7 +1237,8 @@ const file_strategyplatform_v1_control_service_proto_rawDesc = "" +
 	"\tconverged\x18\r \x01(\bR\tconverged\x12\x1d\n" +
 	"\n" +
 	"lease_held\x18\x0e \x01(\bR\tleaseHeld\x12D\n" +
-	"\x10lease_expires_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x0eleaseExpiresAt\"Q\n" +
+	"\x10lease_expires_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x0eleaseExpiresAt\x12?\n" +
+	"\tschedules\x18\x10 \x03(\v2!.strategyplatform.v1.CronScheduleR\tschedules\"Q\n" +
 	"\x13ListMachinesRequest\x12\x1b\n" +
 	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
@@ -1367,37 +1377,38 @@ var file_strategyplatform_v1_control_service_proto_depIdxs = []int32{
 	23, // 9: strategyplatform.v1.StrategyView.running_config:type_name -> strategyplatform.v1.ArtifactRef
 	25, // 10: strategyplatform.v1.StrategyView.conditions:type_name -> strategyplatform.v1.Condition
 	22, // 11: strategyplatform.v1.StrategyView.lease_expires_at:type_name -> google.protobuf.Timestamp
-	0,  // 12: strategyplatform.v1.ListMachinesResponse.machines:type_name -> strategyplatform.v1.Machine
-	26, // 13: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
-	22, // 14: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
-	11, // 15: strategyplatform.v1.ListAuditResponse.entries:type_name -> strategyplatform.v1.AuditEntry
-	0,  // 16: strategyplatform.v1.MachineStatusEvent.machine:type_name -> strategyplatform.v1.Machine
-	22, // 17: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
-	23, // 18: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
-	23, // 19: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
-	2,  // 20: strategyplatform.v1.ControlPlaneService.ListMachines:input_type -> strategyplatform.v1.ListMachinesRequest
-	4,  // 21: strategyplatform.v1.ControlPlaneService.GetMachine:input_type -> strategyplatform.v1.GetMachineRequest
-	5,  // 22: strategyplatform.v1.ControlPlaneService.Deploy:input_type -> strategyplatform.v1.DeployRequest
-	7,  // 23: strategyplatform.v1.ControlPlaneService.Rollback:input_type -> strategyplatform.v1.RollbackRequest
-	9,  // 24: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
-	4,  // 25: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
-	12, // 26: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
-	15, // 27: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
-	17, // 28: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
-	3,  // 29: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
-	0,  // 30: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
-	6,  // 31: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
-	8,  // 32: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
-	10, // 33: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
-	14, // 34: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
-	13, // 35: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
-	16, // 36: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
-	18, // 37: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
-	29, // [29:38] is the sub-list for method output_type
-	20, // [20:29] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	26, // 12: strategyplatform.v1.StrategyView.schedules:type_name -> strategyplatform.v1.CronSchedule
+	0,  // 13: strategyplatform.v1.ListMachinesResponse.machines:type_name -> strategyplatform.v1.Machine
+	26, // 14: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
+	22, // 15: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
+	11, // 16: strategyplatform.v1.ListAuditResponse.entries:type_name -> strategyplatform.v1.AuditEntry
+	0,  // 17: strategyplatform.v1.MachineStatusEvent.machine:type_name -> strategyplatform.v1.Machine
+	22, // 18: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
+	23, // 19: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
+	23, // 20: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
+	2,  // 21: strategyplatform.v1.ControlPlaneService.ListMachines:input_type -> strategyplatform.v1.ListMachinesRequest
+	4,  // 22: strategyplatform.v1.ControlPlaneService.GetMachine:input_type -> strategyplatform.v1.GetMachineRequest
+	5,  // 23: strategyplatform.v1.ControlPlaneService.Deploy:input_type -> strategyplatform.v1.DeployRequest
+	7,  // 24: strategyplatform.v1.ControlPlaneService.Rollback:input_type -> strategyplatform.v1.RollbackRequest
+	9,  // 25: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
+	4,  // 26: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
+	12, // 27: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
+	15, // 28: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
+	17, // 29: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
+	3,  // 30: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
+	0,  // 31: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
+	6,  // 32: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
+	8,  // 33: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
+	10, // 34: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
+	14, // 35: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
+	13, // 36: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
+	16, // 37: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
+	18, // 38: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
+	30, // [30:39] is the sub-list for method output_type
+	21, // [21:30] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_strategyplatform_v1_control_service_proto_init() }
