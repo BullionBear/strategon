@@ -137,8 +137,15 @@
 	.head {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 0.75rem;
 		margin-top: 0.35rem;
+	}
+	.head h1 {
+		word-break: break-all;
+	}
+	.meta {
+		word-break: break-word;
 	}
 	.strat {
 		display: flex;
@@ -166,6 +173,8 @@
 		display: flex;
 		justify-content: space-between;
 		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
 	}
 	.actions {
 		display: flex;
@@ -201,5 +210,17 @@
 		margin: 0.65rem 0 0;
 		color: var(--danger);
 		font-size: 0.82rem;
+	}
+
+	@media (max-width: 639px) {
+		.vs {
+			grid-template-columns: 1fr;
+		}
+		.actions {
+			justify-content: stretch;
+		}
+		.actions .btn {
+			width: 100%;
+		}
 	}
 </style>

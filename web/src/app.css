@@ -18,6 +18,13 @@
 	--display: 'Fraunces', Georgia, serif;
 	--radius: 10px;
 	--shadow: 0 1px 0 rgba(20, 32, 43, 0.04), 0 8px 24px rgba(20, 32, 43, 0.06);
+
+	/* Layout breakpoints (morph points, not shrink points). */
+	--bp-mobile: 640px;
+	--bp-tablet: 1024px;
+	--sidebar-width: 220px;
+	--sidebar-collapsed: 56px;
+	--mobile-bar-h: 52px;
 }
 
 * {
@@ -75,50 +82,21 @@ h3 {
 	color: var(--ink-muted);
 }
 
+/* —— App shell: sidebar + fluid main —— */
 .shell {
-	max-width: 1100px;
-	margin: 0 auto;
+	display: flex;
+	min-height: 100vh;
+	position: relative;
+	max-width: none;
+	margin: 0;
+	padding: 0;
+}
+
+.shell-main {
+	flex: 1;
+	min-width: 0;
 	padding: 1.25rem 1.5rem 3rem;
 	position: relative;
-}
-
-.topbar {
-	display: flex;
-	align-items: center;
-	flex-wrap: wrap;
-	gap: 1.5rem;
-	padding: 0.75rem 0 1.25rem;
-	border-bottom: 1px solid var(--line);
-	margin-bottom: 1.75rem;
-}
-
-.brand {
-	font-family: var(--display);
-	font-size: 1.55rem;
-	font-weight: 700;
-	color: var(--ink);
-	letter-spacing: -0.03em;
-	text-decoration: none;
-}
-.brand:hover {
-	text-decoration: none;
-	color: var(--accent-ink);
-}
-
-.nav {
-	display: flex;
-	gap: 1rem;
-	flex-wrap: wrap;
-	font-size: 0.95rem;
-}
-.nav a {
-	color: var(--ink-muted);
-	font-weight: 500;
-}
-.nav a:hover,
-.nav a.active {
-	color: var(--accent-ink);
-	text-decoration: none;
 }
 
 .panel {
@@ -154,6 +132,22 @@ h3 {
 	opacity: 0.5;
 	cursor: not-allowed;
 }
+.btn.icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0.4rem;
+	min-width: 2rem;
+	min-height: 2rem;
+	background: transparent;
+	border-color: transparent;
+	color: var(--ink-muted);
+}
+.btn.icon:hover {
+	background: rgba(13, 115, 119, 0.08);
+	border-color: transparent;
+	color: var(--accent-ink);
+}
 
 input,
 select {
@@ -164,7 +158,8 @@ select {
 	border-radius: 8px;
 	background: #fff;
 	color: var(--ink);
-	min-width: 12rem;
+	min-width: min(12rem, 100%);
+	max-width: 100%;
 }
 
 label {
@@ -187,6 +182,7 @@ label {
 	border-radius: 999px;
 	border: 1px solid var(--line);
 	background: #fff;
+	white-space: nowrap;
 }
 .pill.ok {
 	border-color: #9fd4b3;
@@ -217,8 +213,44 @@ label {
 	display: grid;
 	gap: 0.85rem;
 }
-.grid.machines {
-	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+
+/* Resource mini bar */
+.mini-bar {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	min-width: 4.5rem;
+}
+.mini-bar .track {
+	flex: 1;
+	height: 6px;
+	border-radius: 999px;
+	background: var(--line);
+	overflow: hidden;
+	min-width: 2.5rem;
+}
+.mini-bar .fill {
+	display: block;
+	height: 100%;
+	border-radius: inherit;
+	background: var(--accent);
+	transition: width 0.2s ease;
+}
+.mini-bar.warn .fill {
+	background: var(--warn);
+}
+.mini-bar.danger .fill {
+	background: var(--danger);
+}
+.mini-bar.empty .fill {
+	background: transparent;
+}
+.mini-bar .pct {
+	font-family: var(--mono);
+	font-size: 0.72rem;
+	color: var(--ink-muted);
+	min-width: 2.4rem;
+	text-align: right;
 }
 
 @keyframes pulse-dot {
@@ -259,4 +291,180 @@ label {
 
 .fade-in {
 	animation: phase-in 0.28s ease-out;
+}
+
+/* —— Dense fleet table —— */
+.fleet-table-wrap {
+	width: 100%;
+	overflow-x: auto;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	box-shadow: var(--shadow);
+}
+
+.fleet-table {
+	width: 100%;
+	border-collapse: collapse;
+	table-layout: auto;
+	font-size: 0.88rem;
+}
+
+.fleet-table th,
+.fleet-table td {
+	padding: 0.45rem 0.65rem;
+	border-bottom: 1px solid var(--line);
+	text-align: left;
+	vertical-align: middle;
+	white-space: nowrap;
+}
+
+.fleet-table th {
+	font-size: 0.72rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--ink-muted);
+	background: rgba(255, 255, 255, 0.55);
+	position: sticky;
+	top: 0;
+	z-index: 1;
+}
+
+.fleet-table th.sortable {
+	cursor: pointer;
+	user-select: none;
+}
+.fleet-table th.sortable:hover {
+	color: var(--accent-ink);
+}
+.fleet-table th .sort-ind {
+	margin-left: 0.2rem;
+	opacity: 0.45;
+}
+.fleet-table th.sorted .sort-ind {
+	opacity: 1;
+	color: var(--accent-ink);
+}
+
+.fleet-table tbody tr {
+	cursor: pointer;
+	transition: background 0.12s;
+}
+.fleet-table tbody tr:hover {
+	background: rgba(13, 115, 119, 0.06);
+}
+.fleet-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.fleet-table a.row-link {
+	color: inherit;
+	text-decoration: none;
+	font-weight: 600;
+}
+.fleet-table a.row-link:hover {
+	color: var(--accent-ink);
+	text-decoration: none;
+}
+
+/* Column priority: hide secondary cols on tablet (agent / heartbeat). */
+@media (max-width: 1024px) {
+	.fleet-table .col-p3 {
+		display: none;
+	}
+}
+
+/* Mobile: table → compact cards */
+.fleet-cards {
+	display: none;
+	flex-direction: column;
+	gap: 0.55rem;
+}
+
+.fleet-card {
+	display: flex;
+	flex-direction: column;
+	gap: 0.35rem;
+	padding: 0.75rem 0.9rem;
+	border: 1px solid var(--line);
+	border-radius: var(--radius);
+	background: var(--surface);
+	box-shadow: var(--shadow);
+	color: inherit;
+	text-decoration: none;
+	transition: border-color 0.15s;
+}
+.fleet-card:hover {
+	border-color: var(--accent);
+	text-decoration: none;
+}
+.fleet-card .card-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
+}
+.fleet-card .card-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.45rem 0.75rem;
+	font-size: 0.8rem;
+	color: var(--ink-muted);
+}
+
+.region-section {
+	margin-top: 1rem;
+}
+.region-section:first-of-type {
+	margin-top: 1.25rem;
+}
+
+.region-toggle {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	appearance: none;
+	border: none;
+	background: transparent;
+	padding: 0.35rem 0.15rem;
+	cursor: pointer;
+	font-family: var(--font);
+	font-size: 0.92rem;
+	font-weight: 650;
+	color: var(--ink);
+	text-align: left;
+}
+.region-toggle:hover {
+	color: var(--accent-ink);
+}
+.region-toggle .chev {
+	display: inline-block;
+	width: 0.7rem;
+	transition: transform 0.15s;
+	color: var(--ink-muted);
+}
+.region-toggle[aria-expanded='false'] .chev {
+	transform: rotate(-90deg);
+}
+.region-toggle .count {
+	font-family: var(--mono);
+	font-size: 0.75rem;
+	font-weight: 500;
+	color: var(--ink-muted);
+}
+
+@media (max-width: 639px) {
+	.shell-main {
+		padding: 1rem 1rem 2.5rem;
+		padding-top: calc(var(--mobile-bar-h) + 0.75rem);
+	}
+
+	.fleet-table-wrap {
+		display: none;
+	}
+	.fleet-cards {
+		display: flex;
+	}
 }
