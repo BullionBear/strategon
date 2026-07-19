@@ -1,0 +1,58 @@
+# Production stack for s7n.lynkora.com.
+#
+# Lives at /opt/strategon/deploy/docker-compose.yml on the host. CI only ever
+# rewrites STRATEGON_VERSION in .env and runs `docker compose up -d`; secrets in
+# .env are never overwritten by a deploy.
+#
+# Traefik already owns :80/:443 on this host and discovers containers on the
+# external `web` network, so nothing here publishes a port.
+#
+# Postgres is a separate long-lived substrate (CICD.md §4.3) — not managed here.
+
+# Fixed project name so containers are strategon-controlplane-1 regardless of
+# the directory CI happens to run compose from.
+name: strategon
+
+services:
+  controlplane:
+    image: ghcr.io/bullionbear/strategon:${STRATEGON_VERSION:-latest}
+    restart: unless-stopped
+    command:
+      # Container-local bind: the default is loopback, which Traefik cannot reach.
+      - --human-addr=0.0.0.0:8081
+      # Agent listener stays on the docker network only. It speaks plaintext
+      # h2c until --tls-cert/--tls-key/--client-ca are supplied, so publishing
+      # it now would expose AgentService with no client-certificate check.
+      # See DEPLOYMENT.md "Exposing the agent endpoint" before changing this.
+      - --agent-addr=0.0.0.0:8080
+      - --db=${STRATEGON_DB_DSN}
+      - --auth-mode=discord
+      - --auth-session-secret=${SESSION_SECRET}
+      - --discord-client-id=${DISCORD_CLIENT_ID}
+      - --discord-client-secret=${DISCORD_CLIENT_SECRET}
+      # Authorization is flat: whoever logs in is a full operator. Guild
+      # membership is the only gate on this public endpoint — never blank it.
+      - --discord-guild-id=${DISCORD_GUILD_ID}
+      - --discord-redirect-url=https://s7n.lynkora.com/auth/callback
+      - --auth-frontend-url=https://s7n.lynkora.com
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.strategon.rule=Host(`s7n.lynkora.com`)"
+      - "traefik.http.routers.strategon.entrypoints=websecure"
+      - "traefik.http.routers.strategon.tls.certresolver=le"
+      # One binary serves the UI, the human API and /auth — a single router
+      # covers the whole host, no path rules needed.
+      - "traefik.http.services.strategon.loadbalancer.server.port=8081"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - web
+
+networks:
+  web:
+    name: web
+    external: true

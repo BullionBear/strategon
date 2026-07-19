@@ -16,7 +16,7 @@ LDFLAGS := -X '$(PACKAGE)/internal/buildinfo.Version=$(VERSION)' \
            -X '$(PACKAGE)/internal/buildinfo.CommitHash=$(COMMIT_HASH)' \
            -X '$(PACKAGE)/internal/buildinfo.BuildTime=$(BUILD_TIMESTAMP)'
 
-.PHONY: all proto lint breaking generate build test tidy tools
+.PHONY: all proto lint breaking generate build test tidy tools web-build release
 
 all: generate build test
 
@@ -48,6 +48,22 @@ build:
 ## test: run the full Go test suite
 test:
 	go test ./...
+
+## web-build: build the SPA and stage it where //go:embed picks it up.
+## Order matters (CICD.md §1): this must run before any go build that ships a
+## UI, or an empty dist/ gets embedded.
+web-build:
+	cd web && pnpm install --frozen-lockfile && pnpm build
+	rm -rf internal/webassets/dist
+	cp -r web/build internal/webassets/dist
+	touch internal/webassets/dist/.gitkeep
+
+## release: UI-embedded, statically linked CP + agent for both architectures
+release: web-build
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/controlplane-linux-amd64 ./cmd/controlplane
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/controlplane-linux-arm64 ./cmd/controlplane
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/agent-linux-amd64 ./cmd/agent
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/agent-linux-arm64 ./cmd/agent
 
 ## web-install / web-check / web-dev: frontend helpers
 web-install:

@@ -25,6 +25,7 @@ import (
 	cpLease "github.com/bullionbear/strategon/internal/controlplane/lease"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/mtls"
+	"github.com/bullionbear/strategon/internal/webassets"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -49,6 +50,7 @@ func main() {
 	discordClientID := flag.String("discord-client-id", "", "Discord OAuth client id (auth-mode=discord)")
 	discordClientSecret := flag.String("discord-client-secret", "", "Discord OAuth client secret (auth-mode=discord)")
 	discordRedirect := flag.String("discord-redirect-url", "http://127.0.0.1:8081/auth/callback", "Discord OAuth redirect URL")
+	discordGuildID := flag.String("discord-guild-id", "", "restrict login to members of this Discord guild (empty = any Discord account)")
 	frontendURL := flag.String("auth-frontend-url", "http://127.0.0.1:5173", "browser redirect after login/logout")
 
 	flag.Parse()
@@ -71,6 +73,7 @@ func main() {
 		DiscordClientID:     *discordClientID,
 		DiscordClientSecret: *discordClientSecret,
 		DiscordRedirectURL:  *discordRedirect,
+		DiscordGuildID:      *discordGuildID,
 		FrontendURL:         *frontendURL,
 		Logger:              logger,
 	})
@@ -116,6 +119,10 @@ func main() {
 	humanMux.Handle(humanPath, humanHandler)
 	authSvc.Mount(humanMux)
 	humanMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	// Catch-all, so the embedded SPA serves every path the routes above don't
+	// claim. ServeMux prefers the longest matching pattern, so the RPC, auth
+	// and health routes still win over "/".
+	humanMux.Handle("/", webassets.Handler())
 
 	h2s := &http2.Server{}
 	go func() {
@@ -126,7 +133,7 @@ func main() {
 		}
 	}()
 
-	logger.Info("human API listening", "addr", *humanAddr, "auth_mode", mode,
+	logger.Info("human API listening", "addr", *humanAddr, "auth_mode", mode, "ui_embedded", webassets.Available(),
 		"build_version", buildinfo.Version, "commit", buildinfo.CommitHash, "build_time", buildinfo.BuildTime)
 	humanHTTP := &http.Server{Addr: *humanAddr, Handler: h2c.NewHandler(withCORS(humanMux), h2s)}
 	if err := humanHTTP.ListenAndServe(); err != nil {
