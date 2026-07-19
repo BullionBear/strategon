@@ -218,7 +218,8 @@
 	}
 	.form :global(input.wide),
 	.form textarea {
-		min-width: 18rem;
+		min-width: min(18rem, 100%);
+		max-width: 100%;
 	}
 	.form label.block {
 		flex: 1 1 100%;

@@ -217,7 +217,8 @@
 		align-items: flex-end;
 	}
 	.form :global(input.wide) {
-		min-width: 18rem;
+		min-width: min(18rem, 100%);
+		max-width: 100%;
 	}
 	.groups {
 		display: flex;

@@ -324,9 +324,18 @@
 		border-top: 1px dashed #f0b4ae;
 	}
 
-	@media (max-width: 720px) {
+	@media (max-width: 639px) {
 		.vs {
 			grid-template-columns: 1fr;
+		}
+		.head {
+			flex-direction: column;
+		}
+		.actions {
+			flex-wrap: wrap;
+		}
+		.actions .btn {
+			flex: 1 1 auto;
 		}
 	}
 </style>
