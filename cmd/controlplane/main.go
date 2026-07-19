@@ -8,6 +8,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log/slog"
 	"net/http"
@@ -28,6 +29,7 @@ func main() {
 	// Legacy alias for agent addr.
 	legacyAddr := flag.String("addr", "", "deprecated alias for --agent-addr")
 	resync := flag.Duration("resync", 30*time.Second, "periodic full-resync interval for agents")
+	dbDSN := flag.String("db", "", "PostgreSQL DSN (e.g. postgres://user:pass@host:5432/strategon); empty = in-memory store")
 	flag.Parse()
 	if *legacyAddr != "" {
 		*agentAddr = *legacyAddr
@@ -35,7 +37,20 @@ func main() {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	hub := store.NewHub()
-	st := store.NewMemory(hub)
+	var st store.Store
+	if *dbDSN != "" {
+		pg, err := store.NewPostgres(context.Background(), *dbDSN, hub)
+		if err != nil {
+			logger.Error("postgres store init failed", "err", err)
+			os.Exit(1)
+		}
+		defer pg.Close()
+		st = pg
+		logger.Info("using postgres store")
+	} else {
+		st = store.NewMemory(hub)
+		logger.Info("using in-memory store (state lost on restart; set --db for durability)")
+	}
 	agentSrv := grpcstream.New(st, grpcstream.WithResync(*resync), grpcstream.WithLogger(logger))
 	humanSrv := api.New(st, hub, agentSrv, logger)
 

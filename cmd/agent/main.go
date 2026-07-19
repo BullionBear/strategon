@@ -49,7 +49,7 @@ func main() {
 	out := make(chan *pb.AgentMessage, 128)
 	rec := reconciler.New(reconciler.Deps{
 		Driver:    driver.NewExecDriver(*cgroupRoot),
-		Artifacts: artifact.NewManager(*base, artifact.LocalFetcher{}),
+		Artifacts: artifact.NewManager(*base, artifact.NewDefaultFetcher()),
 		Health:    health.AlwaysReady{},
 		Clock:     clock.Real{},
 		Out:       out,

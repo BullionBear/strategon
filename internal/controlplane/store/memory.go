@@ -210,7 +210,7 @@ func (m *Memory) RegisterArtifact(ref *pb.ArtifactRef) error {
 	if ref.GetUri() == "" {
 		return fmt.Errorf("register artifact: uri is required")
 	}
-	if _, err := artifacturi.ResolveLocal(ref.GetUri()); err != nil {
+	if err := artifacturi.Validate(ref.GetUri()); err != nil {
 		return fmt.Errorf("register artifact: %w", err)
 	}
 	m.mu.Lock()

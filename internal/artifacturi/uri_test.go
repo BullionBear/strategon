@@ -33,3 +33,29 @@ func TestResolveLocal(t *testing.T) {
 		}
 	}
 }
+
+func TestValidate(t *testing.T) {
+	ok := []string{
+		"/tmp/x",
+		"file:///tmp/x",
+		"https://github.com/org/repo/releases/download/v1/strat",
+		"http://example.com/bin",
+	}
+	for _, uri := range ok {
+		if err := Validate(uri); err != nil {
+			t.Errorf("Validate(%q) = %v, want nil", uri, err)
+		}
+	}
+	bad := []string{
+		"",
+		"file://tmp/x",   // two-slash relative
+		"s3://bucket/key", // deferred
+		"https://",        // no host
+		"tmp/x",           // relative
+	}
+	for _, uri := range bad {
+		if err := Validate(uri); err == nil {
+			t.Errorf("Validate(%q) = nil, want error", uri)
+		}
+	}
+}

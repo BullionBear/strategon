@@ -58,6 +58,12 @@ func TestRegisterArtifactRejectsRelativeFileURI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("absolute file URI should be accepted: %v", err)
 	}
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v2", Digest: "sha256:bbb",
+		Uri: "https://github.com/org/repo/releases/download/v2/strat",
+	}); err != nil {
+		t.Fatalf("https URI should be accepted: %v", err)
+	}
 }
 
 func TestApplyStatusAndHeartbeat(t *testing.T) {
