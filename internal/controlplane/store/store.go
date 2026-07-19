@@ -15,6 +15,19 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
 
+// Resource sample window defaults (short-term sparkline, not long-term history).
+const (
+	ResourceSampleInterval = time.Minute
+	ResourceSampleRetain   = time.Hour
+)
+
+// ResourceSample is one point in the sliding window.
+type ResourceSample struct {
+	SampledAt  time.Time
+	CPUPercent float64
+	MemBytes   int64
+}
+
 // MachineRecord is the control plane's view of a machine.
 type MachineRecord struct {
 	MachineID         string
@@ -23,7 +36,8 @@ type MachineRecord struct {
 	AgentVersion      int32  // capability version (monotonic)
 	AgentBuildVersion string // buildinfo.Version — display only
 	LastResources     *pb.MachineResources
-	LastHeartbeat     int64 // unix seconds; 0 = never
+	LastProcesses     []*pb.ProcessMetrics // latest Heartbeat process snapshot
+	LastHeartbeat     int64                // unix seconds; 0 = never
 	Generation        int64
 	Assignments       map[string]*pb.StrategyAssignmentSpec // strategy -> spec
 	Status            map[string]*pb.StrategyAssignmentStatus
@@ -59,7 +73,13 @@ type Store interface {
 	ApplyStatus(machineID string, report *pb.StatusReport) error
 
 	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent versions).
+	// Also appends to the short-term resource_samples window at most once per
+	// ResourceSampleInterval.
 	ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64) error
+
+	// ListResourceSamples returns sliding-window samples for machine/strategy
+	// (strategy "" = machine-level), oldest first, within [since, now].
+	ListResourceSamples(machineID, strategy string, since time.Time) ([]ResourceSample, error)
 
 	// SetReachable marks a machine reachable/unreachable.
 	SetReachable(machineID string, reachable bool) error

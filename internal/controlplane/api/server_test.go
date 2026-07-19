@@ -431,3 +431,42 @@ func TestDeployBlockedWhileOtherMachineHoldsLease(t *testing.T) {
 		t.Fatal("expected lease_held on m1 StrategyView")
 	}
 }
+
+func TestGetMachineMetrics(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.ApplyHeartbeat("m1", &pb.Heartbeat{
+		Resources: &pb.MachineResources{CpuPercent: 22, MemoryUsedBytes: 4096},
+		Processes: []*pb.ProcessMetrics{{Strategy: "s1", CpuPercent: 5, RssBytes: 512}},
+	}, time.Now().Unix()); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := client.GetMachineMetrics(ctx, connect.NewRequest(&pb.GetMachineMetricsRequest{
+		MachineId: "m1", RangeSeconds: 3600,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Msg.GetSamples()) != 1 || resp.Msg.GetSamples()[0].GetCpuPercent() != 22 {
+		t.Fatalf("machine samples: %+v", resp.Msg.GetSamples())
+	}
+	presp, err := client.GetMachineMetrics(ctx, connect.NewRequest(&pb.GetMachineMetricsRequest{
+		MachineId: "m1", Strategy: "s1",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(presp.Msg.GetSamples()) != 1 || presp.Msg.GetSamples()[0].GetMemBytes() != 512 {
+		t.Fatalf("process samples: %+v", presp.Msg.GetSamples())
+	}
+	m, err := client.GetMachine(ctx, connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Msg.GetLastResources().GetCpuPercent() != 22 {
+		t.Fatalf("last_resources: %+v", m.Msg.GetLastResources())
+	}
+}

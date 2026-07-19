@@ -86,6 +86,43 @@ export function formatHeartbeat(ts?: Timestamp, now = Date.now()): string {
 	return `${Math.floor(sec / 86400)}d ago`;
 }
 
+/** Format a duration as compact uptime (e.g. 3h20m). */
+export function formatUptime(startedAt?: Timestamp, now = Date.now()): string {
+	const ms = heartbeatMs(startedAt);
+	if (!ms) return '—';
+	let sec = Math.max(0, Math.floor((now - ms) / 1000));
+	const d = Math.floor(sec / 86400);
+	sec %= 86400;
+	const h = Math.floor(sec / 3600);
+	sec %= 3600;
+	const m = Math.floor(sec / 60);
+	if (d > 0) return `${d}d${h}h`;
+	if (h > 0) return `${h}h${m.toString().padStart(2, '0')}m`;
+	if (m > 0) return `${m}m`;
+	return `${sec}s`;
+}
+
+export function formatClock(ts?: Timestamp): string {
+	const ms = heartbeatMs(ts);
+	if (!ms) return '—';
+	const d = new Date(ms);
+	return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+export function formatBytes(n?: bigint | number | null): string {
+	if (n == null) return '—';
+	const v = typeof n === 'bigint' ? Number(n) : n;
+	if (!Number.isFinite(v) || v < 0) return '—';
+	const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+	let x = v;
+	let i = 0;
+	while (x >= 1024 && i < units.length - 1) {
+		x /= 1024;
+		i++;
+	}
+	return `${x < 10 && i > 0 ? x.toFixed(1) : Math.round(x)}${units[i]}`;
+}
+
 export type SortKey =
 	| 'name'
 	| 'status'

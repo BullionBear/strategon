@@ -122,6 +122,8 @@ func TestApplyStatusAndHeartbeat(t *testing.T) {
 	}
 	if err := s.ApplyHeartbeat("m1", &pb.Heartbeat{
 		ObservedGeneration: 7, AgentVersion: 3, AgentBuildVersion: "v1.0.1-dirty",
+		Resources: &pb.MachineResources{CpuPercent: 12.5, MemoryUsedBytes: 1024},
+		Processes: []*pb.ProcessMetrics{{Strategy: "s1", CpuPercent: 3, RssBytes: 256}},
 	}, 100); err != nil {
 		t.Fatal(err)
 	}
@@ -129,6 +131,37 @@ func TestApplyStatusAndHeartbeat(t *testing.T) {
 	if rec.ObservedGen != 7 || rec.AgentVersion != 3 || rec.LastHeartbeat != 100 ||
 		rec.AgentBuildVersion != "v1.0.1-dirty" {
 		t.Fatalf("unexpected record: %+v", rec)
+	}
+	if rec.LastResources.GetCpuPercent() != 12.5 || len(rec.LastProcesses) != 1 {
+		t.Fatalf("resources not stored: %+v procs=%v", rec.LastResources, rec.LastProcesses)
+	}
+	samples, err := s.ListResourceSamples("m1", "", time.Unix(0, 0))
+	if err != nil || len(samples) != 1 {
+		t.Fatalf("machine samples: err=%v n=%d", err, len(samples))
+	}
+	psamples, err := s.ListResourceSamples("m1", "s1", time.Unix(0, 0))
+	if err != nil || len(psamples) != 1 || psamples[0].MemBytes != 256 {
+		t.Fatalf("process samples: err=%v %+v", err, psamples)
+	}
+	// Within the sample interval: no second write.
+	if err := s.ApplyHeartbeat("m1", &pb.Heartbeat{
+		Resources: &pb.MachineResources{CpuPercent: 99},
+	}, 130); err != nil {
+		t.Fatal(err)
+	}
+	samples, _ = s.ListResourceSamples("m1", "", time.Unix(0, 0))
+	if len(samples) != 1 {
+		t.Fatalf("expected rate-limited samples, got %d", len(samples))
+	}
+	// Past interval: append.
+	if err := s.ApplyHeartbeat("m1", &pb.Heartbeat{
+		Resources: &pb.MachineResources{CpuPercent: 40},
+	}, 100+int64(ResourceSampleInterval/time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	samples, _ = s.ListResourceSamples("m1", "", time.Unix(0, 0))
+	if len(samples) != 2 {
+		t.Fatalf("expected 2 samples, got %d", len(samples))
 	}
 }
 

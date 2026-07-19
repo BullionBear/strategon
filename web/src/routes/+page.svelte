@@ -292,6 +292,8 @@
 						{#each group.machines as m (machineId(m))}
 							{@const id = machineId(m)}
 							{@const st = machineStatus(m)}
+							{@const cpu = cpuPercent(m)}
+							{@const mem = memoryPercent(m)}
 							<a class="fleet-card" href="/machines/{id}">
 								<div class="card-top">
 									<strong class="mono">{id}</strong>
@@ -306,6 +308,11 @@
 										>{m.strategies.length} strateg{m.strategies.length === 1
 											? 'y'
 											: 'ies'}</span
+									>
+									<span class="mono"
+										>cpu {cpu == null ? '—' : `${Math.round(cpu)}%`} · mem {mem == null
+											? '—'
+											: `${Math.round(mem)}%`}</span
 									>
 									{#if isBuildDrift(m)}
 										<span class="pill drift">drift</span>

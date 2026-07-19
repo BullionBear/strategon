@@ -28,6 +28,11 @@ message ProcessMetrics {
   int32 restart_count = 7;
 }
 
+// ProcessMetricsList is a storage/transport wrapper for a process metrics snapshot.
+message ProcessMetricsList {
+  repeated ProcessMetrics processes = 1;
+}
+
 // Heartbeat is high-frequency (5-10s) and lightweight. observed_generation lets
 // the control plane roughly track convergence without waiting for StatusReport.
 message Heartbeat {

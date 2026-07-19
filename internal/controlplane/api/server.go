@@ -68,6 +68,48 @@ func (s *Server) GetControlPlaneVersion(_ context.Context, _ *connect.Request[pb
 	}), nil
 }
 
+func (s *Server) GetMachineMetrics(_ context.Context, req *connect.Request[pb.GetMachineMetricsRequest]) (*connect.Response[pb.GetMachineMetricsResponse], error) {
+	machineID := req.Msg.GetMachineId()
+	if machineID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id is required"))
+	}
+	if _, ok := s.store.GetMachine(machineID); !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
+	}
+	rangeSec := req.Msg.GetRangeSeconds()
+	if rangeSec <= 0 {
+		rangeSec = int64(store.ResourceSampleRetain / time.Second)
+	}
+	since := time.Now().UTC().Add(-time.Duration(rangeSec) * time.Second)
+	samples, err := s.store.ListResourceSamples(machineID, req.Msg.GetStrategy(), since)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// Downsample to ~60 points for sparkline payloads.
+	samples = downsampleSamples(samples, 60)
+	out := make([]*pb.ResourceSamplePoint, 0, len(samples))
+	for _, s := range samples {
+		out = append(out, &pb.ResourceSamplePoint{
+			SampledAt:  timestamppb.New(s.SampledAt),
+			CpuPercent: s.CPUPercent,
+			MemBytes:   s.MemBytes,
+		})
+	}
+	return connect.NewResponse(&pb.GetMachineMetricsResponse{Samples: out}), nil
+}
+
+func downsampleSamples(in []store.ResourceSample, max int) []store.ResourceSample {
+	if max <= 0 || len(in) <= max {
+		return in
+	}
+	out := make([]store.ResourceSample, 0, max)
+	for i := 0; i < max; i++ {
+		idx := i * (len(in) - 1) / (max - 1)
+		out = append(out, in[idx])
+	}
+	return out
+}
+
 func (s *Server) Deploy(ctx context.Context, req *connect.Request[pb.DeployRequest]) (*connect.Response[pb.DeployResponse], error) {
 	msg := req.Msg
 	spec, art, fromVersion, err := s.buildDeploymentSpec(msg.GetMachineId(), msg.GetStrategy(), msg.GetArtifactVersion(), msg.GetConfigVersion(), nil, nil, false)

@@ -222,6 +222,51 @@ func (x *ProcessMetrics) GetRestartCount() int32 {
 	return 0
 }
 
+// ProcessMetricsList is a storage/transport wrapper for a process metrics snapshot.
+type ProcessMetricsList struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Processes     []*ProcessMetrics      `protobuf:"bytes,1,rep,name=processes,proto3" json:"processes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProcessMetricsList) Reset() {
+	*x = ProcessMetricsList{}
+	mi := &file_strategyplatform_v1_telemetry_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProcessMetricsList) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProcessMetricsList) ProtoMessage() {}
+
+func (x *ProcessMetricsList) ProtoReflect() protoreflect.Message {
+	mi := &file_strategyplatform_v1_telemetry_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProcessMetricsList.ProtoReflect.Descriptor instead.
+func (*ProcessMetricsList) Descriptor() ([]byte, []int) {
+	return file_strategyplatform_v1_telemetry_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ProcessMetricsList) GetProcesses() []*ProcessMetrics {
+	if x != nil {
+		return x.Processes
+	}
+	return nil
+}
+
 // Heartbeat is high-frequency (5-10s) and lightweight. observed_generation lets
 // the control plane roughly track convergence without waiting for StatusReport.
 type Heartbeat struct {
@@ -238,7 +283,7 @@ type Heartbeat struct {
 
 func (x *Heartbeat) Reset() {
 	*x = Heartbeat{}
-	mi := &file_strategyplatform_v1_telemetry_proto_msgTypes[2]
+	mi := &file_strategyplatform_v1_telemetry_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -250,7 +295,7 @@ func (x *Heartbeat) String() string {
 func (*Heartbeat) ProtoMessage() {}
 
 func (x *Heartbeat) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_telemetry_proto_msgTypes[2]
+	mi := &file_strategyplatform_v1_telemetry_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -263,7 +308,7 @@ func (x *Heartbeat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
 func (*Heartbeat) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_telemetry_proto_rawDescGZIP(), []int{2}
+	return file_strategyplatform_v1_telemetry_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Heartbeat) GetResources() *MachineResources {
@@ -327,7 +372,9 @@ const file_strategyplatform_v1_telemetry_proto_rawDesc = "" +
 	"\anum_fds\x18\x05 \x01(\x05R\x06numFds\x12\x1f\n" +
 	"\vcpu_percent\x18\x06 \x01(\x01R\n" +
 	"cpuPercent\x12#\n" +
-	"\rrestart_count\x18\a \x01(\x05R\frestartCount\"\x99\x02\n" +
+	"\rrestart_count\x18\a \x01(\x05R\frestartCount\"W\n" +
+	"\x12ProcessMetricsList\x12A\n" +
+	"\tprocesses\x18\x01 \x03(\v2#.strategyplatform.v1.ProcessMetricsR\tprocesses\"\x99\x02\n" +
 	"\tHeartbeat\x12C\n" +
 	"\tresources\x18\x01 \x01(\v2%.strategyplatform.v1.MachineResourcesR\tresources\x12A\n" +
 	"\tprocesses\x18\x02 \x03(\v2#.strategyplatform.v1.ProcessMetricsR\tprocesses\x12/\n" +
@@ -347,22 +394,24 @@ func file_strategyplatform_v1_telemetry_proto_rawDescGZIP() []byte {
 	return file_strategyplatform_v1_telemetry_proto_rawDescData
 }
 
-var file_strategyplatform_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_strategyplatform_v1_telemetry_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_strategyplatform_v1_telemetry_proto_goTypes = []any{
 	(*MachineResources)(nil),      // 0: strategyplatform.v1.MachineResources
 	(*ProcessMetrics)(nil),        // 1: strategyplatform.v1.ProcessMetrics
-	(*Heartbeat)(nil),             // 2: strategyplatform.v1.Heartbeat
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*ProcessMetricsList)(nil),    // 2: strategyplatform.v1.ProcessMetricsList
+	(*Heartbeat)(nil),             // 3: strategyplatform.v1.Heartbeat
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 }
 var file_strategyplatform_v1_telemetry_proto_depIdxs = []int32{
-	3, // 0: strategyplatform.v1.MachineResources.collected_at:type_name -> google.protobuf.Timestamp
-	0, // 1: strategyplatform.v1.Heartbeat.resources:type_name -> strategyplatform.v1.MachineResources
-	1, // 2: strategyplatform.v1.Heartbeat.processes:type_name -> strategyplatform.v1.ProcessMetrics
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 0: strategyplatform.v1.MachineResources.collected_at:type_name -> google.protobuf.Timestamp
+	1, // 1: strategyplatform.v1.ProcessMetricsList.processes:type_name -> strategyplatform.v1.ProcessMetrics
+	0, // 2: strategyplatform.v1.Heartbeat.resources:type_name -> strategyplatform.v1.MachineResources
+	1, // 3: strategyplatform.v1.Heartbeat.processes:type_name -> strategyplatform.v1.ProcessMetrics
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_strategyplatform_v1_telemetry_proto_init() }
@@ -376,7 +425,7 @@ func file_strategyplatform_v1_telemetry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_strategyplatform_v1_telemetry_proto_rawDesc), len(file_strategyplatform_v1_telemetry_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

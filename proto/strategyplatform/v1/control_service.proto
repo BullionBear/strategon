@@ -26,6 +26,8 @@ message Machine {
   repeated StrategyView strategies = 7;
   // buildinfo.Version from the agent — display only; not for compatibility
   string agent_build_version = 8;
+  // Latest per-process metrics from Heartbeat (instantaneous snapshot).
+  repeated ProcessMetrics last_processes = 9;
 }
 
 // StrategyView is a frontend-friendly join of desired (spec) and actual
@@ -52,6 +54,14 @@ message StrategyView {
   google.protobuf.Timestamp lease_expires_at = 15;
   // Desired cron schedules (from StrategyAssignmentSpec); read-back for UI.
   repeated CronSchedule schedules = 16;
+  // Process start time from agent StatusReport; UI computes uptime as now - started_at.
+  google.protobuf.Timestamp started_at = 17;
+  // Latest process metrics from Heartbeat (instantaneous; trends via GetMachineMetrics).
+  double cpu_percent = 18;
+  int64 rss_bytes = 19;
+  int32 num_fds = 20;
+  // Latest Deploy/SetDeployment/Rollback audit timestamp when available.
+  google.protobuf.Timestamp deployed_at = 21;
 }
 
 message ListMachinesRequest {
@@ -179,6 +189,25 @@ message ControlPlaneVersion {
   string build_time = 3;
 }
 
+// One point in the short-term PG sliding window (sparkline source).
+message ResourceSamplePoint {
+  google.protobuf.Timestamp sampled_at = 1;
+  double cpu_percent = 2;
+  int64 mem_bytes = 3;
+}
+
+message GetMachineMetricsRequest {
+  string machine_id = 1;
+  // Empty = machine-level samples; non-empty = that strategy's process samples.
+  string strategy = 2;
+  // Lookback window in seconds; 0 defaults to 3600 (1 hour).
+  int64 range_seconds = 3;
+}
+
+message GetMachineMetricsResponse {
+  repeated ResourceSamplePoint samples = 1;
+}
+
 service ControlPlaneService {
   rpc ListMachines(ListMachinesRequest) returns (ListMachinesResponse);
   rpc GetMachine(GetMachineRequest) returns (Machine);
@@ -199,4 +228,7 @@ service ControlPlaneService {
 
   // Ops display: control-plane build version (header/footer).
   rpc GetControlPlaneVersion(GetControlPlaneVersionRequest) returns (ControlPlaneVersion);
+
+  // Short-term resource trend from the PG sliding window (not a TSDB).
+  rpc GetMachineMetrics(GetMachineMetricsRequest) returns (GetMachineMetricsResponse);
 }
