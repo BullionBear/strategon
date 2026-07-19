@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"google.golang.org/protobuf/proto"
@@ -67,33 +68,33 @@ func (s *Server) GetControlPlaneVersion(_ context.Context, _ *connect.Request[pb
 	}), nil
 }
 
-func (s *Server) Deploy(_ context.Context, req *connect.Request[pb.DeployRequest]) (*connect.Response[pb.DeployResponse], error) {
+func (s *Server) Deploy(ctx context.Context, req *connect.Request[pb.DeployRequest]) (*connect.Response[pb.DeployResponse], error) {
 	msg := req.Msg
 	spec, art, fromVersion, err := s.buildDeploymentSpec(msg.GetMachineId(), msg.GetStrategy(), msg.GetArtifactVersion(), msg.GetConfigVersion(), nil, nil, false)
 	if err != nil {
 		return nil, err
 	}
-	gen, err := s.commitAssignment(msg.GetMachineId(), msg.GetStrategy(), spec, "Deploy", fromVersion, art.GetVersion())
+	gen, err := s.commitAssignment(ctx, msg.GetMachineId(), msg.GetStrategy(), spec, "Deploy", fromVersion, art.GetVersion())
 	if err != nil {
 		return nil, err
 	}
 	s.logger.Info("deploy", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
-		"version", art.GetVersion(), "generation", gen)
+		"version", art.GetVersion(), "generation", gen, "actor", auth.ActorFromContext(ctx))
 	return connect.NewResponse(&pb.DeployResponse{Generation: gen}), nil
 }
 
-func (s *Server) SetDeployment(_ context.Context, req *connect.Request[pb.SetDeploymentRequest]) (*connect.Response[pb.SetDeploymentResponse], error) {
+func (s *Server) SetDeployment(ctx context.Context, req *connect.Request[pb.SetDeploymentRequest]) (*connect.Response[pb.SetDeploymentResponse], error) {
 	msg := req.Msg
 	spec, art, fromVersion, err := s.buildDeploymentSpec(msg.GetMachineId(), msg.GetStrategy(), msg.GetArtifactVersion(), msg.GetConfigVersion(), msg.GetArgs(), msg.GetEnv(), true)
 	if err != nil {
 		return nil, err
 	}
-	gen, err := s.commitAssignment(msg.GetMachineId(), msg.GetStrategy(), spec, "SetDeployment", fromVersion, art.GetVersion())
+	gen, err := s.commitAssignment(ctx, msg.GetMachineId(), msg.GetStrategy(), spec, "SetDeployment", fromVersion, art.GetVersion())
 	if err != nil {
 		return nil, err
 	}
 	s.logger.Info("set_deployment", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
-		"version", art.GetVersion(), "generation", gen)
+		"version", art.GetVersion(), "generation", gen, "actor", auth.ActorFromContext(ctx))
 	return connect.NewResponse(&pb.SetDeploymentResponse{Generation: gen}), nil
 }
 
@@ -188,14 +189,14 @@ func latestArtifact(st store.Store, name string) (*pb.ArtifactRef, bool) {
 	return list[0], true
 }
 
-func (s *Server) commitAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec, action, fromVersion, toVersion string) (int64, error) {
+func (s *Server) commitAssignment(ctx context.Context, machineID, strategy string, spec *pb.StrategyAssignmentSpec, action, fromVersion, toVersion string) (int64, error) {
 	gen, err := s.store.SetAssignment(machineID, strategy, spec)
 	if err != nil {
 		return 0, connect.NewError(connect.CodeInternal, err)
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{
 		Timestamp:   timestamppb.Now(),
-		Actor:       "local",
+		Actor:       auth.ActorFromContext(ctx),
 		Action:      action,
 		MachineId:   machineID,
 		Strategy:    strategy,
@@ -208,7 +209,7 @@ func (s *Server) commitAssignment(machineID, strategy string, spec *pb.StrategyA
 	return gen, nil
 }
 
-func (s *Server) Rollback(_ context.Context, req *connect.Request[pb.RollbackRequest]) (*connect.Response[pb.RollbackResponse], error) {
+func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackRequest]) (*connect.Response[pb.RollbackResponse], error) {
 	msg := req.Msg
 	if msg.GetMachineId() == "" || msg.GetStrategy() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
@@ -250,7 +251,7 @@ func (s *Server) Rollback(_ context.Context, req *connect.Request[pb.RollbackReq
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{
 		Timestamp:   timestamppb.Now(),
-		Actor:       "local",
+		Actor:       auth.ActorFromContext(ctx),
 		Action:      "Rollback",
 		MachineId:   msg.GetMachineId(),
 		Strategy:    msg.GetStrategy(),
@@ -263,7 +264,7 @@ func (s *Server) Rollback(_ context.Context, req *connect.Request[pb.RollbackReq
 	return connect.NewResponse(&pb.RollbackResponse{Generation: gen}), nil
 }
 
-func (s *Server) Undeploy(_ context.Context, req *connect.Request[pb.UndeployRequest]) (*connect.Response[pb.UndeployResponse], error) {
+func (s *Server) Undeploy(ctx context.Context, req *connect.Request[pb.UndeployRequest]) (*connect.Response[pb.UndeployResponse], error) {
 	msg := req.Msg
 	if msg.GetMachineId() == "" || msg.GetStrategy() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
@@ -284,7 +285,7 @@ func (s *Server) Undeploy(_ context.Context, req *connect.Request[pb.UndeployReq
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{
 		Timestamp:   timestamppb.Now(),
-		Actor:       "local",
+		Actor:       auth.ActorFromContext(ctx),
 		Action:      "Undeploy",
 		MachineId:   msg.GetMachineId(),
 		Strategy:    msg.GetStrategy(),
@@ -294,11 +295,11 @@ func (s *Server) Undeploy(_ context.Context, req *connect.Request[pb.UndeployReq
 		s.agents.Notify(msg.GetMachineId())
 	}
 	s.logger.Info("undeploy", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
-		"from_version", fromVersion, "generation", gen)
+		"from_version", fromVersion, "generation", gen, "actor", auth.ActorFromContext(ctx))
 	return connect.NewResponse(&pb.UndeployResponse{Generation: gen}), nil
 }
 
-func (s *Server) SetSchedule(_ context.Context, req *connect.Request[pb.SetScheduleRequest]) (*connect.Response[pb.SetScheduleResponse], error) {
+func (s *Server) SetSchedule(ctx context.Context, req *connect.Request[pb.SetScheduleRequest]) (*connect.Response[pb.SetScheduleResponse], error) {
 	msg := req.Msg
 	if msg.GetMachineId() == "" || msg.GetStrategy() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
@@ -322,7 +323,7 @@ func (s *Server) SetSchedule(_ context.Context, req *connect.Request[pb.SetSched
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{
 		Timestamp: timestamppb.Now(),
-		Actor:     "local",
+		Actor:     auth.ActorFromContext(ctx),
 		Action:    "ConfigChange",
 		MachineId: msg.GetMachineId(),
 		Strategy:  msg.GetStrategy(),
@@ -407,10 +408,18 @@ func (s *Server) ListAudit(_ context.Context, req *connect.Request[pb.ListAuditR
 	return connect.NewResponse(&pb.ListAuditResponse{Entries: entries}), nil
 }
 
-func (s *Server) RegisterArtifact(_ context.Context, req *connect.Request[pb.RegisterArtifactRequest]) (*connect.Response[pb.RegisterArtifactResponse], error) {
-	if err := s.store.RegisterArtifact(req.Msg.GetArtifact()); err != nil {
+func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.RegisterArtifactRequest]) (*connect.Response[pb.RegisterArtifactResponse], error) {
+	art := req.Msg.GetArtifact()
+	if err := s.store.RegisterArtifact(art); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp: timestamppb.Now(),
+		Actor:     auth.ActorFromContext(ctx),
+		Action:    "RegisterArtifact",
+		Strategy:  art.GetName(),
+		ToVersion: art.GetVersion(),
+	})
 	return connect.NewResponse(&pb.RegisterArtifactResponse{}), nil
 }
 
