@@ -23,8 +23,9 @@ func BuildMachine(rec *store.MachineRecord, st store.Store) *pb.Machine {
 			Uid:        rec.MachineID,
 			Generation: rec.Generation,
 		},
-		Reachable:    rec.Reachable,
-		AgentVersion: rec.AgentVersion,
+		Reachable:         rec.Reachable,
+		AgentVersion:      rec.AgentVersion,
+		AgentBuildVersion: rec.AgentBuildVersion,
 	}
 	if rec.Register != nil {
 		m.Spec = rec.Register.GetSpec()

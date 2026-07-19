@@ -17,15 +17,16 @@ import (
 
 // MachineRecord is the control plane's view of a machine.
 type MachineRecord struct {
-	MachineID     string
-	Register      *pb.Register
-	Reachable     bool
-	AgentVersion  int32
-	LastResources *pb.MachineResources
-	LastHeartbeat int64 // unix seconds; 0 = never
-	Generation    int64
-	Assignments   map[string]*pb.StrategyAssignmentSpec // strategy -> spec
-	Status        map[string]*pb.StrategyAssignmentStatus
+	MachineID         string
+	Register          *pb.Register
+	Reachable         bool
+	AgentVersion      int32  // capability version (monotonic)
+	AgentBuildVersion string // buildinfo.Version — display only
+	LastResources     *pb.MachineResources
+	LastHeartbeat     int64 // unix seconds; 0 = never
+	Generation        int64
+	Assignments       map[string]*pb.StrategyAssignmentSpec // strategy -> spec
+	Status            map[string]*pb.StrategyAssignmentStatus
 	// PreviousArtifacts tracks the last replaced artifact per strategy so
 	// Rollback with empty target_version can re-point desired state (FRONTEND.md §2.2).
 	PreviousArtifacts map[string]*pb.ArtifactRef
@@ -54,7 +55,7 @@ type Store interface {
 	// ApplyStatus records an agent-reported StatusReport.
 	ApplyStatus(machineID string, report *pb.StatusReport) error
 
-	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent version).
+	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent versions).
 	ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64) error
 
 	// SetReachable marks a machine reachable/unreachable.

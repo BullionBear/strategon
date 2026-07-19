@@ -19,11 +19,13 @@ message Machine {
   MachineSpec spec = 2;
   MachineResources last_resources = 3;
   bool reachable = 4;
-  int32 agent_version = 5;
+  int32 agent_version = 5; // capability version (monotonic)
   google.protobuf.Timestamp last_heartbeat = 6;
   // Per-strategy desired+actual merged view. Assembled by the control plane so
   // the frontend never joins spec/status itself (FRONTEND.md §1.2).
   repeated StrategyView strategies = 7;
+  // buildinfo.Version from the agent — display only; not for compatibility
+  string agent_build_version = 8;
 }
 
 // StrategyView is a frontend-friendly join of desired (spec) and actual
@@ -168,6 +170,15 @@ message ListArtifactsResponse {
   repeated ArtifactRef artifacts = 1;
 }
 
+// Control-plane binary build metadata (display only; not stored).
+message GetControlPlaneVersionRequest {}
+
+message ControlPlaneVersion {
+  string version = 1; // buildinfo.Version
+  string commit_hash = 2;
+  string build_time = 3;
+}
+
 service ControlPlaneService {
   rpc ListMachines(ListMachinesRequest) returns (ListMachinesResponse);
   rpc GetMachine(GetMachineRequest) returns (Machine);
@@ -185,4 +196,7 @@ service ControlPlaneService {
 
   rpc RegisterArtifact(RegisterArtifactRequest) returns (RegisterArtifactResponse);
   rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
+
+  // Ops display: control-plane build version (header/footer).
+  rpc GetControlPlaneVersion(GetControlPlaneVersionRequest) returns (ControlPlaneVersion);
 }

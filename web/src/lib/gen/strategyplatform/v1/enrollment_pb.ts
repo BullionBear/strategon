@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/enrollment.proto.
  */
 export const file_strategyplatform_v1_enrollment: GenFile = /*@__PURE__*/
-  fileDesc("CiRzdHJhdGVneXBsYXRmb3JtL3YxL2Vucm9sbG1lbnQucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEizAEKC01hY2hpbmVTcGVjEhAKCG51bV9jcHVzGAEgASgFEhoKEm1lbW9yeV90b3RhbF9ieXRlcxgCIAEoAxIKCgJvcxgDIAEoCRIMCgRhcmNoGAQgASgJEhYKDmtlcm5lbF92ZXJzaW9uGAUgASgJEg4KBnJlZ2lvbhgGIAEoCRIMCgR6b25lGAcgASgJEj8KEXN1cHBvcnRlZF9kcml2ZXJzGAggAygOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXIihAEKDUVucm9sbFJlcXVlc3QSGAoQZW5yb2xsbWVudF90b2tlbhgBIAEoCRIcChRyZXF1ZXN0ZWRfbWFjaGluZV9pZBgCIAEoCRILCgNjc3IYAyABKAwSLgoEc3BlYxgEIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVNwZWMiVQoORW5yb2xsUmVzcG9uc2USEwoLY2VydGlmaWNhdGUYASABKAwSEQoJY2FfYnVuZGxlGAIgASgMEhsKE2Fzc2lnbmVkX21hY2hpbmVfaWQYAyABKAkijQEKCFJlZ2lzdGVyEhIKCm1hY2hpbmVfaWQYASABKAkSEAoIaG9zdG5hbWUYAiABKAkSLgoEc3BlYxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVNwZWMSFQoNYWdlbnRfdmVyc2lvbhgEIAEoBRIUCgxhZ2VudF9zZW12ZXIYBSABKAlCTVpLZ2l0aHViLmNvbS9idWxsaW9uYmVhci9zdHJhdGVnb24vZ2VuL3N0cmF0ZWd5cGxhdGZvcm0vdjE7c3RyYXRlZ3lwbGF0Zm9ybXYxYgZwcm90bzM", [file_strategyplatform_v1_common]);
+  fileDesc("CiRzdHJhdGVneXBsYXRmb3JtL3YxL2Vucm9sbG1lbnQucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEizAEKC01hY2hpbmVTcGVjEhAKCG51bV9jcHVzGAEgASgFEhoKEm1lbW9yeV90b3RhbF9ieXRlcxgCIAEoAxIKCgJvcxgDIAEoCRIMCgRhcmNoGAQgASgJEhYKDmtlcm5lbF92ZXJzaW9uGAUgASgJEg4KBnJlZ2lvbhgGIAEoCRIMCgR6b25lGAcgASgJEj8KEXN1cHBvcnRlZF9kcml2ZXJzGAggAygOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXIihAEKDUVucm9sbFJlcXVlc3QSGAoQZW5yb2xsbWVudF90b2tlbhgBIAEoCRIcChRyZXF1ZXN0ZWRfbWFjaGluZV9pZBgCIAEoCRILCgNjc3IYAyABKAwSLgoEc3BlYxgEIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVNwZWMiVQoORW5yb2xsUmVzcG9uc2USEwoLY2VydGlmaWNhdGUYASABKAwSEQoJY2FfYnVuZGxlGAIgASgMEhsKE2Fzc2lnbmVkX21hY2hpbmVfaWQYAyABKAkiqgEKCFJlZ2lzdGVyEhIKCm1hY2hpbmVfaWQYASABKAkSEAoIaG9zdG5hbWUYAiABKAkSLgoEc3BlYxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVNwZWMSFQoNYWdlbnRfdmVyc2lvbhgEIAEoBRIUCgxhZ2VudF9zZW12ZXIYBSABKAkSGwoTYWdlbnRfYnVpbGRfdmVyc2lvbhgGIAEoCUJNWktnaXRodWIuY29tL2J1bGxpb25iZWFyL3N0cmF0ZWdvbi9nZW4vc3RyYXRlZ3lwbGF0Zm9ybS92MTtzdHJhdGVneXBsYXRmb3JtdjFiBnByb3RvMw", [file_strategyplatform_v1_common]);
 
 /**
  * @generated from message strategyplatform.v1.MachineSpec
@@ -160,6 +160,8 @@ export type Register = Message<"strategyplatform.v1.Register"> & {
   spec?: MachineSpec | undefined;
 
   /**
+   * capability version (monotonic); used for compatibility
+   *
    * @generated from field: int32 agent_version = 4;
    */
   agentVersion: number;
@@ -170,6 +172,13 @@ export type Register = Message<"strategyplatform.v1.Register"> & {
    * @generated from field: string agent_semver = 5;
    */
   agentSemver: string;
+
+  /**
+   * buildinfo.Version — display only (git describe); not for compatibility checks
+   *
+   * @generated from field: string agent_build_version = 6;
+   */
+  agentBuildVersion: string;
 };
 
 /**

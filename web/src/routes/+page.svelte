@@ -7,6 +7,30 @@
 	let error = $state('');
 	let loading = $state(true);
 
+	/** Fleet modal build version — for version-drift reminder only (no actions). */
+	const fleetBuildMode = $derived.by(() => {
+		const counts = new Map<string, number>();
+		for (const m of machines) {
+			const v = m.agentBuildVersion?.trim();
+			if (!v) continue;
+			counts.set(v, (counts.get(v) ?? 0) + 1);
+		}
+		let mode = '';
+		let best = 0;
+		for (const [v, n] of counts) {
+			if (n > best) {
+				best = n;
+				mode = v;
+			}
+		}
+		return mode;
+	});
+
+	function isBuildDrift(m: Machine): boolean {
+		const v = m.agentBuildVersion?.trim();
+		return !!v && !!fleetBuildMode && v !== fleetBuildMode;
+	}
+
 	async function refresh() {
 		try {
 			const res = await client.listMachines({ pageSize: 100 });
@@ -43,6 +67,7 @@
 		<div class="grid machines" style="margin-top:1.25rem">
 			{#each machines as m (m.metadata?.uid ?? m.metadata?.name)}
 				{@const id = m.metadata?.uid || m.metadata?.name || '?'}
+				{@const drift = isBuildDrift(m)}
 				<a class="panel machine" href="/machines/{id}">
 					<div class="row">
 						<strong class="mono">{id}</strong>
@@ -53,9 +78,21 @@
 						{/if}
 					</div>
 					<div class="muted mono" style="margin-top:0.45rem;font-size:0.8rem">
-						agent v{m.agentVersion} · gen {m.metadata?.generation ?? 0} ·
+						agent v{m.agentVersion}
+						{#if m.agentBuildVersion}
+							· build {m.agentBuildVersion}{/if}
+						· gen {m.metadata?.generation ?? 0} ·
 						{m.strategies.length} strateg{m.strategies.length === 1 ? 'y' : 'ies'}
 					</div>
+					{#if drift}
+						<span
+							class="pill drift"
+							style="margin-top:0.45rem"
+							title="Build differs from the fleet majority — reminder only, no action taken"
+						>
+							version-drift
+						</span>
+					{/if}
 					{#if m.strategies.length}
 						<ul class="strats">
 							{#each m.strategies as s}

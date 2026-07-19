@@ -100,7 +100,8 @@ func (s *Server) Connect(ctx context.Context, stream *connect.BidiStream[pb.Agen
 	if _, err := s.store.UpsertMachine(reg); err != nil {
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	s.logger.Info("agent connected", "machine_id", machineID, "agent_version", reg.GetAgentVersion())
+	s.logger.Info("agent connected", "machine_id", machineID,
+		"agent_version", reg.GetAgentVersion(), "agent_build_version", reg.GetAgentBuildVersion())
 
 	notify := s.registerNotifier(machineID)
 	defer s.unregisterNotifier(machineID)

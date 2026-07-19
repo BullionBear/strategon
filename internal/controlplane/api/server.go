@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -56,6 +57,14 @@ func (s *Server) GetMachine(_ context.Context, req *connect.Request[pb.GetMachin
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", req.Msg.GetMachineId()))
 	}
 	return connect.NewResponse(BuildMachine(rec, s.store)), nil
+}
+
+func (s *Server) GetControlPlaneVersion(_ context.Context, _ *connect.Request[pb.GetControlPlaneVersionRequest]) (*connect.Response[pb.ControlPlaneVersion], error) {
+	return connect.NewResponse(&pb.ControlPlaneVersion{
+		Version:    buildinfo.Version,
+		CommitHash: buildinfo.CommitHash,
+		BuildTime:  buildinfo.BuildTime,
+	}), nil
 }
 
 func (s *Server) Deploy(_ context.Context, req *connect.Request[pb.DeployRequest]) (*connect.Response[pb.DeployResponse], error) {

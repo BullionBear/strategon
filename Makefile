@@ -2,6 +2,20 @@ GOBIN := $(shell go env GOPATH)/bin
 export PATH := $(GOBIN):$(PATH)
 export GOTOOLCHAIN := local
 
+PACKAGE := github.com/bullionbear/strategon
+
+# --dirty: local uncommitted changes get a -dirty suffix (ops version check)
+# --always: fall back to short commit when no tag matches
+# || echo dev: still build when git is unavailable
+VERSION := $(shell git describe --tags --always --dirty --match='v[0-9]*.[0-9]*.[0-9]*' 2>/dev/null || echo "dev")
+COMMIT_HASH := $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+# -u: UTC, avoid builder timezone skew
+BUILD_TIMESTAMP := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
+
+LDFLAGS := -X '$(PACKAGE)/internal/buildinfo.Version=$(VERSION)' \
+           -X '$(PACKAGE)/internal/buildinfo.CommitHash=$(COMMIT_HASH)' \
+           -X '$(PACKAGE)/internal/buildinfo.BuildTime=$(BUILD_TIMESTAMP)'
+
 .PHONY: all proto lint breaking generate build test tidy tools
 
 all: generate build test
@@ -24,9 +38,12 @@ breaking:
 generate proto:
 	buf generate
 
-## build: compile all packages and command binaries
+## build: compile all packages with buildinfo ldflags; also emit bin/ binaries
 build:
-	go build ./...
+	go build -ldflags "$(LDFLAGS)" ./...
+	mkdir -p bin
+	go build -ldflags "$(LDFLAGS)" -o bin/controlplane ./cmd/controlplane
+	go build -ldflags "$(LDFLAGS)" -o bin/agent ./cmd/agent
 
 ## test: run the full Go test suite
 test:

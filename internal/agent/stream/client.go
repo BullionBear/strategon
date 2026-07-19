@@ -19,15 +19,15 @@ import (
 
 // Client is the agent-side stream client.
 type Client struct {
-	Register     *pb.Register
-	Client       strategyplatformv1connect.AgentServiceClient
-	Out          <-chan *pb.AgentMessage // northbound messages from the reconciler
-	Submit       func(*pb.DesiredState)  // deliver DesiredState to the reconciler
-	ObservedGen  func() int64            // for heartbeat stamping
-	Clock        clock.Clock
-	Heartbeat    time.Duration
-	MaxBackoff   time.Duration
-	Logger       *slog.Logger
+	Register    *pb.Register
+	Client      strategyplatformv1connect.AgentServiceClient
+	Out         <-chan *pb.AgentMessage // northbound messages from the reconciler
+	Submit      func(*pb.DesiredState)  // deliver DesiredState to the reconciler
+	ObservedGen func() int64            // for heartbeat stamping
+	Clock       clock.Clock
+	Heartbeat   time.Duration
+	MaxBackoff  time.Duration
+	Logger      *slog.Logger
 }
 
 func (c *Client) heartbeatInterval() time.Duration {
@@ -143,6 +143,7 @@ func (c *Client) buildHeartbeat() *pb.AgentMessage {
 		Payload: &pb.AgentMessage_Heartbeat{Heartbeat: &pb.Heartbeat{
 			ObservedGeneration: obs,
 			AgentVersion:       c.Register.GetAgentVersion(),
+			AgentBuildVersion:  c.Register.GetAgentBuildVersion(),
 		}},
 	}
 }

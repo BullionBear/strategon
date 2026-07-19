@@ -148,9 +148,9 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 		PreviousArtifacts: map[string]*pb.ArtifactRef{},
 	}
 	var register, resources []byte
-	err := q.QueryRow(ctx, `SELECT register, reachable, agent_version, last_resources,
-		last_heartbeat, generation, observed_gen FROM machines WHERE machine_id=$1`, id).
-		Scan(&register, &rec.Reachable, &rec.AgentVersion, &resources,
+	err := q.QueryRow(ctx, `SELECT register, reachable, agent_version, agent_build_version,
+		last_resources, last_heartbeat, generation, observed_gen FROM machines WHERE machine_id=$1`, id).
+		Scan(&register, &rec.Reachable, &rec.AgentVersion, &rec.AgentBuildVersion, &resources,
 			&rec.LastHeartbeat, &rec.Generation, &rec.ObservedGen)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
@@ -284,11 +284,12 @@ func (p *Postgres) UpsertMachine(reg *pb.Register) (*MachineRecord, error) {
 	}
 	ctx, cancel := opCtx()
 	defer cancel()
-	if _, err := p.pool.Exec(ctx, `INSERT INTO machines (machine_id, register, agent_version, reachable)
-		VALUES ($1, $2, $3, TRUE)
+	if _, err := p.pool.Exec(ctx, `INSERT INTO machines (machine_id, register, agent_version, agent_build_version, reachable)
+		VALUES ($1, $2, $3, $4, TRUE)
 		ON CONFLICT (machine_id) DO UPDATE
-		SET register = EXCLUDED.register, agent_version = EXCLUDED.agent_version, reachable = TRUE`,
-		reg.GetMachineId(), regBytes, reg.GetAgentVersion()); err != nil {
+		SET register = EXCLUDED.register, agent_version = EXCLUDED.agent_version,
+		    agent_build_version = EXCLUDED.agent_build_version, reachable = TRUE`,
+		reg.GetMachineId(), regBytes, reg.GetAgentVersion(), reg.GetAgentBuildVersion()); err != nil {
 		return nil, err
 	}
 	rec, _, err := loadMachine(ctx, p.pool, reg.GetMachineId())
@@ -411,11 +412,12 @@ func (p *Postgres) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int
 	ctx, cancel := opCtx()
 	defer cancel()
 	tag, err := p.pool.Exec(ctx, `UPDATE machines
-		SET last_heartbeat=$2, agent_version=$3, reachable=TRUE,
-		    observed_gen=GREATEST(observed_gen, $4),
-		    last_resources=COALESCE($5, last_resources)
+		SET last_heartbeat=$2, agent_version=$3, agent_build_version=$4, reachable=TRUE,
+		    observed_gen=GREATEST(observed_gen, $5),
+		    last_resources=COALESCE($6, last_resources)
 		WHERE machine_id=$1`,
-		machineID, atUnix, hb.GetAgentVersion(), hb.GetObservedGeneration(), resBytes)
+		machineID, atUnix, hb.GetAgentVersion(), hb.GetAgentBuildVersion(),
+		hb.GetObservedGeneration(), resBytes)
 	if err != nil {
 		return err
 	}

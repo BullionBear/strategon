@@ -37,6 +37,8 @@ message Register {
   string machine_id = 1;
   string hostname = 2;
   MachineSpec spec = 3;
-  int32 agent_version = 4;
+  int32 agent_version = 4; // capability version (monotonic); used for compatibility
   string agent_semver = 5; // human-readable, e.g. "1.4.2"
+  // buildinfo.Version — display only (git describe); not for compatibility checks
+  string agent_build_version = 6;
 }

@@ -36,6 +36,33 @@ func startHumanAPI(t *testing.T) (strategyplatformv1connect.ControlPlaneServiceC
 	return client, st, hub, agents
 }
 
+func TestGetControlPlaneVersion(t *testing.T) {
+	client, _, _, _ := startHumanAPI(t)
+	resp, err := client.GetControlPlaneVersion(context.Background(), connect.NewRequest(&pb.GetControlPlaneVersionRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.GetVersion() == "" {
+		t.Fatal("expected non-empty version (default \"dev\" for bare builds)")
+	}
+}
+
+func TestMachineSurfacesBuildVersion(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	if _, err := st.UpsertMachine(&pb.Register{
+		MachineId: "m1", Hostname: "host1", AgentVersion: 1, AgentBuildVersion: "v1.4.2-3-gabc1234",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := client.GetMachine(context.Background(), connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Msg.GetAgentBuildVersion() != "v1.4.2-3-gabc1234" || got.Msg.GetAgentVersion() != 1 {
+		t.Fatalf("unexpected machine versions: %+v", got.Msg)
+	}
+}
+
 func TestDeployJoinAndWatch(t *testing.T) {
 	client, st, _, agents := startHumanAPI(t)
 	ctx := context.Background()
