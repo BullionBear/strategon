@@ -39,6 +39,9 @@ type strategyState struct {
 	healthDeadline time.Time // HEALTH_CHECKING observation window end
 	startedAt    time.Time
 	lastError    string
+
+	// cron tracks next fire times for DesiredState schedules (ARCHITECTURE §10).
+	cron map[string]*cronEntry
 }
 
 // deployOp tracks an in-flight deploy so it can be cancelled if desired changes.

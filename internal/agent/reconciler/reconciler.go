@@ -49,6 +49,10 @@ type Deps struct {
 	// Jitter is injected into backoff (nil disables jitter for tests).
 	Jitter func(time.Duration) time.Duration
 
+	// CronRand returns an integer in [0, n) for cron schedule jitter.
+	// Nil uses math/rand (non-crypto; only for multi-machine stagger).
+	CronRand func(n int32) int32
+
 	// BaseDir is the agent --base directory; when set, supervision state is
 	// persisted under <BaseDir>/agent/supervision.json for restart takeover.
 	BaseDir string
@@ -349,8 +353,9 @@ func (r *Reconciler) handleExit(ex processExit) {
 	}
 }
 
-// tick drives time-based work: health-window evaluation and async readiness
-// probing. Backoff wakeups are handled by reconcile() running after every tick.
+// tick drives time-based work: health-window evaluation, async readiness
+// probing, and local cron schedule evaluation (ARCHITECTURE §10). Backoff
+// wakeups are handled by reconcile() running after every tick.
 func (r *Reconciler) tick(now time.Time) {
 	for _, st := range r.actual {
 		if st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING || st.proc == nil {
@@ -370,6 +375,7 @@ func (r *Reconciler) tick(now time.Time) {
 		}
 		r.probeReadiness(st)
 	}
+	r.tickCron(now)
 }
 
 // probeReadiness launches an async readiness probe (non-blocking loop).

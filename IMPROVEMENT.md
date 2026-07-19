@@ -125,9 +125,9 @@
 
 ### B4.【核心功能·原始需求】Cron 本地執行器
 
-**現狀**:UI 能寫 cron spec 進期望狀態,但 **agent 不執行**。
+**現狀(已落地)**:`SetSchedule` 校驗 crontab + IANA 時區後寫入 spec;`StrategyView.schedules` 讀回;agent reconciler `tick` 本地求值(時區 + jitter),分派 RESTART / RELOAD_CONFIG(SIGHUP) / RUN_SCRIPT;deploy `inflight` 或非 HEALTHY 時 `CronDeferred` 延後。事件:`CronExecuted` / `CronFailed` / `CronDeferred`。
 
-**這是最初需求**(「每日 00:00 重啟進程」)目前是只進不出的設定框。含:agent 本地 cron 執行(spec 下發、本地執行、結果回報)、顯式時區、多機抖動/分批(ARCHITECTURE §10)。cron 動作與部署狀態機的競態需定義(未定義問題第 3 點:inflight 時 cron 動作延後)。
+**剩餘**:腳本制品拉取(今日 `script_ref` 為策略目錄相對路徑);cron 執行史持久化/UI;與 lease 交易負載的協調(見 A7)。
 
 ### B5.【無擾運維】Agent 自我更新接管
 
@@ -209,7 +209,7 @@
 - **B1 剩餘** = 框架強制下單攔截、NTP/殘餘風險運維、持久化 leases、自動遷移編排完備 + SDK 優雅退出(A7)。MVP 已有:`LeaseService` + `sdk/lease` + Deploy 跨機互鎖;agent 串流 lease 仍正確 no-op。
 
 **Tranche 4 — 功能補完**
-- **B4 cron**(+ 與部署狀態機競態,未定義 #3;對交易策略還與 A7 退出/lease 自殺咬合——先做被動負載,交易負載待競態定義)。
+- **B4 cron**(MVP 已落地:本地執行 + inflight 延後;對交易策略還與 A7 退出/lease 自殺咬合——交易負載待協調)。
 - **B5 剩餘**:自我更新 worker + systemd guard + canary(接管 MVP:狀態檔 + `rebuildActualState` 已落地)。
 - **B6 S3/OCI**、**B8 secrets**、**B9 每策略 user**、**B11 fleet UI**。
 
@@ -223,7 +223,7 @@
 |---|---|---|
 | 1 | Fencing 凍結下的有界風險 | B1 / A2 |
 | 2 | 時鐘偏差假設未明說 | B1(SAFETY §5) |
-| 3 | Cron 與部署狀態機競態 | B4 |
+| 3 | Cron 與部署狀態機競態 | B4（inflight 延後已落地） |
 | 4 | Secrets 管理缺席 | B8 |
 | 5 | 日誌/stdout 去向(現況:未接線 → `/dev/null`,日誌全丟) | Tranche 0(#5);亦為 B1 LeaseSuicide 除錯依賴 |
 | 6 | Release 磁碟保留與 GC | B6 |

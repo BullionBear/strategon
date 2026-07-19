@@ -56,7 +56,26 @@ func (f *fakeDriver) Signal(p *driver.Process, sig syscall.Signal) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.signals = append(f.signals, sig)
+	// Treat TERM/KILL as fatal so gracefulStop (used by cron RESTART / drain)
+	// can finish under a fake clock that does not advance during Sleep.
+	if sig == syscall.SIGTERM || sig == syscall.SIGKILL {
+		if f.alive[p.PID] {
+			f.alive[p.PID] = false
+			if ch := f.exitCh[p.PID]; ch != nil {
+				close(ch)
+				f.exitCh[p.PID] = nil
+			}
+		}
+	}
 	return nil
+}
+
+func (f *fakeDriver) signalList() []syscall.Signal {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make([]syscall.Signal, len(f.signals))
+	copy(out, f.signals)
+	return out
 }
 
 func (f *fakeDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*driver.Process, error) {

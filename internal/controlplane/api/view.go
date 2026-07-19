@@ -66,6 +66,7 @@ func buildStrategyView(rec *store.MachineRecord, name string, st store.Store) *p
 	if spec := rec.Assignments[name]; spec != nil {
 		v.DesiredArtifact = spec.GetArtifact()
 		v.DesiredConfig = spec.GetConfig()
+		v.Schedules = spec.GetSchedules()
 	}
 	if status := rec.Status[name]; status != nil {
 		v.Phase = status.GetPhase()

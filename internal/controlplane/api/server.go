@@ -183,6 +183,9 @@ func (s *Server) SetSchedule(_ context.Context, req *connect.Request[pb.SetSched
 	if msg.GetMachineId() == "" || msg.GetStrategy() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
 	}
+	if err := validateSchedules(msg.GetSchedules()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	rec, ok := s.store.GetMachine(msg.GetMachineId())
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", msg.GetMachineId()))
