@@ -384,12 +384,15 @@ func (x *Condition) GetLastTransition() *timestamppb.Timestamp {
 // ArtifactRef is content-addressed: config is also an ArtifactRef, so a config
 // change is just a new digest that travels the exact same deploy path.
 type ArtifactRef struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          ArtifactType           `protobuf:"varint,1,opt,name=type,proto3,enum=strategyplatform.v1.ArtifactType" json:"type,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"` // human-readable, e.g. "v42"
-	Digest        string                 `protobuf:"bytes,4,opt,name=digest,proto3" json:"digest,omitempty"`   // "sha256:..."; content-addressed, verification is free
-	Uri           string                 `protobuf:"bytes,5,opt,name=uri,proto3" json:"uri,omitempty"`         // "s3://bucket/key" or registry ref
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Type    ArtifactType           `protobuf:"varint,1,opt,name=type,proto3,enum=strategyplatform.v1.ArtifactType" json:"type,omitempty"`
+	Name    string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Version string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"` // human-readable, e.g. "v42"
+	Digest  string                 `protobuf:"bytes,4,opt,name=digest,proto3" json:"digest,omitempty"`   // "sha256:..."; content-addressed, verification is free
+	Uri     string                 `protobuf:"bytes,5,opt,name=uri,proto3" json:"uri,omitempty"`         // "s3://bucket/key" or registry ref
+	// Set by the control plane on RegisterArtifact (registration time). Defines
+	// "latest" for catalog UI / deploy convenience — not version-string order.
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -457,6 +460,13 @@ func (x *ArtifactRef) GetUri() string {
 		return x.Uri
 	}
 	return ""
+}
+
+func (x *ArtifactRef) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
 }
 
 type ResourceLimits struct {
@@ -757,13 +767,15 @@ const file_strategyplatform_v1_common_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\x0e2$.strategyplatform.v1.ConditionStatusR\x06status\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x18\n" +
 	"\amessage\x18\x04 \x01(\tR\amessage\x12C\n" +
-	"\x0flast_transition\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastTransition\"\x9c\x01\n" +
+	"\x0flast_transition\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastTransition\"\xd7\x01\n" +
 	"\vArtifactRef\x125\n" +
 	"\x04type\x18\x01 \x01(\x0e2!.strategyplatform.v1.ArtifactTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x03 \x01(\tR\aversion\x12\x16\n" +
 	"\x06digest\x18\x04 \x01(\tR\x06digest\x12\x10\n" +
-	"\x03uri\x18\x05 \x01(\tR\x03uri\"\x80\x01\n" +
+	"\x03uri\x18\x05 \x01(\tR\x03uri\x129\n" +
+	"\n" +
+	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x80\x01\n" +
 	"\x0eResourceLimits\x12%\n" +
 	"\x0ecpu_millicores\x18\x01 \x01(\x03R\rcpuMillicores\x12!\n" +
 	"\fmemory_bytes\x18\x02 \x01(\x03R\vmemoryBytes\x12$\n" +
@@ -841,12 +853,13 @@ var file_strategyplatform_v1_common_proto_depIdxs = []int32{
 	0,  // 2: strategyplatform.v1.Condition.status:type_name -> strategyplatform.v1.ConditionStatus
 	12, // 3: strategyplatform.v1.Condition.last_transition:type_name -> google.protobuf.Timestamp
 	1,  // 4: strategyplatform.v1.ArtifactRef.type:type_name -> strategyplatform.v1.ArtifactType
-	3,  // 5: strategyplatform.v1.CronSchedule.action:type_name -> strategyplatform.v1.CronAction
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	12, // 5: strategyplatform.v1.ArtifactRef.created_at:type_name -> google.protobuf.Timestamp
+	3,  // 6: strategyplatform.v1.CronSchedule.action:type_name -> strategyplatform.v1.CronAction
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_strategyplatform_v1_common_proto_init() }

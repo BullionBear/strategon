@@ -5,7 +5,7 @@
 	import { client } from '$lib/api';
 	import type { ArtifactRef } from '$lib/gen/strategyplatform/v1/common_pb';
 	import type { Machine } from '$lib/gen/strategyplatform/v1/control_service_pb';
-	import { ArtifactType } from '$lib/gen/strategyplatform/v1/common_pb';
+	import { latestVersion, versionsFor } from '$lib/artifacts';
 
 	let machines = $state<Machine[]>([]);
 	let artifacts = $state<ArtifactRef[]>([]);
@@ -15,16 +15,11 @@
 	let configVersion = $state('');
 	let argsText = $state('-c ${CONFIG}');
 	let envText = $state('');
-	let regName = $state('');
-	let regVersion = $state('');
-	let regDigest = $state('');
-	let regUri = $state('');
-	let cfgVersion = $state('');
-	let cfgDigest = $state('');
-	let cfgUri = $state('');
 	let busy = $state(false);
 	let error = $state('');
 	let info = $state('');
+	let versionTouched = $state(false);
+	let configTouched = $state(false);
 
 	onMount(async () => {
 		machineId = page.url.searchParams.get('machine') || '';
@@ -45,65 +40,25 @@
 		artifacts = res.artifacts;
 	}
 
-	async function registerBinary() {
-		busy = true;
-		error = '';
-		info = '';
-		try {
-			await client.registerArtifact({
-				artifact: {
-					name: regName,
-					version: regVersion,
-					digest: regDigest,
-					uri: regUri,
-					type: ArtifactType.BINARY
-				}
-			});
-			info = `Registered binary ${regName}@${regVersion}`;
-			if (!strategy) strategy = regName;
-			if (!version) version = regVersion;
-			await loadArtifacts();
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		} finally {
-			busy = false;
-		}
-	}
+	const binaryOptions = $derived(strategy ? versionsFor(artifacts, strategy) : []);
+	const configOptions = $derived(strategy ? versionsFor(artifacts, `${strategy}-config`) : []);
+	const hasBinary = $derived(binaryOptions.length > 0);
 
-	async function registerConfig() {
-		const name = strategy || regName;
-		if (!name) {
-			error = 'Set strategy (or binary name) first — config is registered as <strategy>-config';
-			return;
+	// Default version selectors to latest when strategy changes (unless user picked).
+	$effect(() => {
+		const s = strategy;
+		if (!s) return;
+		if (!versionTouched) {
+			version = latestVersion(artifacts, s) ?? '';
 		}
-		busy = true;
-		error = '';
-		info = '';
-		try {
-			const configName = `${name}-config`;
-			await client.registerArtifact({
-				artifact: {
-					name: configName,
-					version: cfgVersion,
-					digest: cfgDigest,
-					uri: cfgUri,
-					type: ArtifactType.BINARY
-				}
-			});
-			info = `Registered config ${configName}@${cfgVersion}`;
-			if (!configVersion) configVersion = cfgVersion;
-			await loadArtifacts();
-		} catch (e) {
-			error = e instanceof Error ? e.message : String(e);
-		} finally {
-			busy = false;
+		if (!configTouched) {
+			configVersion = latestVersion(artifacts, `${s}-config`) ?? '';
 		}
-	}
+	});
 
 	function parseArgs(text: string): string[] {
 		const trimmed = text.trim();
 		if (!trimmed) return [];
-		// Simple whitespace split; quote-aware enough for typical "-c ${CONFIG}".
 		const out: string[] = [];
 		const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
 		let m: RegExpExecArray | null;
@@ -146,63 +101,18 @@
 			busy = false;
 		}
 	}
-
-	const binaryVersions = $derived(
-		artifacts.filter((a) => a.name === strategy || a.name === regName).map((a) => a.version)
-	);
-	const configVersions = $derived(
-		artifacts
-			.filter((a) => a.name === `${strategy}-config` || a.name === `${regName}-config`)
-			.map((a) => a.version)
-	);
 </script>
 
 <section class="fade-in">
 	<h1>Deploy</h1>
 	<p class="muted">
-		Register immutable artifacts, then set a full deployment (binary + config + args + env).
-		Success is when observed generation catches up — not when this form returns.
+		Set a full deployment (binary + config + args + env). Versions default to the newest
+		registered artifact; the deployment pins that concrete version.
+		<a href="/artifacts">Manage catalog →</a>
 	</p>
 
 	<div class="panel" style="margin-top:1.25rem">
-		<h2>1. Register binary</h2>
-		<p class="muted" style="margin-bottom:0.85rem">
-			Digest + URI are required so agents can fetch and verify.
-		</p>
 		<div class="form">
-			<label>Name<input bind:value={regName} placeholder="strategy name" /></label>
-			<label>Version<input bind:value={regVersion} placeholder="v42" /></label>
-			<label>Digest<input class="wide" bind:value={regDigest} placeholder="sha256:…" /></label>
-			<label>URI<input class="wide" bind:value={regUri} placeholder="file:///path/to/bin" /></label>
-			<button class="btn secondary" disabled={busy} onclick={registerBinary}>Register binary</button>
-		</div>
-	</div>
-
-	<div class="panel" style="margin-top:1rem">
-		<h2>2. Register config</h2>
-		<p class="muted" style="margin-bottom:0.85rem">
-			Stored as <span class="mono">&lt;strategy&gt;-config</span> in the same artifact registry.
-			Keep the original extension in the URI (e.g. <span class="mono">config.yml</span>).
-		</p>
-		<div class="form">
-			<label>Version<input bind:value={cfgVersion} placeholder="c17" /></label>
-			<label>Digest<input class="wide" bind:value={cfgDigest} placeholder="sha256:…" /></label>
-			<label>URI<input class="wide" bind:value={cfgUri} placeholder="file:///path/to/config.yml" /></label>
-			<button class="btn secondary" disabled={busy || !(strategy || regName)} onclick={registerConfig}>
-				Register config
-			</button>
-		</div>
-	</div>
-
-	<div class="panel" style="margin-top:1rem">
-		<h2>3. Set deployment</h2>
-		<p class="muted" style="margin-bottom:0.85rem">
-			Args may use <span class="mono">${'{CONFIG}'}</span>,
-			<span class="mono">${'{RELEASE_DIR}'}</span>,
-			<span class="mono">${'{BINARY}'}</span> — resolved by the agent against
-			<span class="mono">current/</span>.
-		</p>
-		<div class="form" style="margin-top:0.85rem">
 			<label>
 				Machine
 				<select bind:value={machineId}>
@@ -213,31 +123,58 @@
 					{/each}
 				</select>
 			</label>
-			<label>Strategy<input bind:value={strategy} placeholder="mystrat" /></label>
 			<label>
-				Binary version
-				{#if binaryVersions.length}
-					<select bind:value={version}>
-						<option value="">Select…</option>
-						{#each binaryVersions as v}
-							<option value={v}>{v}</option>
+				Strategy
+				<input
+					bind:value={strategy}
+					placeholder="mystrat"
+					oninput={() => {
+						versionTouched = false;
+						configTouched = false;
+					}}
+				/>
+			</label>
+			<label>
+				Binary
+				{#if binaryOptions.length}
+					<select
+						bind:value={version}
+						onchange={() => (versionTouched = true)}
+						title="當前最新註冊版本；部署會釘死此版本"
+					>
+						{#each binaryOptions as opt}
+							<option value={opt.version}>
+								{opt.version}{opt.latest ? ' (latest)' : ''}
+							</option>
 						{/each}
 					</select>
+				{:else if strategy}
+					<span class="empty-hint muted">
+						No binary registered.
+						<a href="/artifacts">Register on Artifacts →</a>
+					</span>
 				{:else}
-					<input bind:value={version} placeholder="v42" />
+					<span class="empty-hint muted">Enter a strategy name first</span>
 				{/if}
 			</label>
 			<label>
-				Config version
-				{#if configVersions.length}
-					<select bind:value={configVersion}>
-						<option value="">(keep / none)</option>
-						{#each configVersions as v}
-							<option value={v}>{v}</option>
+				Config
+				{#if configOptions.length}
+					<select bind:value={configVersion} onchange={() => (configTouched = true)}>
+						<option value="">none</option>
+						{#each configOptions as opt}
+							<option value={opt.version}>
+								{opt.version}{opt.latest ? ' (latest)' : ''}
+							</option>
 						{/each}
 					</select>
 				{:else}
-					<input bind:value={configVersion} placeholder="c17 (optional)" />
+					<span class="empty-hint muted">
+						none
+						{#if strategy}
+							· <a href="/artifacts">register config →</a>
+						{/if}
+					</span>
 				{/if}
 			</label>
 			<label class="block">
@@ -250,12 +187,18 @@
 			</label>
 			<button
 				class="btn"
-				disabled={busy || !machineId || !strategy || !version}
+				disabled={busy || !machineId || !strategy || !version || !hasBinary}
 				onclick={setDeployment}
 			>
-				Set deployment
+				Deploy
 			</button>
 		</div>
+		<p class="muted hint">
+			Args may use <span class="mono">${'{CONFIG}'}</span>,
+			<span class="mono">${'{RELEASE_DIR}'}</span>,
+			<span class="mono">${'{BINARY}'}</span> — resolved by the agent against
+			<span class="mono">current/</span>.
+		</p>
 	</div>
 
 	{#if info}
@@ -263,17 +206,6 @@
 	{/if}
 	{#if error}
 		<p class="pill bad" style="margin-top:1rem">{error}</p>
-	{/if}
-
-	{#if artifacts.length}
-		<div style="margin-top:1.5rem">
-			<h2>Catalog</h2>
-			<ul class="catalog">
-				{#each artifacts as a}
-					<li class="mono">{a.name}@{a.version} · {a.digest}</li>
-				{/each}
-			</ul>
-		</div>
 	{/if}
 </section>
 
@@ -304,14 +236,15 @@
 		background: var(--surface, #fff);
 		resize: vertical;
 	}
-	.catalog {
-		list-style: none;
-		padding: 0;
-		margin: 0.5rem 0 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.35rem;
+	.empty-hint {
+		display: inline-block;
+		padding: 0.5rem 0;
+		font-size: 0.9rem;
+		font-weight: 400;
+		min-width: 12rem;
+	}
+	.hint {
+		margin: 1rem 0 0;
 		font-size: 0.85rem;
-		color: var(--ink-muted);
 	}
 </style>

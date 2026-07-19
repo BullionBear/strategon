@@ -246,7 +246,16 @@ func (m *Memory) RegisterArtifact(ref *pb.ArtifactRef) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.artifacts[artifactKey(ref.GetName(), ref.GetVersion())] = proto.Clone(ref).(*pb.ArtifactRef)
+	cloned := proto.Clone(ref).(*pb.ArtifactRef)
+	key := artifactKey(ref.GetName(), ref.GetVersion())
+	// Preserve created_at on re-register of the same name+version; otherwise
+	// stamp registration time (defines "latest" for the catalog UI).
+	if existing, ok := m.artifacts[key]; ok && existing.GetCreatedAt() != nil {
+		cloned.CreatedAt = existing.GetCreatedAt()
+	} else {
+		cloned.CreatedAt = timestamppb.New(m.now())
+	}
+	m.artifacts[key] = cloned
 	return nil
 }
 
@@ -270,12 +279,7 @@ func (m *Memory) ListArtifacts(name string) []*pb.ArtifactRef {
 		}
 		out = append(out, proto.Clone(ref).(*pb.ArtifactRef))
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].GetName() != out[j].GetName() {
-			return out[i].GetName() < out[j].GetName()
-		}
-		return out[i].GetVersion() < out[j].GetVersion()
-	})
+	sortArtifactsByNameThenNewest(out)
 	return out
 }
 

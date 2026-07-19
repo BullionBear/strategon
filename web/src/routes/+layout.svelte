@@ -36,6 +36,7 @@
 		<a class="brand" href="/">Strategon</a>
 		<nav class="nav">
 			<a href="/" class:active={active('/')}>Fleet</a>
+			<a href="/artifacts" class:active={active('/artifacts')}>Artifacts</a>
 			<a href="/deploy" class:active={active('/deploy')}>Deploy</a>
 			<a href="/schedules" class:active={active('/schedules')}>Schedules</a>
 			<a href="/audit" class:active={active('/audit')}>Audit</a>

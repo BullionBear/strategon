@@ -2,6 +2,7 @@ package store
 
 import (
 	"testing"
+	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
@@ -63,6 +64,53 @@ func TestRegisterArtifactRejectsRelativeFileURI(t *testing.T) {
 		Uri: "https://github.com/org/repo/releases/download/v2/strat",
 	}); err != nil {
 		t.Fatalf("https URI should be accepted: %v", err)
+	}
+}
+
+func TestRegisterArtifactSetsCreatedAtAndListsNewestFirst(t *testing.T) {
+	s := NewMemory(nil)
+	base := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
+	n := 0
+	s.SetClock(func() time.Time {
+		n++
+		return base.Add(time.Duration(n) * time.Minute)
+	})
+
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/a",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v2", Digest: "sha256:bbb", Uri: "file:///tmp/b",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	list := s.ListArtifacts("s")
+	if len(list) != 2 {
+		t.Fatalf("len = %d", len(list))
+	}
+	if list[0].GetVersion() != "v2" || list[1].GetVersion() != "v1" {
+		t.Fatalf("want newest-first v2,v1; got %s,%s", list[0].GetVersion(), list[1].GetVersion())
+	}
+	if list[0].GetCreatedAt() == nil || list[1].GetCreatedAt() == nil {
+		t.Fatal("created_at must be set on register")
+	}
+	if !list[0].GetCreatedAt().AsTime().After(list[1].GetCreatedAt().AsTime()) {
+		t.Fatal("v2 created_at should be after v1")
+	}
+
+	// Re-register same version preserves original created_at.
+	prev := list[1].GetCreatedAt().AsTime()
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v1", Digest: "sha256:aaa2", Uri: "file:///tmp/a2",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := s.GetArtifact("s", "v1")
+	if !ok || !got.GetCreatedAt().AsTime().Equal(prev) {
+		t.Fatalf("re-register should preserve created_at; got %v want %v", got.GetCreatedAt().AsTime(), prev)
 	}
 }
 
