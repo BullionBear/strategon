@@ -655,6 +655,102 @@ func (x *RollbackResponse) GetGeneration() int64 {
 	return 0
 }
 
+type UndeployRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MachineId     string                 `protobuf:"bytes,1,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
+	Strategy      string                 `protobuf:"bytes,2,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UndeployRequest) Reset() {
+	*x = UndeployRequest{}
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UndeployRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UndeployRequest) ProtoMessage() {}
+
+func (x *UndeployRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UndeployRequest.ProtoReflect.Descriptor instead.
+func (*UndeployRequest) Descriptor() ([]byte, []int) {
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UndeployRequest) GetMachineId() string {
+	if x != nil {
+		return x.MachineId
+	}
+	return ""
+}
+
+func (x *UndeployRequest) GetStrategy() string {
+	if x != nil {
+		return x.Strategy
+	}
+	return ""
+}
+
+type UndeployResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Generation    int64                  `protobuf:"varint,1,opt,name=generation,proto3" json:"generation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UndeployResponse) Reset() {
+	*x = UndeployResponse{}
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UndeployResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UndeployResponse) ProtoMessage() {}
+
+func (x *UndeployResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UndeployResponse.ProtoReflect.Descriptor instead.
+func (*UndeployResponse) Descriptor() ([]byte, []int) {
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UndeployResponse) GetGeneration() int64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
 type SetScheduleRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	MachineId     string                 `protobuf:"bytes,1,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
@@ -666,7 +762,7 @@ type SetScheduleRequest struct {
 
 func (x *SetScheduleRequest) Reset() {
 	*x = SetScheduleRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -678,7 +774,7 @@ func (x *SetScheduleRequest) String() string {
 func (*SetScheduleRequest) ProtoMessage() {}
 
 func (x *SetScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -691,7 +787,7 @@ func (x *SetScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetScheduleRequest.ProtoReflect.Descriptor instead.
 func (*SetScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{9}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SetScheduleRequest) GetMachineId() string {
@@ -724,7 +820,7 @@ type SetScheduleResponse struct {
 
 func (x *SetScheduleResponse) Reset() {
 	*x = SetScheduleResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -736,7 +832,7 @@ func (x *SetScheduleResponse) String() string {
 func (*SetScheduleResponse) ProtoMessage() {}
 
 func (x *SetScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -749,7 +845,7 @@ func (x *SetScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetScheduleResponse.ProtoReflect.Descriptor instead.
 func (*SetScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{10}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SetScheduleResponse) GetGeneration() int64 {
@@ -763,7 +859,7 @@ type AuditEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Timestamp     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	Actor         string                 `protobuf:"bytes,2,opt,name=actor,proto3" json:"actor,omitempty"`
-	Action        string                 `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"` // "Deploy" | "Rollback" | "ConfigChange"
+	Action        string                 `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"` // "Deploy" | "Rollback" | "ConfigChange" | "Undeploy"
 	MachineId     string                 `protobuf:"bytes,4,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
 	Strategy      string                 `protobuf:"bytes,5,opt,name=strategy,proto3" json:"strategy,omitempty"`
 	FromVersion   string                 `protobuf:"bytes,6,opt,name=from_version,json=fromVersion,proto3" json:"from_version,omitempty"`
@@ -774,7 +870,7 @@ type AuditEntry struct {
 
 func (x *AuditEntry) Reset() {
 	*x = AuditEntry{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -786,7 +882,7 @@ func (x *AuditEntry) String() string {
 func (*AuditEntry) ProtoMessage() {}
 
 func (x *AuditEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -799,7 +895,7 @@ func (x *AuditEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditEntry.ProtoReflect.Descriptor instead.
 func (*AuditEntry) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{11}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AuditEntry) GetTimestamp() *timestamppb.Timestamp {
@@ -863,7 +959,7 @@ type ListAuditRequest struct {
 
 func (x *ListAuditRequest) Reset() {
 	*x = ListAuditRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -875,7 +971,7 @@ func (x *ListAuditRequest) String() string {
 func (*ListAuditRequest) ProtoMessage() {}
 
 func (x *ListAuditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -888,7 +984,7 @@ func (x *ListAuditRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuditRequest.ProtoReflect.Descriptor instead.
 func (*ListAuditRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{12}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListAuditRequest) GetMachineId() string {
@@ -929,7 +1025,7 @@ type ListAuditResponse struct {
 
 func (x *ListAuditResponse) Reset() {
 	*x = ListAuditResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -941,7 +1037,7 @@ func (x *ListAuditResponse) String() string {
 func (*ListAuditResponse) ProtoMessage() {}
 
 func (x *ListAuditResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -954,7 +1050,7 @@ func (x *ListAuditResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuditResponse.ProtoReflect.Descriptor instead.
 func (*ListAuditResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{13}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListAuditResponse) GetEntries() []*AuditEntry {
@@ -982,7 +1078,7 @@ type MachineStatusEvent struct {
 
 func (x *MachineStatusEvent) Reset() {
 	*x = MachineStatusEvent{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -994,7 +1090,7 @@ func (x *MachineStatusEvent) String() string {
 func (*MachineStatusEvent) ProtoMessage() {}
 
 func (x *MachineStatusEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1007,7 +1103,7 @@ func (x *MachineStatusEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MachineStatusEvent.ProtoReflect.Descriptor instead.
 func (*MachineStatusEvent) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{14}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *MachineStatusEvent) GetMachineId() string {
@@ -1043,7 +1139,7 @@ type RegisterArtifactRequest struct {
 
 func (x *RegisterArtifactRequest) Reset() {
 	*x = RegisterArtifactRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1055,7 +1151,7 @@ func (x *RegisterArtifactRequest) String() string {
 func (*RegisterArtifactRequest) ProtoMessage() {}
 
 func (x *RegisterArtifactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1068,7 +1164,7 @@ func (x *RegisterArtifactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterArtifactRequest.ProtoReflect.Descriptor instead.
 func (*RegisterArtifactRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{15}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *RegisterArtifactRequest) GetArtifact() *ArtifactRef {
@@ -1086,7 +1182,7 @@ type RegisterArtifactResponse struct {
 
 func (x *RegisterArtifactResponse) Reset() {
 	*x = RegisterArtifactResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1098,7 +1194,7 @@ func (x *RegisterArtifactResponse) String() string {
 func (*RegisterArtifactResponse) ProtoMessage() {}
 
 func (x *RegisterArtifactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1111,7 +1207,7 @@ func (x *RegisterArtifactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterArtifactResponse.ProtoReflect.Descriptor instead.
 func (*RegisterArtifactResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{16}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{18}
 }
 
 type ListArtifactsRequest struct {
@@ -1123,7 +1219,7 @@ type ListArtifactsRequest struct {
 
 func (x *ListArtifactsRequest) Reset() {
 	*x = ListArtifactsRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1135,7 +1231,7 @@ func (x *ListArtifactsRequest) String() string {
 func (*ListArtifactsRequest) ProtoMessage() {}
 
 func (x *ListArtifactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1148,7 +1244,7 @@ func (x *ListArtifactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArtifactsRequest.ProtoReflect.Descriptor instead.
 func (*ListArtifactsRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{17}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListArtifactsRequest) GetName() string {
@@ -1167,7 +1263,7 @@ type ListArtifactsResponse struct {
 
 func (x *ListArtifactsResponse) Reset() {
 	*x = ListArtifactsResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1179,7 +1275,7 @@ func (x *ListArtifactsResponse) String() string {
 func (*ListArtifactsResponse) ProtoMessage() {}
 
 func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1192,7 +1288,7 @@ func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArtifactsResponse.ProtoReflect.Descriptor instead.
 func (*ListArtifactsResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{18}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListArtifactsResponse) GetArtifacts() []*ArtifactRef {
@@ -1267,6 +1363,14 @@ const file_strategyplatform_v1_control_service_proto_rawDesc = "" +
 	"\x10RollbackResponse\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x01 \x01(\x03R\n" +
+	"generation\"L\n" +
+	"\x0fUndeployRequest\x12\x1d\n" +
+	"\n" +
+	"machine_id\x18\x01 \x01(\tR\tmachineId\x12\x1a\n" +
+	"\bstrategy\x18\x02 \x01(\tR\bstrategy\"2\n" +
+	"\x10UndeployResponse\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x01 \x01(\x03R\n" +
 	"generation\"\x90\x01\n" +
 	"\x12SetScheduleRequest\x12\x1d\n" +
 	"\n" +
@@ -1309,13 +1413,14 @@ const file_strategyplatform_v1_control_service_proto_rawDesc = "" +
 	"\x14ListArtifactsRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"W\n" +
 	"\x15ListArtifactsResponse\x12>\n" +
-	"\tartifacts\x18\x01 \x03(\v2 .strategyplatform.v1.ArtifactRefR\tartifacts2\xf4\x06\n" +
+	"\tartifacts\x18\x01 \x03(\v2 .strategyplatform.v1.ArtifactRefR\tartifacts2\xcd\a\n" +
 	"\x13ControlPlaneService\x12c\n" +
 	"\fListMachines\x12(.strategyplatform.v1.ListMachinesRequest\x1a).strategyplatform.v1.ListMachinesResponse\x12R\n" +
 	"\n" +
 	"GetMachine\x12&.strategyplatform.v1.GetMachineRequest\x1a\x1c.strategyplatform.v1.Machine\x12Q\n" +
 	"\x06Deploy\x12\".strategyplatform.v1.DeployRequest\x1a#.strategyplatform.v1.DeployResponse\x12W\n" +
-	"\bRollback\x12$.strategyplatform.v1.RollbackRequest\x1a%.strategyplatform.v1.RollbackResponse\x12`\n" +
+	"\bRollback\x12$.strategyplatform.v1.RollbackRequest\x1a%.strategyplatform.v1.RollbackResponse\x12W\n" +
+	"\bUndeploy\x12$.strategyplatform.v1.UndeployRequest\x1a%.strategyplatform.v1.UndeployResponse\x12`\n" +
 	"\vSetSchedule\x12'.strategyplatform.v1.SetScheduleRequest\x1a(.strategyplatform.v1.SetScheduleResponse\x12a\n" +
 	"\fWatchMachine\x12&.strategyplatform.v1.GetMachineRequest\x1a'.strategyplatform.v1.MachineStatusEvent0\x01\x12Z\n" +
 	"\tListAudit\x12%.strategyplatform.v1.ListAuditRequest\x1a&.strategyplatform.v1.ListAuditResponse\x12o\n" +
@@ -1334,7 +1439,7 @@ func file_strategyplatform_v1_control_service_proto_rawDescGZIP() []byte {
 	return file_strategyplatform_v1_control_service_proto_rawDescData
 }
 
-var file_strategyplatform_v1_control_service_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_strategyplatform_v1_control_service_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_strategyplatform_v1_control_service_proto_goTypes = []any{
 	(*Machine)(nil),                  // 0: strategyplatform.v1.Machine
 	(*StrategyView)(nil),             // 1: strategyplatform.v1.StrategyView
@@ -1345,67 +1450,71 @@ var file_strategyplatform_v1_control_service_proto_goTypes = []any{
 	(*DeployResponse)(nil),           // 6: strategyplatform.v1.DeployResponse
 	(*RollbackRequest)(nil),          // 7: strategyplatform.v1.RollbackRequest
 	(*RollbackResponse)(nil),         // 8: strategyplatform.v1.RollbackResponse
-	(*SetScheduleRequest)(nil),       // 9: strategyplatform.v1.SetScheduleRequest
-	(*SetScheduleResponse)(nil),      // 10: strategyplatform.v1.SetScheduleResponse
-	(*AuditEntry)(nil),               // 11: strategyplatform.v1.AuditEntry
-	(*ListAuditRequest)(nil),         // 12: strategyplatform.v1.ListAuditRequest
-	(*ListAuditResponse)(nil),        // 13: strategyplatform.v1.ListAuditResponse
-	(*MachineStatusEvent)(nil),       // 14: strategyplatform.v1.MachineStatusEvent
-	(*RegisterArtifactRequest)(nil),  // 15: strategyplatform.v1.RegisterArtifactRequest
-	(*RegisterArtifactResponse)(nil), // 16: strategyplatform.v1.RegisterArtifactResponse
-	(*ListArtifactsRequest)(nil),     // 17: strategyplatform.v1.ListArtifactsRequest
-	(*ListArtifactsResponse)(nil),    // 18: strategyplatform.v1.ListArtifactsResponse
-	(*ObjectMeta)(nil),               // 19: strategyplatform.v1.ObjectMeta
-	(*MachineSpec)(nil),              // 20: strategyplatform.v1.MachineSpec
-	(*MachineResources)(nil),         // 21: strategyplatform.v1.MachineResources
-	(*timestamppb.Timestamp)(nil),    // 22: google.protobuf.Timestamp
-	(*ArtifactRef)(nil),              // 23: strategyplatform.v1.ArtifactRef
-	(DeployPhase)(0),                 // 24: strategyplatform.v1.DeployPhase
-	(*Condition)(nil),                // 25: strategyplatform.v1.Condition
-	(*CronSchedule)(nil),             // 26: strategyplatform.v1.CronSchedule
+	(*UndeployRequest)(nil),          // 9: strategyplatform.v1.UndeployRequest
+	(*UndeployResponse)(nil),         // 10: strategyplatform.v1.UndeployResponse
+	(*SetScheduleRequest)(nil),       // 11: strategyplatform.v1.SetScheduleRequest
+	(*SetScheduleResponse)(nil),      // 12: strategyplatform.v1.SetScheduleResponse
+	(*AuditEntry)(nil),               // 13: strategyplatform.v1.AuditEntry
+	(*ListAuditRequest)(nil),         // 14: strategyplatform.v1.ListAuditRequest
+	(*ListAuditResponse)(nil),        // 15: strategyplatform.v1.ListAuditResponse
+	(*MachineStatusEvent)(nil),       // 16: strategyplatform.v1.MachineStatusEvent
+	(*RegisterArtifactRequest)(nil),  // 17: strategyplatform.v1.RegisterArtifactRequest
+	(*RegisterArtifactResponse)(nil), // 18: strategyplatform.v1.RegisterArtifactResponse
+	(*ListArtifactsRequest)(nil),     // 19: strategyplatform.v1.ListArtifactsRequest
+	(*ListArtifactsResponse)(nil),    // 20: strategyplatform.v1.ListArtifactsResponse
+	(*ObjectMeta)(nil),               // 21: strategyplatform.v1.ObjectMeta
+	(*MachineSpec)(nil),              // 22: strategyplatform.v1.MachineSpec
+	(*MachineResources)(nil),         // 23: strategyplatform.v1.MachineResources
+	(*timestamppb.Timestamp)(nil),    // 24: google.protobuf.Timestamp
+	(*ArtifactRef)(nil),              // 25: strategyplatform.v1.ArtifactRef
+	(DeployPhase)(0),                 // 26: strategyplatform.v1.DeployPhase
+	(*Condition)(nil),                // 27: strategyplatform.v1.Condition
+	(*CronSchedule)(nil),             // 28: strategyplatform.v1.CronSchedule
 }
 var file_strategyplatform_v1_control_service_proto_depIdxs = []int32{
-	19, // 0: strategyplatform.v1.Machine.metadata:type_name -> strategyplatform.v1.ObjectMeta
-	20, // 1: strategyplatform.v1.Machine.spec:type_name -> strategyplatform.v1.MachineSpec
-	21, // 2: strategyplatform.v1.Machine.last_resources:type_name -> strategyplatform.v1.MachineResources
-	22, // 3: strategyplatform.v1.Machine.last_heartbeat:type_name -> google.protobuf.Timestamp
+	21, // 0: strategyplatform.v1.Machine.metadata:type_name -> strategyplatform.v1.ObjectMeta
+	22, // 1: strategyplatform.v1.Machine.spec:type_name -> strategyplatform.v1.MachineSpec
+	23, // 2: strategyplatform.v1.Machine.last_resources:type_name -> strategyplatform.v1.MachineResources
+	24, // 3: strategyplatform.v1.Machine.last_heartbeat:type_name -> google.protobuf.Timestamp
 	1,  // 4: strategyplatform.v1.Machine.strategies:type_name -> strategyplatform.v1.StrategyView
-	23, // 5: strategyplatform.v1.StrategyView.desired_artifact:type_name -> strategyplatform.v1.ArtifactRef
-	23, // 6: strategyplatform.v1.StrategyView.desired_config:type_name -> strategyplatform.v1.ArtifactRef
-	24, // 7: strategyplatform.v1.StrategyView.phase:type_name -> strategyplatform.v1.DeployPhase
-	23, // 8: strategyplatform.v1.StrategyView.running_artifact:type_name -> strategyplatform.v1.ArtifactRef
-	23, // 9: strategyplatform.v1.StrategyView.running_config:type_name -> strategyplatform.v1.ArtifactRef
-	25, // 10: strategyplatform.v1.StrategyView.conditions:type_name -> strategyplatform.v1.Condition
-	22, // 11: strategyplatform.v1.StrategyView.lease_expires_at:type_name -> google.protobuf.Timestamp
-	26, // 12: strategyplatform.v1.StrategyView.schedules:type_name -> strategyplatform.v1.CronSchedule
+	25, // 5: strategyplatform.v1.StrategyView.desired_artifact:type_name -> strategyplatform.v1.ArtifactRef
+	25, // 6: strategyplatform.v1.StrategyView.desired_config:type_name -> strategyplatform.v1.ArtifactRef
+	26, // 7: strategyplatform.v1.StrategyView.phase:type_name -> strategyplatform.v1.DeployPhase
+	25, // 8: strategyplatform.v1.StrategyView.running_artifact:type_name -> strategyplatform.v1.ArtifactRef
+	25, // 9: strategyplatform.v1.StrategyView.running_config:type_name -> strategyplatform.v1.ArtifactRef
+	27, // 10: strategyplatform.v1.StrategyView.conditions:type_name -> strategyplatform.v1.Condition
+	24, // 11: strategyplatform.v1.StrategyView.lease_expires_at:type_name -> google.protobuf.Timestamp
+	28, // 12: strategyplatform.v1.StrategyView.schedules:type_name -> strategyplatform.v1.CronSchedule
 	0,  // 13: strategyplatform.v1.ListMachinesResponse.machines:type_name -> strategyplatform.v1.Machine
-	26, // 14: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
-	22, // 15: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
-	11, // 16: strategyplatform.v1.ListAuditResponse.entries:type_name -> strategyplatform.v1.AuditEntry
+	28, // 14: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
+	24, // 15: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
+	13, // 16: strategyplatform.v1.ListAuditResponse.entries:type_name -> strategyplatform.v1.AuditEntry
 	0,  // 17: strategyplatform.v1.MachineStatusEvent.machine:type_name -> strategyplatform.v1.Machine
-	22, // 18: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
-	23, // 19: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
-	23, // 20: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
+	24, // 18: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
+	25, // 19: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
+	25, // 20: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
 	2,  // 21: strategyplatform.v1.ControlPlaneService.ListMachines:input_type -> strategyplatform.v1.ListMachinesRequest
 	4,  // 22: strategyplatform.v1.ControlPlaneService.GetMachine:input_type -> strategyplatform.v1.GetMachineRequest
 	5,  // 23: strategyplatform.v1.ControlPlaneService.Deploy:input_type -> strategyplatform.v1.DeployRequest
 	7,  // 24: strategyplatform.v1.ControlPlaneService.Rollback:input_type -> strategyplatform.v1.RollbackRequest
-	9,  // 25: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
-	4,  // 26: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
-	12, // 27: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
-	15, // 28: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
-	17, // 29: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
-	3,  // 30: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
-	0,  // 31: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
-	6,  // 32: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
-	8,  // 33: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
-	10, // 34: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
-	14, // 35: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
-	13, // 36: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
-	16, // 37: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
-	18, // 38: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
-	30, // [30:39] is the sub-list for method output_type
-	21, // [21:30] is the sub-list for method input_type
+	9,  // 25: strategyplatform.v1.ControlPlaneService.Undeploy:input_type -> strategyplatform.v1.UndeployRequest
+	11, // 26: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
+	4,  // 27: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
+	14, // 28: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
+	17, // 29: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
+	19, // 30: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
+	3,  // 31: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
+	0,  // 32: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
+	6,  // 33: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
+	8,  // 34: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
+	10, // 35: strategyplatform.v1.ControlPlaneService.Undeploy:output_type -> strategyplatform.v1.UndeployResponse
+	12, // 36: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
+	16, // 37: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
+	15, // 38: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
+	18, // 39: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
+	20, // 40: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
+	31, // [31:41] is the sub-list for method output_type
+	21, // [21:31] is the sub-list for method input_type
 	21, // [21:21] is the sub-list for extension type_name
 	21, // [21:21] is the sub-list for extension extendee
 	0,  // [0:21] is the sub-list for field type_name
@@ -1426,7 +1535,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_strategyplatform_v1_control_service_proto_rawDesc), len(file_strategyplatform_v1_control_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

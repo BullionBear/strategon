@@ -198,6 +198,8 @@ func (r *Reconciler) spawnDrain(st *strategyState, spec *pb.StrategyAssignmentSp
 		grace = spec.GetDeployPolicy().GetStopGraceSeconds()
 	} else if s := r.desired[st.strategy]; s != nil {
 		grace = s.GetDeployPolicy().GetStopGraceSeconds()
+	} else {
+		grace = st.stopGraceSeconds
 	}
 	go func() {
 		r.gracefulStop(proc, grace)

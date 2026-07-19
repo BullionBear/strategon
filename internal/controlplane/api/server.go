@@ -178,6 +178,41 @@ func (s *Server) Rollback(_ context.Context, req *connect.Request[pb.RollbackReq
 	return connect.NewResponse(&pb.RollbackResponse{Generation: gen}), nil
 }
 
+func (s *Server) Undeploy(_ context.Context, req *connect.Request[pb.UndeployRequest]) (*connect.Response[pb.UndeployResponse], error) {
+	msg := req.Msg
+	if msg.GetMachineId() == "" || msg.GetStrategy() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
+	}
+	rec, ok := s.store.GetMachine(msg.GetMachineId())
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", msg.GetMachineId()))
+	}
+	spec := rec.Assignments[msg.GetStrategy()]
+	if spec == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("strategy %q not assigned", msg.GetStrategy()))
+	}
+	fromVersion := spec.GetArtifact().GetVersion()
+
+	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), nil)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp:   timestamppb.Now(),
+		Actor:       "local",
+		Action:      "Undeploy",
+		MachineId:   msg.GetMachineId(),
+		Strategy:    msg.GetStrategy(),
+		FromVersion: fromVersion,
+	})
+	if s.agents != nil {
+		s.agents.Notify(msg.GetMachineId())
+	}
+	s.logger.Info("undeploy", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
+		"from_version", fromVersion, "generation", gen)
+	return connect.NewResponse(&pb.UndeployResponse{Generation: gen}), nil
+}
+
 func (s *Server) SetSchedule(_ context.Context, req *connect.Request[pb.SetScheduleRequest]) (*connect.Response[pb.SetScheduleResponse], error) {
 	msg := req.Msg
 	if msg.GetMachineId() == "" || msg.GetStrategy() == "" {

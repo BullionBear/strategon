@@ -40,6 +40,11 @@ type strategyState struct {
 	startedAt    time.Time
 	lastError    string
 
+	// stopGraceSeconds caches DeployPolicy.stop_grace_seconds from the last
+	// desired assignment so retirement (when desired is already gone) still
+	// honors the configured SIGTERM→SIGKILL grace.
+	stopGraceSeconds int32
+
 	// cron tracks next fire times for DesiredState schedules (ARCHITECTURE §10).
 	cron map[string]*cronEntry
 }
