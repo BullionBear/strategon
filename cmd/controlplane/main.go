@@ -4,8 +4,8 @@
 //   - ControlPlaneService on --human-addr (default 127.0.0.1:8081) — human HTTP/JSON
 //
 // Separate ports match FRONTEND.md §0: different clients, different mental
-// models. The human port binds loopback by default (no auth yet). Agent port
-// optionally requires mTLS (--tls-cert/--tls-key/--client-ca).
+// models. The human port optionally requires Discord/mock auth (--auth-mode).
+// Agent port optionally requires mTLS (--tls-cert/--tls-key/--client-ca).
 package main
 
 import (
@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
+	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/api"
 	"github.com/bullionbear/strategon/internal/controlplane/grpcstream"
@@ -30,7 +31,7 @@ import (
 
 func main() {
 	agentAddr := flag.String("agent-addr", ":8080", "AgentService listen address")
-	humanAddr := flag.String("human-addr", "127.0.0.1:8081", "ControlPlaneService listen address (bind loopback; no auth)")
+	humanAddr := flag.String("human-addr", "127.0.0.1:8081", "ControlPlaneService listen address (bind loopback by default)")
 	// Legacy alias for agent addr.
 	legacyAddr := flag.String("addr", "", "deprecated alias for --agent-addr")
 	resync := flag.Duration("resync", 30*time.Second, "periodic full-resync interval for agents")
@@ -40,12 +41,44 @@ func main() {
 	tlsKey := flag.String("tls-key", "", "AgentService TLS private key (PEM)")
 	clientCA := flag.String("client-ca", "", "CA PEM used to verify agent client certificates")
 	leaseMarginCP := flag.Duration("lease-margin-cp", store.DefaultLeaseMarginCP, "control-plane lease expiry margin (SAFETY §2)")
+
+	authMode := flag.String("auth-mode", "none", "human API auth: none|mock|discord (default none for local/CI)")
+	sessionSecret := flag.String("auth-session-secret", "", "HMAC secret for session cookies; random if empty")
+	mockUser := flag.String("auth-mock-user", "local", "username injected in auth-mode=none / mock-login")
+	mockID := flag.String("auth-mock-id", "local", "user id injected in auth-mode=none / mock-login")
+	discordClientID := flag.String("discord-client-id", "", "Discord OAuth client id (auth-mode=discord)")
+	discordClientSecret := flag.String("discord-client-secret", "", "Discord OAuth client secret (auth-mode=discord)")
+	discordRedirect := flag.String("discord-redirect-url", "http://127.0.0.1:8081/auth/callback", "Discord OAuth redirect URL")
+	frontendURL := flag.String("auth-frontend-url", "http://127.0.0.1:5173", "browser redirect after login/logout")
+
 	flag.Parse()
 	if *legacyAddr != "" {
 		*agentAddr = *legacyAddr
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	mode, err := auth.ParseMode(*authMode)
+	if err != nil {
+		logger.Error("invalid --auth-mode", "err", err)
+		os.Exit(1)
+	}
+	authSvc, err := auth.New(auth.Config{
+		Mode:                mode,
+		SessionSecret:       *sessionSecret,
+		MockUser:            *mockUser,
+		MockID:              *mockID,
+		DiscordClientID:     *discordClientID,
+		DiscordClientSecret: *discordClientSecret,
+		DiscordRedirectURL:  *discordRedirect,
+		FrontendURL:         *frontendURL,
+		Logger:              logger,
+	})
+	if err != nil {
+		logger.Error("auth init failed", "err", err)
+		os.Exit(1)
+	}
+
 	hub := store.NewHub()
 	var st store.Store
 	if *dbDSN != "" {
@@ -76,8 +109,12 @@ func main() {
 	agentMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	humanMux := http.NewServeMux()
-	humanPath, humanHandler := strategyplatformv1connect.NewControlPlaneServiceHandler(humanSrv)
-	humanMux.Handle(humanPath, withCORS(humanHandler))
+	humanPath, humanHandler := strategyplatformv1connect.NewControlPlaneServiceHandler(
+		humanSrv,
+		authSvc.HandlerOptions()...,
+	)
+	humanMux.Handle(humanPath, humanHandler)
+	authSvc.Mount(humanMux)
 	humanMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	h2s := &http2.Server{}
@@ -89,9 +126,9 @@ func main() {
 		}
 	}()
 
-	logger.Info("human API listening", "addr", *humanAddr,
+	logger.Info("human API listening", "addr", *humanAddr, "auth_mode", mode,
 		"build_version", buildinfo.Version, "commit", buildinfo.CommitHash, "build_time", buildinfo.BuildTime)
-	humanHTTP := &http.Server{Addr: *humanAddr, Handler: h2c.NewHandler(humanMux, h2s)}
+	humanHTTP := &http.Server{Addr: *humanAddr, Handler: h2c.NewHandler(withCORS(humanMux), h2s)}
 	if err := humanHTTP.ListenAndServe(); err != nil {
 		logger.Error("human server exited", "err", err)
 		os.Exit(1)
@@ -130,8 +167,8 @@ func serveAgent(logger *slog.Logger, addr string, handler http.Handler, h2s *htt
 	return srv.ListenAndServe()
 }
 
-// withCORS allows the local SvelteKit dev server to call the human API.
-// Production sits behind VPN/SSO; this is a local-dev convenience only.
+// withCORS allows the local SvelteKit dev server to call the human API
+// (including credentialed fetches and Bearer tokens).
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
@@ -139,8 +176,12 @@ func withCORS(next http.Handler) http.Handler {
 			origin = "*"
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Connect-Protocol-Version, Connect-Timeout-Ms, Grpc-Timeout, X-Grpc-Web, X-User-Agent")
+		if origin != "*" {
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Add("Vary", "Origin")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Connect-Protocol-Version, Connect-Timeout-Ms, Grpc-Timeout, X-Grpc-Web, X-User-Agent, X-Requested-With")
 		w.Header().Set("Access-Control-Expose-Headers", "Grpc-Status, Grpc-Message, Grpc-Status-Details-Bin, Connect-Content-Encoding")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

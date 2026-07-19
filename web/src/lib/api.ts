@@ -1,13 +1,27 @@
-import { createClient, type Client } from '@connectrpc/connect';
+import { createClient, type Client, type Interceptor } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 import { ControlPlaneService } from '$lib/gen/strategyplatform/v1/control_service_pb';
 import type { Machine } from '$lib/gen/strategyplatform/v1/control_service_pb';
+import { getAccessToken } from '$lib/auth';
 
 const baseUrl =
 	(typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) ||
 	'http://127.0.0.1:8081';
 
-const transport = createConnectTransport({ baseUrl });
+const authInterceptor: Interceptor = (next) => async (req) => {
+	const tok = getAccessToken();
+	if (tok) {
+		req.header.set('Authorization', `Bearer ${tok}`);
+	}
+	return next(req);
+};
+
+const transport = createConnectTransport({
+	baseUrl,
+	interceptors: [authInterceptor],
+	// Cookie sessions when UI and API share a site; Bearer still works cross-origin.
+	fetch: (input, init) => fetch(input, { ...init, credentials: 'include' })
+});
 
 /** Typed Connect client for ControlPlaneService. */
 export const client: Client<typeof ControlPlaneService> = createClient(

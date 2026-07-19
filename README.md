@@ -72,7 +72,40 @@ go run ./cmd/controlplane \
 ```
 
 - `:8080` — `AgentService` + `LeaseService` (agents / strategy SDK)
-- `127.0.0.1:8081` — `ControlPlaneService` (UI/CLI; loopback, no auth)
+- `127.0.0.1:8081` — `ControlPlaneService` (UI/CLI; loopback by default)
+
+Human API auth (`--auth-mode`, default `none`):
+
+| Mode | Behavior |
+|------|----------|
+| `none` | No login required; audit actor is `--auth-mock-user` (default `local`) |
+| `mock` | Local mock login at `/auth/login` (no Discord app); full operator access |
+| `discord` | Discord OAuth; requires `--discord-client-id`, `--discord-client-secret`, `--discord-redirect-url` |
+
+Any authenticated user is a full operator (flat authz). Mutating RPCs write the
+actor into the audit log. After login, mint long-lived API tokens in the UI
+(`/tokens`) or `POST /auth/tokens` and call the API with
+`Authorization: Bearer str_live_…`.
+
+```bash
+# Local auth-flow testing (mock user, no Discord)
+go run ./cmd/controlplane \
+  --agent-addr :8080 \
+  --human-addr 127.0.0.1:8081 \
+  --auth-mode=mock \
+  --auth-frontend-url=http://127.0.0.1:5173
+
+# Discord (register redirect URL http://127.0.0.1:8081/auth/callback on the Discord app)
+go run ./cmd/controlplane \
+  --agent-addr :8080 \
+  --human-addr 127.0.0.1:8081 \
+  --auth-mode=discord \
+  --discord-client-id="$DISCORD_CLIENT_ID" \
+  --discord-client-secret="$DISCORD_CLIENT_SECRET" \
+  --discord-redirect-url=http://127.0.0.1:8081/auth/callback \
+  --auth-frontend-url=http://127.0.0.1:5173 \
+  --auth-session-secret="$(openssl rand -hex 32)"
+```
 
 ### 2. Agent
 

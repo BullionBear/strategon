@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
+	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -26,8 +27,12 @@ func startHumanAPI(t *testing.T) (strategyplatformv1connect.ControlPlaneServiceC
 	st := store.NewMemory(hub)
 	agents := &stubAgents{}
 	srv := New(st, hub, agents, nil)
+	authSvc, err := auth.New(auth.Config{Mode: auth.ModeNone, SessionSecret: "test-secret-at-least-32-bytes-long!!"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	mux := http.NewServeMux()
-	path, h := strategyplatformv1connect.NewControlPlaneServiceHandler(srv)
+	path, h := strategyplatformv1connect.NewControlPlaneServiceHandler(srv, authSvc.HandlerOptions()...)
 	mux.Handle(path, h)
 	ts := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	ts.Start()

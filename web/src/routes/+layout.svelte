@@ -3,6 +3,13 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import { client } from '$lib/api';
+	import {
+		consumeAuthHash,
+		fetchAuthStatus,
+		loginURL,
+		logout,
+		type AuthStatus
+	} from '$lib/auth';
 	import { BP } from '$lib/fleet';
 	import {
 		hasSidebarCollapsedPreference,
@@ -15,6 +22,14 @@
 	let cpVersion = $state('');
 	let collapsed = $state(false);
 	let drawerOpen = $state(false);
+	let auth = $state<AuthStatus>({ mode: 'none', user: null });
+	let authReady = $state(false);
+
+	/** Gate content whenever auth is required, or status is unreachable (don't silently open the UI). */
+	const needsLogin = $derived(
+		authReady && !auth.user && (auth.mode === 'mock' || auth.mode === 'discord' || auth.mode === 'unknown')
+	);
+	const showLoginButton = $derived(needsLogin);
 
 	function active(path: string): boolean {
 		const p = page.url.pathname;
@@ -49,6 +64,21 @@
 		};
 	});
 
+	async function refreshAuth() {
+		try {
+			await consumeAuthHash();
+		} catch {
+			/* ignore exchange failures; status fetch still runs */
+		}
+		auth = await fetchAuthStatus();
+		authReady = true;
+	}
+
+	async function onLogout() {
+		await logout();
+		auth = await fetchAuthStatus();
+	}
+
 	onMount(() => {
 		collapsed = readSidebarCollapsed();
 		const w = window.innerWidth;
@@ -60,14 +90,16 @@
 			collapsed = true;
 		}
 
-		client
-			.getControlPlaneVersion({})
-			.then((v) => {
-				cpVersion = v.version || 'dev';
-			})
-			.catch(() => {
-				cpVersion = '';
-			});
+		void refreshAuth().then(() => {
+			client
+				.getControlPlaneVersion({})
+				.then((v) => {
+					cpVersion = v.version || 'dev';
+				})
+				.catch(() => {
+					cpVersion = '';
+				});
+		});
 
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === 'Escape' && drawerOpen) closeDrawer();
@@ -98,7 +130,10 @@
 		},
 		{
 			label: 'Observe',
-			items: [{ href: '/audit', label: 'Audit', icon: 'audit' as const }]
+			items: [
+				{ href: '/audit', label: 'Audit', icon: 'audit' as const },
+				{ href: '/tokens', label: 'API tokens', icon: 'tokens' as const }
+			]
 		}
 	];
 </script>
@@ -127,7 +162,9 @@
 			</svg>
 		</button>
 		<a class="brand" href="/" onclick={closeDrawer}>Strategon</a>
-		{#if cpVersion}
+		{#if showLoginButton}
+			<a class="btn auth-btn-mobile" href={loginURL()}>Log in</a>
+		{:else if cpVersion}
 			<span class="cp-version mono muted" title="Control plane build version">
 				cp {cpVersion}
 			</span>
@@ -187,7 +224,21 @@
 							onclick={onNavClick}
 						>
 							<span class="nav-icon" aria-hidden="true">
-								{#if item.icon === 'machines'}
+								{#if item.icon === 'tokens'}
+									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+										<path
+											d="M7 10a3 3 0 116 0 3 3 0 01-6 0z"
+											stroke="currentColor"
+											stroke-width="1.5"
+										/>
+										<path
+											d="M12.5 10h5M15.5 8v4"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+										/>
+									</svg>
+								{:else if item.icon === 'machines'}
 									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">
 										<rect
 											x="3"
@@ -249,6 +300,21 @@
 			{/each}
 		</nav>
 
+		<div class="sidebar-auth">
+			{#if showLoginButton}
+				<a class="btn auth-btn" href={loginURL()}>
+					{auth.mode === 'discord' ? 'Log in with Discord' : 'Log in'}
+				</a>
+			{:else if auth.user}
+				<div class="auth-user" title={auth.user.actor}>
+					<span class="auth-name">{auth.user.username}</span>
+					{#if auth.mode !== 'none'}
+						<button type="button" class="btn ghost auth-btn" onclick={onLogout}>Log out</button>
+					{/if}
+				</div>
+			{/if}
+		</div>
+
 		{#if cpVersion}
 			<div class="sidebar-foot mono muted" title="Control plane build version (display only)">
 				<span class="foot-full">cp {cpVersion}</span>
@@ -258,7 +324,34 @@
 	</aside>
 
 	<main class="shell-main">
-		{@render children()}
+		{#if needsLogin}
+			<section class="fade-in auth-gate">
+				<h1>Sign in</h1>
+				{#if auth.error}
+					<p class="pill bad" style="margin-top:0.75rem">{auth.error}</p>
+					<p class="muted" style="margin-top:0.75rem">
+						Start the control plane with
+						<code class="mono">--auth-mode=mock</code>
+						(or <code class="mono">discord</code>), then retry.
+					</p>
+					<p style="margin-top: 1.25rem">
+						<button type="button" class="btn" onclick={() => refreshAuth()}>Retry</button>
+					</p>
+				{:else}
+					<p class="muted">
+						Human API auth is enabled ({auth.mode}). Log in to operate the control plane. Any
+						authenticated user has full operator access; actions are attributed in the audit log.
+					</p>
+					<p style="margin-top: 1.25rem">
+						<a class="btn" href={loginURL()}>
+							{auth.mode === 'discord' ? 'Log in with Discord' : 'Continue as mock user'}
+						</a>
+					</p>
+				{/if}
+			</section>
+		{:else}
+			{@render children()}
+		{/if}
 	</main>
 </div>
 
@@ -327,6 +420,44 @@
 		width: var(--sidebar-collapsed);
 		padding-left: 0.4rem;
 		padding-right: 0.4rem;
+	}
+
+	.sidebar-auth {
+		margin-top: auto;
+		padding: 0.75rem 0.35rem 0.5rem;
+		border-top: 1px solid var(--line);
+	}
+	.auth-user {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		font-size: 0.85rem;
+	}
+	.auth-name {
+		font-weight: 600;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.auth-btn {
+		font-size: 0.8rem;
+		justify-content: center;
+		width: 100%;
+	}
+	.auth-btn-mobile {
+		margin-left: auto;
+		font-size: 0.8rem;
+		padding: 0.35rem 0.7rem;
+	}
+	:global(.shell.collapsed) .sidebar-auth .auth-name {
+		display: none;
+	}
+	:global(.shell.collapsed) .sidebar-auth .auth-btn {
+		padding: 0.4rem;
+		font-size: 0.7rem;
+	}
+	.auth-gate {
+		max-width: 32rem;
 	}
 
 	.sidebar-top {
