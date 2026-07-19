@@ -23,18 +23,24 @@ type Memory struct {
 	leaseMargin time.Duration
 	now         func() time.Time // injectable for tests
 	hub         *Hub
+
+	// samples keyed by machineID + "\x00" + strategy ("" = machine-level).
+	samples      map[string][]ResourceSample
+	lastSampleAt map[string]int64 // machineID -> unix of last window write
 }
 
 // NewMemory returns an empty in-memory store that notifies hub on changes.
 // hub may be nil (no fan-out).
 func NewMemory(hub *Hub) *Memory {
 	return &Memory{
-		machines:    map[string]*MachineRecord{},
-		artifacts:   map[string]*pb.ArtifactRef{},
-		leases:      map[string]*LeaseInfo{},
-		leaseMargin: DefaultLeaseMarginCP,
-		now:         time.Now,
-		hub:         hub,
+		machines:     map[string]*MachineRecord{},
+		artifacts:    map[string]*pb.ArtifactRef{},
+		leases:       map[string]*LeaseInfo{},
+		leaseMargin:  DefaultLeaseMarginCP,
+		now:          time.Now,
+		hub:          hub,
+		samples:      map[string][]ResourceSample{},
+		lastSampleAt: map[string]int64{},
 	}
 }
 
@@ -182,6 +188,9 @@ func (m *Memory) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64
 	if hb.GetResources() != nil {
 		rec.LastResources = proto.Clone(hb.GetResources()).(*pb.MachineResources)
 	}
+	if procs := hb.GetProcesses(); len(procs) > 0 {
+		rec.LastProcesses = cloneProcesses(procs)
+	}
 	rec.LastHeartbeat = atUnix
 	rec.AgentVersion = hb.GetAgentVersion()
 	rec.AgentBuildVersion = hb.GetAgentBuildVersion()
@@ -189,9 +198,79 @@ func (m *Memory) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64
 	if hb.GetObservedGeneration() > rec.ObservedGen {
 		rec.ObservedGen = hb.GetObservedGeneration()
 	}
+	m.maybeAppendSamplesLocked(machineID, hb, atUnix)
 	m.mu.Unlock()
 	m.notify(machineID)
 	return nil
+}
+
+func (m *Memory) maybeAppendSamplesLocked(machineID string, hb *pb.Heartbeat, atUnix int64) {
+	last := m.lastSampleAt[machineID]
+	if last > 0 && atUnix-last < int64(ResourceSampleInterval/time.Second) {
+		return
+	}
+	at := time.Unix(atUnix, 0).UTC()
+	if res := hb.GetResources(); res != nil {
+		m.appendSampleLocked(machineID, "", ResourceSample{
+			SampledAt:  at,
+			CPUPercent: res.GetCpuPercent(),
+			MemBytes:   res.GetMemoryUsedBytes(),
+		})
+	}
+	for _, p := range hb.GetProcesses() {
+		if p.GetStrategy() == "" {
+			continue
+		}
+		m.appendSampleLocked(machineID, p.GetStrategy(), ResourceSample{
+			SampledAt:  at,
+			CPUPercent: p.GetCpuPercent(),
+			MemBytes:   p.GetRssBytes(),
+		})
+	}
+	m.lastSampleAt[machineID] = atUnix
+}
+
+func (m *Memory) appendSampleLocked(machineID, strategy string, s ResourceSample) {
+	key := sampleKey(machineID, strategy)
+	cutoff := s.SampledAt.Add(-ResourceSampleRetain)
+	buf := append(m.samples[key], s)
+	// Drop points outside the retention window.
+	i := 0
+	for i < len(buf) && buf[i].SampledAt.Before(cutoff) {
+		i++
+	}
+	if i > 0 {
+		buf = append([]ResourceSample{}, buf[i:]...)
+	}
+	m.samples[key] = buf
+}
+
+func (m *Memory) ListResourceSamples(machineID, strategy string, since time.Time) ([]ResourceSample, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if _, ok := m.machines[machineID]; !ok {
+		return nil, fmt.Errorf("list resource samples: unknown machine %s", machineID)
+	}
+	src := m.samples[sampleKey(machineID, strategy)]
+	out := make([]ResourceSample, 0, len(src))
+	for _, s := range src {
+		if !s.SampledAt.Before(since) {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
+func sampleKey(machineID, strategy string) string {
+	return machineID + "\x00" + strategy
+}
+
+func cloneProcesses(in []*pb.ProcessMetrics) []*pb.ProcessMetrics {
+	out := make([]*pb.ProcessMetrics, len(in))
+	for i, p := range in {
+		out[i] = proto.Clone(p).(*pb.ProcessMetrics)
+	}
+	return out
 }
 
 func (m *Memory) SetReachable(machineID string, reachable bool) error {
@@ -410,6 +489,9 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	}
 	if rec.LastResources != nil {
 		cp.LastResources = proto.Clone(rec.LastResources).(*pb.MachineResources)
+	}
+	if len(rec.LastProcesses) > 0 {
+		cp.LastProcesses = cloneProcesses(rec.LastProcesses)
 	}
 	for k, v := range rec.Assignments {
 		cp.Assignments[k] = proto.Clone(v).(*pb.StrategyAssignmentSpec)

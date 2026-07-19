@@ -6,6 +6,7 @@ import (
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -36,6 +37,12 @@ func BuildMachine(rec *store.MachineRecord, st store.Store) *pb.Machine {
 	if rec.LastResources != nil {
 		m.LastResources = rec.LastResources
 	}
+	if len(rec.LastProcesses) > 0 {
+		m.LastProcesses = make([]*pb.ProcessMetrics, len(rec.LastProcesses))
+		for i, p := range rec.LastProcesses {
+			m.LastProcesses[i] = proto.Clone(p).(*pb.ProcessMetrics)
+		}
+	}
 	if rec.LastHeartbeat > 0 {
 		m.LastHeartbeat = timestamppb.New(unixSec(rec.LastHeartbeat))
 	}
@@ -55,14 +62,21 @@ func buildStrategyViews(rec *store.MachineRecord, st store.Store) []*pb.Strategy
 		}
 	}
 	sort.Strings(names)
+	procByStrat := map[string]*pb.ProcessMetrics{}
+	for _, p := range rec.LastProcesses {
+		if p.GetStrategy() != "" {
+			procByStrat[p.GetStrategy()] = p
+		}
+	}
+	deployedAt := latestDeployTimes(st, rec.MachineID)
 	out := make([]*pb.StrategyView, 0, len(names))
 	for _, name := range names {
-		out = append(out, buildStrategyView(rec, name, st))
+		out = append(out, buildStrategyView(rec, name, st, procByStrat[name], deployedAt[name]))
 	}
 	return out
 }
 
-func buildStrategyView(rec *store.MachineRecord, name string, st store.Store) *pb.StrategyView {
+func buildStrategyView(rec *store.MachineRecord, name string, st store.Store, proc *pb.ProcessMetrics, deployedAt *timestamppb.Timestamp) *pb.StrategyView {
 	v := &pb.StrategyView{Strategy: name, SpecGeneration: rec.Generation}
 	if spec := rec.Assignments[name]; spec != nil {
 		v.DesiredArtifact = spec.GetArtifact()
@@ -80,6 +94,18 @@ func buildStrategyView(rec *store.MachineRecord, name string, st store.Store) *p
 		v.LastError = status.GetLastError()
 		v.LeaseHeld = status.GetLeaseHeld()
 		v.LeaseExpiresAt = status.GetLeaseExpiresAt()
+		v.StartedAt = status.GetStartedAt()
+	}
+	if proc != nil {
+		v.CpuPercent = proc.GetCpuPercent()
+		v.RssBytes = proc.GetRssBytes()
+		v.NumFds = proc.GetNumFds()
+		if v.Pid == 0 {
+			v.Pid = proc.GetPid()
+		}
+	}
+	if deployedAt != nil {
+		v.DeployedAt = deployedAt
 	}
 	// Control-plane lease store is authoritative for fencing state.
 	if st != nil {
@@ -96,6 +122,26 @@ func buildStrategyView(rec *store.MachineRecord, name string, st store.Store) *p
 	}
 	v.Converged = isConverged(v)
 	return v
+}
+
+func latestDeployTimes(st store.Store, machineID string) map[string]*timestamppb.Timestamp {
+	out := map[string]*timestamppb.Timestamp{}
+	if st == nil {
+		return out
+	}
+	for _, e := range st.ListAudit(machineID, "") {
+		switch e.GetAction() {
+		case "Deploy", "SetDeployment", "Rollback":
+		default:
+			continue
+		}
+		strat := e.GetStrategy()
+		if strat == "" || out[strat] != nil {
+			continue // ListAudit is newest-first
+		}
+		out[strat] = e.GetTimestamp()
+	}
+	return out
 }
 
 // isConverged mirrors reconciler versionMatches + HEALTHY (FRONTEND.md §1.2).

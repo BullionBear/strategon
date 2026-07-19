@@ -26,6 +26,7 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/health"
 	"github.com/bullionbear/strategon/internal/agent/reconciler"
 	"github.com/bullionbear/strategon/internal/agent/stream"
+	"github.com/bullionbear/strategon/internal/agent/telemetry"
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/clock"
 	"github.com/bullionbear/strategon/internal/mtls"
@@ -38,6 +39,7 @@ func main() {
 	base := flag.String("base", "/opt/strategies", "strategy release base directory")
 	cgroupRoot := flag.String("cgroup-root", "", "delegated cgroup v2 root (empty disables confinement)")
 	agentVersion := flag.Int("agent-version", 1, "agent version")
+	metricsListen := flag.String("metrics-listen", "", "optional Prometheus text /metrics listen address (e.g. 127.0.0.1:9101); empty disables")
 
 	tlsCert := flag.String("tls-cert", "", "client certificate PEM (enables mTLS with --tls-key and --server-ca)")
 	tlsKey := flag.String("tls-key", "", "client private key PEM")
@@ -87,18 +89,45 @@ func main() {
 		Logger:       logger,
 	})
 
+	collector := telemetry.New(func() []telemetry.ProcessTarget {
+		raw := rec.ProcessTargets()
+		out := make([]telemetry.ProcessTarget, len(raw))
+		for i, t := range raw {
+			out[i] = telemetry.ProcessTarget{
+				Strategy:     t.Strategy,
+				PID:          t.PID,
+				Alive:        t.Alive,
+				RestartCount: t.RestartCount,
+			}
+		}
+		return out
+	})
+	collector.Logger = logger
+	go collector.Run(ctx)
+
+	if *metricsListen != "" {
+		go func() {
+			logger.Info("metrics endpoint listening", "addr", *metricsListen)
+			if err := telemetry.ListenAndServeMetrics(*metricsListen, *machineID, collector); err != nil && ctx.Err() == nil {
+				logger.Error("metrics server exited", "err", err)
+			}
+		}()
+	}
+
 	client := &stream.Client{
 		Register: &pb.Register{
 			MachineId:         *machineID,
 			Hostname:          hostname,
 			AgentVersion:      int32(*agentVersion),
 			AgentBuildVersion: buildinfo.Version,
-			Spec:              &pb.MachineSpec{Os: "linux", SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC}},
+			Spec:              telemetry.MachineSpecFromHost(),
 		},
 		Client:      strategyplatformv1connect.NewAgentServiceClient(httpClient, *controlURL, connect.WithGRPC()),
 		Out:         out,
 		Submit:      rec.SubmitDesired,
 		ObservedGen: rec.ObservedGeneration,
+		Resources:   collector.HeartbeatResources,
+		Processes:   collector.HeartbeatProcesses,
 		Clock:       clock.Real{},
 		Heartbeat:   5 * time.Second,
 		Logger:      logger,

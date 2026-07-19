@@ -69,6 +69,9 @@ const (
 	// ControlPlaneServiceGetControlPlaneVersionProcedure is the fully-qualified name of the
 	// ControlPlaneService's GetControlPlaneVersion RPC.
 	ControlPlaneServiceGetControlPlaneVersionProcedure = "/strategyplatform.v1.ControlPlaneService/GetControlPlaneVersion"
+	// ControlPlaneServiceGetMachineMetricsProcedure is the fully-qualified name of the
+	// ControlPlaneService's GetMachineMetrics RPC.
+	ControlPlaneServiceGetMachineMetricsProcedure = "/strategyplatform.v1.ControlPlaneService/GetMachineMetrics"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -86,6 +89,7 @@ var (
 	controlPlaneServiceRegisterArtifactMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("RegisterArtifact")
 	controlPlaneServiceListArtifactsMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("ListArtifacts")
 	controlPlaneServiceGetControlPlaneVersionMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("GetControlPlaneVersion")
+	controlPlaneServiceGetMachineMetricsMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachineMetrics")
 )
 
 // ControlPlaneServiceClient is a client for the strategyplatform.v1.ControlPlaneService service.
@@ -104,6 +108,8 @@ type ControlPlaneServiceClient interface {
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
+	// Short-term resource trend from the PG sliding window (not a TSDB).
+	GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error)
 }
 
 // NewControlPlaneServiceClient constructs a client for the strategyplatform.v1.ControlPlaneService
@@ -188,6 +194,12 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceGetControlPlaneVersionMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		getMachineMetrics: connect.NewClient[v1.GetMachineMetricsRequest, v1.GetMachineMetricsResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceGetMachineMetricsProcedure,
+			connect.WithSchema(controlPlaneServiceGetMachineMetricsMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -205,6 +217,7 @@ type controlPlaneServiceClient struct {
 	registerArtifact       *connect.Client[v1.RegisterArtifactRequest, v1.RegisterArtifactResponse]
 	listArtifacts          *connect.Client[v1.ListArtifactsRequest, v1.ListArtifactsResponse]
 	getControlPlaneVersion *connect.Client[v1.GetControlPlaneVersionRequest, v1.ControlPlaneVersion]
+	getMachineMetrics      *connect.Client[v1.GetMachineMetricsRequest, v1.GetMachineMetricsResponse]
 }
 
 // ListMachines calls strategyplatform.v1.ControlPlaneService.ListMachines.
@@ -267,6 +280,11 @@ func (c *controlPlaneServiceClient) GetControlPlaneVersion(ctx context.Context, 
 	return c.getControlPlaneVersion.CallUnary(ctx, req)
 }
 
+// GetMachineMetrics calls strategyplatform.v1.ControlPlaneService.GetMachineMetrics.
+func (c *controlPlaneServiceClient) GetMachineMetrics(ctx context.Context, req *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error) {
+	return c.getMachineMetrics.CallUnary(ctx, req)
+}
+
 // ControlPlaneServiceHandler is an implementation of the strategyplatform.v1.ControlPlaneService
 // service.
 type ControlPlaneServiceHandler interface {
@@ -284,6 +302,8 @@ type ControlPlaneServiceHandler interface {
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
+	// Short-term resource trend from the PG sliding window (not a TSDB).
+	GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error)
 }
 
 // NewControlPlaneServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -364,6 +384,12 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceGetControlPlaneVersionMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceGetMachineMetricsHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceGetMachineMetricsProcedure,
+		svc.GetMachineMetrics,
+		connect.WithSchema(controlPlaneServiceGetMachineMetricsMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/strategyplatform.v1.ControlPlaneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ControlPlaneServiceListMachinesProcedure:
@@ -390,6 +416,8 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceListArtifactsHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceGetControlPlaneVersionProcedure:
 			controlPlaneServiceGetControlPlaneVersionHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceGetMachineMetricsProcedure:
+			controlPlaneServiceGetMachineMetricsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -445,4 +473,8 @@ func (UnimplementedControlPlaneServiceHandler) ListArtifacts(context.Context, *c
 
 func (UnimplementedControlPlaneServiceHandler) GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.GetMachineMetrics is not implemented"))
 }

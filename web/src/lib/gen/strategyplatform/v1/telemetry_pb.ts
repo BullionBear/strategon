@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/telemetry.proto.
  */
 export const file_strategyplatform_v1_telemetry: GenFile = /*@__PURE__*/
-  fileDesc("CiNzdHJhdGVneXBsYXRmb3JtL3YxL3RlbGVtZXRyeS5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSL+AQoQTWFjaGluZVJlc291cmNlcxITCgtjcHVfcGVyY2VudBgBIAEoARIZChFtZW1vcnlfdXNlZF9ieXRlcxgCIAEoAxIaChJtZW1vcnlfdG90YWxfYnl0ZXMYAyABKAMSFwoPZGlza191c2VkX2J5dGVzGAQgASgDEhgKEGRpc2tfdG90YWxfYnl0ZXMYBSABKAMSDQoFbG9hZDEYBiABKAESFAoMbmV0X3J4X2J5dGVzGAcgASgDEhQKDG5ldF90eF9ieXRlcxgIIAEoAxIwCgxjb2xsZWN0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIo4BCg5Qcm9jZXNzTWV0cmljcxIQCghzdHJhdGVneRgBIAEoCRILCgNwaWQYAiABKAUSDQoFYWxpdmUYAyABKAgSEQoJcnNzX2J5dGVzGAQgASgDEg8KB251bV9mZHMYBSABKAUSEwoLY3B1X3BlcmNlbnQYBiABKAESFQoNcmVzdGFydF9jb3VudBgHIAEoBSLOAQoJSGVhcnRiZWF0EjgKCXJlc291cmNlcxgBIAEoCzIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVJlc291cmNlcxI2Cglwcm9jZXNzZXMYAiADKAsyIy5zdHJhdGVneXBsYXRmb3JtLnYxLlByb2Nlc3NNZXRyaWNzEhsKE29ic2VydmVkX2dlbmVyYXRpb24YAyABKAMSFQoNYWdlbnRfdmVyc2lvbhgEIAEoBRIbChNhZ2VudF9idWlsZF92ZXJzaW9uGAUgASgJQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("CiNzdHJhdGVneXBsYXRmb3JtL3YxL3RlbGVtZXRyeS5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSL+AQoQTWFjaGluZVJlc291cmNlcxITCgtjcHVfcGVyY2VudBgBIAEoARIZChFtZW1vcnlfdXNlZF9ieXRlcxgCIAEoAxIaChJtZW1vcnlfdG90YWxfYnl0ZXMYAyABKAMSFwoPZGlza191c2VkX2J5dGVzGAQgASgDEhgKEGRpc2tfdG90YWxfYnl0ZXMYBSABKAMSDQoFbG9hZDEYBiABKAESFAoMbmV0X3J4X2J5dGVzGAcgASgDEhQKDG5ldF90eF9ieXRlcxgIIAEoAxIwCgxjb2xsZWN0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIo4BCg5Qcm9jZXNzTWV0cmljcxIQCghzdHJhdGVneRgBIAEoCRILCgNwaWQYAiABKAUSDQoFYWxpdmUYAyABKAgSEQoJcnNzX2J5dGVzGAQgASgDEg8KB251bV9mZHMYBSABKAUSEwoLY3B1X3BlcmNlbnQYBiABKAESFQoNcmVzdGFydF9jb3VudBgHIAEoBSJMChJQcm9jZXNzTWV0cmljc0xpc3QSNgoJcHJvY2Vzc2VzGAEgAygLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Qcm9jZXNzTWV0cmljcyLOAQoJSGVhcnRiZWF0EjgKCXJlc291cmNlcxgBIAEoCzIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVJlc291cmNlcxI2Cglwcm9jZXNzZXMYAiADKAsyIy5zdHJhdGVneXBsYXRmb3JtLnYxLlByb2Nlc3NNZXRyaWNzEhsKE29ic2VydmVkX2dlbmVyYXRpb24YAyABKAMSFQoNYWdlbnRfdmVyc2lvbhgEIAEoBRIbChNhZ2VudF9idWlsZF92ZXJzaW9uGAUgASgJQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message strategyplatform.v1.MachineResources
@@ -119,6 +119,25 @@ export const ProcessMetricsSchema: GenMessage<ProcessMetrics> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_telemetry, 1);
 
 /**
+ * ProcessMetricsList is a storage/transport wrapper for a process metrics snapshot.
+ *
+ * @generated from message strategyplatform.v1.ProcessMetricsList
+ */
+export type ProcessMetricsList = Message<"strategyplatform.v1.ProcessMetricsList"> & {
+  /**
+   * @generated from field: repeated strategyplatform.v1.ProcessMetrics processes = 1;
+   */
+  processes: ProcessMetrics[];
+};
+
+/**
+ * Describes the message strategyplatform.v1.ProcessMetricsList.
+ * Use `create(ProcessMetricsListSchema)` to create a new message.
+ */
+export const ProcessMetricsListSchema: GenMessage<ProcessMetricsList> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_telemetry, 2);
+
+/**
  * Heartbeat is high-frequency (5-10s) and lightweight. observed_generation lets
  * the control plane roughly track convergence without waiting for StatusReport.
  *
@@ -162,5 +181,5 @@ export type Heartbeat = Message<"strategyplatform.v1.Heartbeat"> & {
  * Use `create(HeartbeatSchema)` to create a new message.
  */
 export const HeartbeatSchema: GenMessage<Heartbeat> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_telemetry, 2);
+  messageDesc(file_strategyplatform_v1_telemetry, 3);
 

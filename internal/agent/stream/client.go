@@ -24,10 +24,14 @@ type Client struct {
 	Out         <-chan *pb.AgentMessage // northbound messages from the reconciler
 	Submit      func(*pb.DesiredState)  // deliver DesiredState to the reconciler
 	ObservedGen func() int64            // for heartbeat stamping
-	Clock       clock.Clock
-	Heartbeat   time.Duration
-	MaxBackoff  time.Duration
-	Logger      *slog.Logger
+	// Resources / Processes supply the latest instantaneous telemetry snapshot
+	// for Heartbeat (sampled off the reconciler critical path).
+	Resources  func() *pb.MachineResources
+	Processes  func() []*pb.ProcessMetrics
+	Clock      clock.Clock
+	Heartbeat  time.Duration
+	MaxBackoff time.Duration
+	Logger     *slog.Logger
 }
 
 func (c *Client) heartbeatInterval() time.Duration {
@@ -139,11 +143,18 @@ func (c *Client) buildHeartbeat() *pb.AgentMessage {
 	if c.ObservedGen != nil {
 		obs = c.ObservedGen()
 	}
+	hb := &pb.Heartbeat{
+		ObservedGeneration: obs,
+		AgentVersion:       c.Register.GetAgentVersion(),
+		AgentBuildVersion:  c.Register.GetAgentBuildVersion(),
+	}
+	if c.Resources != nil {
+		hb.Resources = c.Resources()
+	}
+	if c.Processes != nil {
+		hb.Processes = c.Processes()
+	}
 	return &pb.AgentMessage{
-		Payload: &pb.AgentMessage_Heartbeat{Heartbeat: &pb.Heartbeat{
-			ObservedGeneration: obs,
-			AgentVersion:       c.Register.GetAgentVersion(),
-			AgentBuildVersion:  c.Register.GetAgentBuildVersion(),
-		}},
+		Payload: &pb.AgentMessage_Heartbeat{Heartbeat: hb},
 	}
 }

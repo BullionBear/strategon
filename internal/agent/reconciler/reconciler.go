@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"sync/atomic"
 	"time"
 
@@ -85,6 +86,18 @@ type Reconciler struct {
 
 	lastReport   string
 	observedGenA atomic.Int64
+	// processTargets is a read-only snapshot for the telemetry collector.
+	// Updated only by the reconciler goroutine; safe for concurrent Load.
+	processTargets atomic.Value // []ProcessTarget
+}
+
+// ProcessTarget is a read-only view of a managed process for resource sampling.
+// Published by the reconciler; consumed by the telemetry collector (never mutates state).
+type ProcessTarget struct {
+	Strategy     string
+	PID          int32
+	Alive        bool
+	RestartCount int32
 }
 
 // New constructs a Reconciler.
@@ -124,6 +137,34 @@ func (r *Reconciler) SubmitDesired(ds *pb.DesiredState) {
 // stream client to stamp on heartbeats. Safe for concurrent reads.
 func (r *Reconciler) ObservedGeneration() int64 { return r.observedGenA.Load() }
 
+// ProcessTargets returns a snapshot of managed processes for telemetry sampling.
+// Safe for concurrent reads; never returns nil.
+func (r *Reconciler) ProcessTargets() []ProcessTarget {
+	v, _ := r.processTargets.Load().([]ProcessTarget)
+	if v == nil {
+		return nil
+	}
+	out := make([]ProcessTarget, len(v))
+	copy(out, v)
+	return out
+}
+
+func (r *Reconciler) publishProcessTargets() {
+	out := make([]ProcessTarget, 0, len(r.actual))
+	for name, st := range r.actual {
+		t := ProcessTarget{Strategy: name, RestartCount: st.restartCount}
+		if st.proc != nil {
+			// Presence of a handle is enough here; the collector discovers dead
+			// PIDs via /proc and exit events clear st.proc on the reconciler.
+			t.PID = int32(st.proc.PID)
+			t.Alive = true
+		}
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Strategy < out[j].Strategy })
+	r.processTargets.Store(out)
+}
+
 // Run drives the loop until ctx is cancelled.
 func (r *Reconciler) Run(ctx context.Context) {
 	r.ctx = ctx
@@ -148,6 +189,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 		}
 		r.reconcile()
 		r.reportStatusIfChanged()
+		r.publishProcessTargets()
 		r.persistSupervision()
 	}
 }

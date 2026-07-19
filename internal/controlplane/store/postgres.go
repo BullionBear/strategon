@@ -147,10 +147,10 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 		Status:            map[string]*pb.StrategyAssignmentStatus{},
 		PreviousArtifacts: map[string]*pb.ArtifactRef{},
 	}
-	var register, resources []byte
+	var register, resources, processes []byte
 	err := q.QueryRow(ctx, `SELECT register, reachable, agent_version, agent_build_version,
-		last_resources, last_heartbeat, generation, observed_gen FROM machines WHERE machine_id=$1`, id).
-		Scan(&register, &rec.Reachable, &rec.AgentVersion, &rec.AgentBuildVersion, &resources,
+		last_resources, last_processes, last_heartbeat, generation, observed_gen FROM machines WHERE machine_id=$1`, id).
+		Scan(&register, &rec.Reachable, &rec.AgentVersion, &rec.AgentBuildVersion, &resources, &processes,
 			&rec.LastHeartbeat, &rec.Generation, &rec.ObservedGen)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
@@ -169,6 +169,13 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 		if err := proto.Unmarshal(resources, rec.LastResources); err != nil {
 			return nil, false, err
 		}
+	}
+	if processes != nil {
+		list := &pb.ProcessMetricsList{}
+		if err := proto.Unmarshal(processes, list); err != nil {
+			return nil, false, err
+		}
+		rec.LastProcesses = list.GetProcesses()
 	}
 	if err := loadInto(ctx, q, `SELECT strategy, spec FROM assignments WHERE machine_id=$1`, id,
 		func(k string, b []byte) error {
@@ -416,7 +423,7 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 }
 
 func (p *Postgres) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64) error {
-	var resBytes []byte
+	var resBytes, procBytes []byte
 	if hb.GetResources() != nil {
 		b, err := proto.Marshal(hb.GetResources())
 		if err != nil {
@@ -424,23 +431,109 @@ func (p *Postgres) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int
 		}
 		resBytes = b
 	}
+	if procs := hb.GetProcesses(); len(procs) > 0 {
+		b, err := proto.Marshal(&pb.ProcessMetricsList{Processes: procs})
+		if err != nil {
+			return err
+		}
+		procBytes = b
+	}
 	ctx, cancel := opCtx()
 	defer cancel()
-	tag, err := p.pool.Exec(ctx, `UPDATE machines
-		SET last_heartbeat=$2, agent_version=$3, agent_build_version=$4, reachable=TRUE,
-		    observed_gen=GREATEST(observed_gen, $5),
-		    last_resources=COALESCE($6, last_resources)
-		WHERE machine_id=$1`,
-		machineID, atUnix, hb.GetAgentVersion(), hb.GetAgentBuildVersion(),
-		hb.GetObservedGeneration(), resBytes)
+	err := p.inTx(ctx, func(tx pgx.Tx) error {
+		tag, err := tx.Exec(ctx, `UPDATE machines
+			SET last_heartbeat=$2, agent_version=$3, agent_build_version=$4, reachable=TRUE,
+			    observed_gen=GREATEST(observed_gen, $5),
+			    last_resources=COALESCE($6, last_resources),
+			    last_processes=COALESCE($7, last_processes)
+			WHERE machine_id=$1`,
+			machineID, atUnix, hb.GetAgentVersion(), hb.GetAgentBuildVersion(),
+			hb.GetObservedGeneration(), resBytes, procBytes)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("apply heartbeat: unknown machine %s", machineID)
+		}
+		return p.maybeAppendSamples(ctx, tx, machineID, hb, atUnix)
+	})
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("apply heartbeat: unknown machine %s", machineID)
-	}
 	p.notify(machineID)
 	return nil
+}
+
+func (p *Postgres) maybeAppendSamples(ctx context.Context, tx pgx.Tx, machineID string, hb *pb.Heartbeat, atUnix int64) error {
+	var lastAt *time.Time
+	err := tx.QueryRow(ctx, `
+		SELECT MAX(sampled_at) FROM resource_samples
+		WHERE machine_id=$1 AND strategy=''`, machineID).Scan(&lastAt)
+	if err != nil {
+		return err
+	}
+	at := time.Unix(atUnix, 0).UTC()
+	if lastAt != nil && at.Sub(*lastAt) < ResourceSampleInterval {
+		return nil
+	}
+	if res := hb.GetResources(); res != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO resource_samples
+			(machine_id, strategy, sampled_at, cpu_percent, mem_bytes)
+			VALUES ($1, '', $2, $3, $4)
+			ON CONFLICT DO NOTHING`,
+			machineID, at, res.GetCpuPercent(), res.GetMemoryUsedBytes()); err != nil {
+			return err
+		}
+	}
+	for _, proc := range hb.GetProcesses() {
+		if proc.GetStrategy() == "" {
+			continue
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO resource_samples
+			(machine_id, strategy, sampled_at, cpu_percent, mem_bytes)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT DO NOTHING`,
+			machineID, proc.GetStrategy(), at, proc.GetCpuPercent(), proc.GetRssBytes()); err != nil {
+			return err
+		}
+	}
+	cutoff := at.Add(-ResourceSampleRetain)
+	_, err = tx.Exec(ctx, `DELETE FROM resource_samples WHERE machine_id=$1 AND sampled_at < $2`,
+		machineID, cutoff)
+	return err
+}
+
+func (p *Postgres) ListResourceSamples(machineID, strategy string, since time.Time) ([]ResourceSample, error) {
+	ctx, cancel := opCtx()
+	defer cancel()
+	if err := requireMachine(ctx, p.pool, machineID, "list resource samples"); err != nil {
+		return nil, err
+	}
+	rows, err := p.pool.Query(ctx, `SELECT sampled_at, cpu_percent, mem_bytes
+		FROM resource_samples
+		WHERE machine_id=$1 AND strategy=$2 AND sampled_at >= $3
+		ORDER BY sampled_at ASC`, machineID, strategy, since.UTC())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ResourceSample
+	for rows.Next() {
+		var s ResourceSample
+		var cpu *float64
+		var mem *int64
+		if err := rows.Scan(&s.SampledAt, &cpu, &mem); err != nil {
+			return nil, err
+		}
+		if cpu != nil {
+			s.CPUPercent = *cpu
+		}
+		if mem != nil {
+			s.MemBytes = *mem
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
 }
 
 func (p *Postgres) SetReachable(machineID string, reachable bool) error {

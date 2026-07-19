@@ -4,28 +4,78 @@
 	import { client, watchMachine } from '$lib/api';
 	import type { Machine } from '$lib/gen/strategyplatform/v1/control_service_pb';
 	import { phaseLabel, isFailPhase } from '$lib/phases';
+	import {
+		barTone,
+		cpuPercent,
+		formatBytes,
+		formatClock,
+		formatUptime,
+		memoryPercent
+	} from '$lib/fleet';
+	import Sparkline from '$lib/Sparkline.svelte';
 
 	let machine = $state<Machine | null>(null);
 	let live = $state(false);
 	let error = $state('');
 	let busy = $state('');
+	let now = $state(Date.now());
+	let cpuSeries = $state<number[]>([]);
+	let memSeries = $state<number[]>([]);
+	let stratSeries = $state<Record<string, number[]>>({});
 
 	const id = $derived(page.params.id ?? '');
+	const cpu = $derived(machine ? cpuPercent(machine) : null);
+	const mem = $derived(machine ? memoryPercent(machine) : null);
+	const grafanaBase =
+		(typeof import.meta !== 'undefined' && import.meta.env?.VITE_GRAFANA_URL) || '';
+
+	async function loadMetrics() {
+		if (!id) return;
+		try {
+			const res = await client.getMachineMetrics({ machineId: id, rangeSeconds: 3600n });
+			cpuSeries = res.samples.map((s) => s.cpuPercent);
+			memSeries = res.samples.map((s) => Number(s.memBytes));
+			const next: Record<string, number[]> = {};
+			for (const s of machine?.strategies ?? []) {
+				const pr = await client.getMachineMetrics({
+					machineId: id,
+					strategy: s.strategy,
+					rangeSeconds: 3600n
+				});
+				next[s.strategy] = pr.samples.map((p) => p.cpuPercent);
+			}
+			stratSeries = next;
+		} catch {
+			/* sparkline is best-effort */
+		}
+	}
 
 	onMount(() => {
 		const ac = new AbortController();
 		live = true;
+		let metricsLoaded = false;
 		watchMachine(
 			id,
 			(m) => {
 				machine = m;
 				error = '';
+				now = Date.now();
+				if (!metricsLoaded) {
+					metricsLoaded = true;
+					loadMetrics();
+				}
 			},
 			ac.signal
 		).finally(() => {
 			live = false;
 		});
-		return () => ac.abort();
+		const metricsTimer = setInterval(loadMetrics, 30000);
+		const clockTimer = setInterval(() => (now = Date.now()), 1000);
+		return () => {
+			ac.abort();
+			clearInterval(metricsTimer);
+			clearInterval(clockTimer);
+		};
 	});
 
 	async function undeploy(strategy: string) {
@@ -72,6 +122,58 @@
 				· build {machine.agentBuildVersion}{/if}
 			· generation {machine.metadata?.generation ?? 0} ·
 			{machine.reachable ? 'reachable' : 'unreachable'}
+			{#if machine.spec?.numCpus}
+				· {machine.spec.numCpus} cpu{/if}
+			{#if machine.spec?.memoryTotalBytes}
+				· {formatBytes(machine.spec.memoryTotalBytes)} ram{/if}
+			{#if machine.spec?.kernelVersion}
+				· {machine.spec.kernelVersion}{/if}
+		</div>
+
+		<div class="resources panel" style="margin-top:1.25rem">
+			<div class="res-col">
+				<div class="res-head">
+					<span class="lbl">CPU</span>
+					<span class="mono pct">{cpu == null ? '—' : `${Math.round(cpu)}%`}</span>
+				</div>
+				<div class="mini-bar {barTone(cpu)}">
+					<span class="track"><span class="fill" style="width: {cpu ?? 0}%"></span></span>
+				</div>
+				<Sparkline values={cpuSeries} width={220} height={36} />
+				<span class="muted tiny">1h trend</span>
+			</div>
+			<div class="res-col">
+				<div class="res-head">
+					<span class="lbl">Memory</span>
+					<span class="mono pct">{mem == null ? '—' : `${Math.round(mem)}%`}</span>
+				</div>
+				<div class="mini-bar {barTone(mem)}">
+					<span class="track"><span class="fill" style="width: {mem ?? 0}%"></span></span>
+				</div>
+				<Sparkline
+					values={memSeries}
+					width={220}
+					height={36}
+					stroke="var(--warn)"
+					fill="rgba(184, 110, 0, 0.12)"
+				/>
+				<span class="muted tiny">
+					{formatBytes(machine.lastResources?.memoryUsedBytes)}
+					/ {formatBytes(machine.lastResources?.memoryTotalBytes || machine.spec?.memoryTotalBytes)}
+				</span>
+			</div>
+			{#if grafanaBase}
+				<div class="res-col grafana">
+					<a
+						class="btn secondary"
+						href="{grafanaBase}?var-machine={encodeURIComponent(id)}"
+						target="_blank"
+						rel="noreferrer"
+					>
+						Open in Grafana
+					</a>
+				</div>
+			{/if}
 		</div>
 
 		<h2 style="margin-top:1.75rem">Strategies</h2>
@@ -111,10 +213,30 @@
 							{#if s.lastError}
 								<p class="err mono">{s.lastError}</p>
 							{/if}
-							{#if s.pid}
-								<p class="muted mono tiny" style="margin:0.5rem 0 0">
-									pid {s.pid} · restarts {s.restartCount}
-								</p>
+							<p class="life muted mono tiny">
+								{#if s.deployedAt}
+									deployed {formatClock(s.deployedAt)} ·
+								{/if}
+								{#if s.startedAt}
+									up {formatUptime(s.startedAt, now)} ·
+								{/if}
+								restarts {s.restartCount}
+								{#if s.pid}
+									· pid {s.pid}{/if}
+								· {phaseLabel(s.phase)}
+							</p>
+							{#if s.cpuPercent || s.rssBytes}
+								<div class="proc-res">
+									<div class="mini-bar {barTone(s.cpuPercent || null)}">
+										<span class="track"
+											><span class="fill" style="width: {Math.min(s.cpuPercent || 0, 100)}%"
+											></span></span
+										>
+										<span class="pct">{Math.round(s.cpuPercent || 0)}% cpu</span>
+									</div>
+									<span class="muted mono tiny">{formatBytes(s.rssBytes)} rss</span>
+									<Sparkline values={stratSeries[s.strategy] ?? []} width={100} height={24} />
+								</div>
 							{/if}
 						</a>
 						<div class="actions">
@@ -146,6 +268,25 @@
 	}
 	.meta {
 		word-break: break-word;
+	}
+	.resources {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+		gap: 1.25rem;
+		align-items: start;
+	}
+	.res-col {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+	.res-head {
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+	}
+	.grafana {
+		justify-content: center;
 	}
 	.strat {
 		display: flex;
@@ -205,6 +346,19 @@
 	}
 	.tiny {
 		font-size: 0.75rem;
+	}
+	.life {
+		margin: 0.55rem 0 0;
+	}
+	.proc-res {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		margin-top: 0.55rem;
+		flex-wrap: wrap;
+	}
+	.proc-res .mini-bar {
+		min-width: 110px;
 	}
 	.err {
 		margin: 0.65rem 0 0;

@@ -6,12 +6,17 @@
 	import type { Machine, StrategyView } from '$lib/gen/strategyplatform/v1/control_service_pb';
 	import { DeployPhase } from '$lib/gen/strategyplatform/v1/status_pb';
 	import { HAPPY_PATH, FAIL_PATH, phaseLabel, happyIndex, isFailPhase } from '$lib/phases';
+	import { barTone, formatBytes, formatClock, formatUptime } from '$lib/fleet';
+	import Sparkline from '$lib/Sparkline.svelte';
 
 	let machine = $state<Machine | null>(null);
 	let pendingGen = $state<bigint | number | null>(null);
 	let busy = $state(false);
 	let actionError = $state('');
 	let live = $state(false);
+	let now = $state(Date.now());
+	let cpuSeries = $state<number[]>([]);
+	let memSeries = $state<number[]>([]);
 
 	const id = $derived(page.params.id ?? '');
 	const strat = $derived(page.params.strat ?? '');
@@ -28,11 +33,33 @@
 				Number(view.observedGeneration) < Number(pendingGen)
 		);
 
+	async function loadMetrics() {
+		if (!id || !strat) return;
+		try {
+			const res = await client.getMachineMetrics({
+				machineId: id,
+				strategy: strat,
+				rangeSeconds: 3600n
+			});
+			cpuSeries = res.samples.map((s) => s.cpuPercent);
+			memSeries = res.samples.map((s) => Number(s.memBytes));
+		} catch {
+			/* best-effort */
+		}
+	}
+
 	onMount(() => {
 		const ac = new AbortController();
 		live = true;
 		watchMachine(id, (m) => (machine = m), ac.signal).finally(() => (live = false));
-		return () => ac.abort();
+		loadMetrics();
+		const metricsTimer = setInterval(loadMetrics, 30000);
+		const clockTimer = setInterval(() => (now = Date.now()), 1000);
+		return () => {
+			ac.abort();
+			clearInterval(metricsTimer);
+			clearInterval(clockTimer);
+		};
 	});
 
 	$effect(() => {
@@ -121,6 +148,44 @@
 			{#if view.lastError}
 				<p class="err mono">{view.lastError}</p>
 			{/if}
+			<p class="life muted mono tiny">
+				{#if view.deployedAt}
+					deployed {formatClock(view.deployedAt)} ·
+				{/if}
+				{#if view.startedAt}
+					up {formatUptime(view.startedAt, now)} ·
+				{/if}
+				restarts {view.restartCount}
+				{#if view.pid}
+					· pid {view.pid}{/if}
+				· {phaseLabel(view.phase)}
+			</p>
+			{#if view.cpuPercent || view.rssBytes || cpuSeries.length}
+				<div class="proc-metrics">
+					<div class="metric">
+						<span class="lbl">CPU</span>
+						<div class="mini-bar {barTone(view.cpuPercent || null)}">
+							<span class="track"
+								><span class="fill" style="width: {Math.min(view.cpuPercent || 0, 100)}%"
+								></span></span
+							>
+							<span class="pct">{Math.round(view.cpuPercent || 0)}%</span>
+						</div>
+						<Sparkline values={cpuSeries} width={160} height={28} />
+					</div>
+					<div class="metric">
+						<span class="lbl">RSS</span>
+						<span class="mono">{formatBytes(view.rssBytes)}</span>
+						<Sparkline
+							values={memSeries}
+							width={160}
+							height={28}
+							stroke="var(--warn)"
+							fill="rgba(184, 110, 0, 0.12)"
+						/>
+					</div>
+				</div>
+			{/if}
 			<div class="actions">
 				<a class="btn secondary" href="/deploy?machine={id}&strategy={strat}">Deploy…</a>
 				<button class="btn secondary" disabled={busy} onclick={rollback}>Rollback</button>
@@ -201,6 +266,25 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
+	}
+	.life {
+		margin: 0.75rem 0 0;
+	}
+	.proc-metrics {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 1rem;
+		margin-top: 0.85rem;
+	}
+	@media (max-width: 639px) {
+		.proc-metrics {
+			grid-template-columns: 1fr;
+		}
+	}
+	.metric {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
 	}
 	.lbl {
 		font-size: 0.72rem;
