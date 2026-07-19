@@ -87,6 +87,15 @@ message RollbackResponse {
   int64 generation = 1;
 }
 
+message UndeployRequest {
+  string machine_id = 1;
+  string strategy = 2;
+}
+
+message UndeployResponse {
+  int64 generation = 1;
+}
+
 message SetScheduleRequest {
   string machine_id = 1;
   string strategy = 2;
@@ -100,7 +109,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "Rollback" | "ConfigChange"
+  string action = 3; // "Deploy" | "Rollback" | "ConfigChange" | "Undeploy"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -148,6 +157,7 @@ service ControlPlaneService {
 
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc Rollback(RollbackRequest) returns (RollbackResponse);
+  rpc Undeploy(UndeployRequest) returns (UndeployResponse);
   rpc SetSchedule(SetScheduleRequest) returns (SetScheduleResponse);
 
   // UI real-time panel: machine status and deploy progress push.

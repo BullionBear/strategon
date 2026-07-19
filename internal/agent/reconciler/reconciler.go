@@ -194,6 +194,7 @@ func (r *Reconciler) reconcile() {
 }
 
 func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyState) {
+	st.stopGraceSeconds = spec.GetDeployPolicy().GetStopGraceSeconds()
 	if st.backoff.Blocked(r.now()) {
 		return // backoff not elapsed; tick will wake us
 	}

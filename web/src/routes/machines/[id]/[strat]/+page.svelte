@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { client, watchMachine } from '$lib/api';
 	import type { Machine, StrategyView } from '$lib/gen/strategyplatform/v1/control_service_pb';
@@ -57,6 +58,22 @@
 			busy = false;
 		}
 	}
+
+	async function undeploy() {
+		if (!confirm(`Undeploy ${strat} from ${id}? The process will receive SIGTERM, then SIGKILL if it does not exit.`)) {
+			return;
+		}
+		busy = true;
+		actionError = '';
+		try {
+			await client.undeploy({ machineId: id, strategy: strat });
+			await goto(`/machines/${id}`);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = false;
+		}
+	}
 </script>
 
 <section class="fade-in">
@@ -107,6 +124,7 @@
 			<div class="actions">
 				<a class="btn secondary" href="/deploy?machine={id}&strategy={strat}">Deploy…</a>
 				<button class="btn secondary" disabled={busy} onclick={rollback}>Rollback</button>
+				<button class="btn secondary" disabled={busy} onclick={undeploy}>Undeploy</button>
 			</div>
 			{#if actionError}
 				<p class="err mono">{actionError}</p>

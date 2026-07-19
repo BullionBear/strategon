@@ -170,6 +170,78 @@ func TestRollbackToPrevious(t *testing.T) {
 	}
 }
 
+func TestUndeployRemovesAssignment(t *testing.T) {
+	client, st, _, agents := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	deployResp, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notifyAfterDeploy := agents.n
+
+	resp, err := client.Undeploy(ctx, connect.NewRequest(&pb.UndeployRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.GetGeneration() <= deployResp.Msg.GetGeneration() {
+		t.Fatalf("generation = %d, want > %d", resp.Msg.GetGeneration(), deployResp.Msg.GetGeneration())
+	}
+	if agents.n != notifyAfterDeploy+1 {
+		t.Fatalf("agent notify count = %d, want %d", agents.n, notifyAfterDeploy+1)
+	}
+
+	rec, ok := st.GetMachine("m1")
+	if !ok {
+		t.Fatal("machine missing")
+	}
+	if _, assigned := rec.Assignments["s"]; assigned {
+		t.Fatal("assignment should be removed")
+	}
+	got, err := client.GetMachine(ctx, connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Msg.GetStrategies()) != 0 {
+		t.Fatalf("strategies = %d, want 0", len(got.Msg.GetStrategies()))
+	}
+
+	audits := st.ListAudit("m1", "s")
+	found := false
+	for _, a := range audits {
+		if a.GetAction() == "Undeploy" && a.GetFromVersion() == "v1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected Undeploy audit entry, got %+v", audits)
+	}
+}
+
+func TestUndeployUnassignedFails(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+
+	_, err := client.Undeploy(ctx, connect.NewRequest(&pb.UndeployRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err == nil {
+		t.Fatal("expected undeploy of unassigned strategy to fail")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code=%v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}
+
 func TestDeployBlockedWhileOtherMachineHoldsLease(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
