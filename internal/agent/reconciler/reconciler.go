@@ -9,6 +9,7 @@ package reconciler
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -47,6 +48,16 @@ type Deps struct {
 
 	// Jitter is injected into backoff (nil disables jitter for tests).
 	Jitter func(time.Duration) time.Duration
+
+	// BaseDir is the agent --base directory; when set, supervision state is
+	// persisted under <BaseDir>/agent/supervision.json for restart takeover.
+	BaseDir string
+
+	// AgentVersion is stamped into the supervision file header.
+	AgentVersion int
+
+	// Logger for adopt/persist diagnostics (optional).
+	Logger *slog.Logger
 }
 
 // Reconciler is the agent core.
@@ -108,6 +119,7 @@ func (r *Reconciler) ObservedGeneration() int64 { return r.observedGenA.Load() }
 // Run drives the loop until ctx is cancelled.
 func (r *Reconciler) Run(ctx context.Context) {
 	r.ctx = ctx
+	r.rebuildActualState()
 	tick := r.deps.Clock.Ticker(r.tickInterval)
 	defer tick.Stop()
 	for {
@@ -128,6 +140,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 		}
 		r.reconcile()
 		r.reportStatusIfChanged()
+		r.persistSupervision()
 	}
 }
 
@@ -418,9 +431,10 @@ func (r *Reconciler) recomputeObservedGeneration() {
 }
 
 func (r *Reconciler) shutdown() {
-	// Agent SIGTERM: do NOT kill strategy processes (setsid-detached). Just stop
-	// reconciling; strategies keep running for the next agent to re-adopt
+	// Agent SIGTERM: do NOT kill strategy processes (setsid-detached). Persist
+	// supervision so the next agent can Adopt; strategies keep running
 	// (RECONCILER §7 / §10).
+	r.persistSupervision()
 }
 
 // versionMatches compares desired vs actual by content digest (artifact +

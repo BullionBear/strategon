@@ -1,21 +1,24 @@
 // Command agent runs the Strategon agent: the level-triggered reconciler plus
-// the outbound stream client. It connects to the control plane over h2c
-// (plaintext HTTP/2 for local/dev; mTLS enrollment is a deferred follow-up),
-// registers, and converges local state to the pushed DesiredState.
+// the outbound stream client. Local/dev uses plaintext h2c; with
+// --tls-cert/--tls-key/--server-ca the agent dials HTTPS and presents an
+// Ed25519 client certificate (mTLS).
 package main
 
 import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
+	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
 	"github.com/bullionbear/strategon/internal/agent/artifact"
@@ -24,21 +27,46 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/reconciler"
 	"github.com/bullionbear/strategon/internal/agent/stream"
 	"github.com/bullionbear/strategon/internal/clock"
-	"connectrpc.com/connect"
+	"github.com/bullionbear/strategon/internal/mtls"
 	"golang.org/x/net/http2"
 )
 
 func main() {
-	controlURL := flag.String("control-plane", "http://127.0.0.1:8080", "control plane base URL")
-	machineID := flag.String("machine-id", "", "machine id (required)")
+	controlURL := flag.String("control-plane", "http://127.0.0.1:8080", "control plane base URL (http for h2c, https for mTLS)")
+	machineID := flag.String("machine-id", "", "machine id (defaults to client cert CN when mTLS is enabled)")
 	base := flag.String("base", "/opt/strategies", "strategy release base directory")
 	cgroupRoot := flag.String("cgroup-root", "", "delegated cgroup v2 root (empty disables confinement)")
 	agentVersion := flag.Int("agent-version", 1, "agent version")
+
+	tlsCert := flag.String("tls-cert", "", "client certificate PEM (enables mTLS with --tls-key and --server-ca)")
+	tlsKey := flag.String("tls-key", "", "client private key PEM")
+	serverCA := flag.String("server-ca", "", "CA PEM used to verify the control plane certificate")
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	httpClient, idFromCert, err := newHTTPClient(*tlsCert, *tlsKey, *serverCA)
+	if err != nil {
+		logger.Error("tls config failed", "err", err)
+		os.Exit(2)
+	}
 	if *machineID == "" {
-		logger.Error("--machine-id is required")
+		*machineID = idFromCert
+	}
+	if *machineID == "" {
+		logger.Error("--machine-id is required (or provide an mTLS client cert with CN)")
+		os.Exit(2)
+	}
+	if idFromCert != "" && idFromCert != *machineID {
+		logger.Error("machine-id does not match client certificate CN", "machine_id", *machineID, "cert_cn", idFromCert)
+		os.Exit(2)
+	}
+	if strings.HasPrefix(*controlURL, "https://") && *tlsCert == "" {
+		logger.Error("https:// control-plane requires --tls-cert/--tls-key/--server-ca")
+		os.Exit(2)
+	}
+	if *tlsCert != "" && strings.HasPrefix(*controlURL, "http://") {
+		logger.Error("mTLS requires https:// control-plane URL")
 		os.Exit(2)
 	}
 
@@ -48,14 +76,16 @@ func main() {
 
 	out := make(chan *pb.AgentMessage, 128)
 	rec := reconciler.New(reconciler.Deps{
-		Driver:    driver.NewExecDriver(*cgroupRoot),
-		Artifacts: artifact.NewManager(*base, artifact.NewDefaultFetcher()),
-		Health:    health.AlwaysReady{},
-		Clock:     clock.Real{},
-		Out:       out,
+		Driver:       driver.NewExecDriver(*cgroupRoot),
+		Artifacts:    artifact.NewManager(*base, artifact.NewDefaultFetcher()),
+		Health:       health.AlwaysReady{},
+		Clock:        clock.Real{},
+		Out:          out,
+		BaseDir:      *base,
+		AgentVersion: *agentVersion,
+		Logger:       logger,
 	})
 
-	httpClient := &http.Client{Transport: h2cTransport()}
 	client := &stream.Client{
 		Register: &pb.Register{
 			MachineId:    *machineID,
@@ -73,15 +103,40 @@ func main() {
 	}
 
 	go rec.Run(ctx)
-	logger.Info("agent started", "machine_id", *machineID, "control_plane", *controlURL)
+	logger.Info("agent started", "machine_id", *machineID, "control_plane", *controlURL, "mtls", *tlsCert != "")
 	if err := client.Run(ctx); err != nil && ctx.Err() == nil {
 		logger.Error("stream client exited", "err", err)
 		os.Exit(1)
 	}
 }
 
+func newHTTPClient(certFile, keyFile, serverCAFile string) (*http.Client, string, error) {
+	tlsMode := certFile != "" || keyFile != "" || serverCAFile != ""
+	if !tlsMode {
+		return &http.Client{Transport: h2cTransport()}, "", nil
+	}
+	if certFile == "" || keyFile == "" || serverCAFile == "" {
+		return nil, "", fmt.Errorf("mTLS requires --tls-cert, --tls-key, and --server-ca together")
+	}
+	cert, err := mtls.LoadCert(certFile, keyFile)
+	if err != nil {
+		return nil, "", err
+	}
+	cn, err := mtls.CertCN(cert)
+	if err != nil {
+		return nil, "", err
+	}
+	serverCA, err := mtls.LoadCAPool(serverCAFile)
+	if err != nil {
+		return nil, "", err
+	}
+	return &http.Client{Transport: &http2.Transport{
+		TLSClientConfig: mtls.ClientConfig(cert, serverCA),
+	}}, cn, nil
+}
+
 // h2cTransport dials plaintext HTTP/2 (h2c) so bidi streaming works without TLS
-// in local/dev. Production would use TLS/mTLS (deferred).
+// in local/dev.
 func h2cTransport() *http2.Transport {
 	return &http2.Transport{
 		AllowHTTP: true,

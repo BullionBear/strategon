@@ -71,7 +71,7 @@ go run ./cmd/controlplane \
   --human-addr 127.0.0.1:8081
 ```
 
-- `:8080` — `AgentService` (agents)
+- `:8080` — `AgentService` + `LeaseService` (agents / strategy SDK)
 - `127.0.0.1:8081` — `ControlPlaneService` (UI/CLI; loopback, no auth)
 
 ### 2. Agent
@@ -81,6 +81,67 @@ go run ./cmd/agent \
   --control-plane http://127.0.0.1:8080 \
   --machine-id m1 \
   --base /tmp/strategon-m1
+```
+
+Strategy processes are `setsid`-detached. The agent persists supervision under
+`<base>/agent/supervision.json` and on restart `Adopt`s still-running PIDs
+before reconcile (no duplicate starts). Full self-update worker / systemd guard
+are still deferred.
+
+### 2b. AgentService mTLS (Ed25519)
+
+Offline CA (keys never leave the operator machine). Human API on `:8081`
+stays plaintext/loopback; only the agent port is mutual-TLS.
+
+```bash
+go run ./cmd/strategon-ca init --out ./ca/
+
+go run ./cmd/strategon-ca sign --ca ./ca/ --cn m1 --out ./certs/m1/
+
+go run ./cmd/strategon-ca sign --ca ./ca/ --cn control-plane --server \
+  --dns cp.internal --ip 127.0.0.1 --out ./certs/cp/
+
+go run ./cmd/controlplane \
+  --agent-addr :8080 \
+  --human-addr 127.0.0.1:8081 \
+  --tls-cert ./certs/cp/cert.pem \
+  --tls-key  ./certs/cp/key.pem \
+  --client-ca ./ca/ca-cert.pem
+
+go run ./cmd/agent \
+  --control-plane https://127.0.0.1:8080 \
+  --tls-cert ./certs/m1/cert.pem \
+  --tls-key  ./certs/m1/key.pem \
+  --server-ca ./ca/ca-cert.pem \
+  --base /tmp/strategon-m1
+```
+
+`--machine-id` defaults to the client cert CN (`m1`). The control plane rejects
+a Register whose `machine_id` does not match that CN. Use `--dns`/`--ip` SANs
+so the agent URL host verifies (e.g. `https://cp.internal:8080` needs
+`--dns cp.internal`).
+
+### 2c. Fencing lease (strategy SDK)
+
+Lease lifecycle is owned by the **strategy process** (`sdk/lease`), not the
+agent (IMPROVEMENT A1). `LeaseService` is on the agent port. Deploy to another
+machine is blocked while a lease is held (+ `--lease-margin-cp`).
+
+```bash
+# Demo process that acquires/renews and calls CheckBeforeOrder each second
+go run ./cmd/lease-demo \
+  --control-plane http://127.0.0.1:8080 \
+  --machine-id m1 \
+  --strategy s \
+  --ttl 30s
+```
+
+Or build and deploy it as a binary artifact:
+
+```bash
+go build -o /tmp/lease-demo ./cmd/lease-demo
+DIGEST="sha256:$(sha256sum /tmp/lease-demo | cut -d' ' -f1)"
+# RegisterArtifact uri=file:///tmp/lease-demo, then Deploy as usual
 ```
 
 ### 3. Frontend
@@ -96,7 +157,7 @@ tracker.
 
 ```bash
 # Register an artifact, then deploy
-printf '#!/bin/sh\nexec sleep 300\n' > /tmp/strat.sh && chmod +x /tmp/strat.sh
+printf '#!/bin/sh\nexec sleep 15\n' > /tmp/strat.sh && chmod +x /tmp/strat.sh
 DIGEST="sha256:$(sha256sum /tmp/strat.sh | cut -d' ' -f1)"
 
 curl -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/RegisterArtifact \
@@ -117,6 +178,8 @@ curl -N -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/W
 
 - Artifacts/S3 + Postgres store
 - Cron local executor (UI writes spec today; agent does not run it yet)
-- Fencing lease + safety hardening (`SAFETY.md`)
-- mTLS enrollment + SSO/authz on the human API
+- Remaining SAFETY §8 hardening (NTP ops, residual-risk labeling); CP lease
+  authority + SDK `CheckBeforeOrder` + Deploy interlocking are implemented
+- Online mTLS enrollment (token→CSR) + SSO/authz on the human API
+  (offline Ed25519 mTLS via `strategon-ca` is implemented)
 - Agent self-update + DR drills

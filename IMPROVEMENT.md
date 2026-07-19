@@ -95,13 +95,12 @@
 
 ### B1.【虧錢項·最高】Fencing lease + 安全硬化(SAFETY.md 整份)
 
-**現狀**:proto 有 lease 訊息佔位,但**零 `.go` 邏輯**;SAFETY 整份是紙上的。
+**現狀(MVP 已落地)**:`LeaseService` unary(Acquire/Renew)在 agent port;`store` 租約授權 + `--lease-margin-cp`;Deploy 跨機互鎖;`sdk/lease` 取得/續約/`CheckBeforeOrder`(含粗粒度 clock-jump;續約不再清空跳變基準);`cmd/lease-demo`;Postgres `leases` 表持久化(控制面重啟不丟互斥)。Agent 串流 lease 訊息仍 no-op(A1)。NTP/殘餘風險標註、框架強制下單攔截、SAFETY §8 全清單**尚未**完成。
 
-**這是唯一「錯了會直接虧錢」的缺口**,單獨足以否決任何會下單的策略上線。含:
-- 策略 SDK 的 lease 客戶端(取得/續約,見 A1)。
-- 下單前同步檢查 + 時鐘跳變偵測(見 A2)。
-- 遷移互鎖:控制面偵測 unreachable 後,**必須等 lease 確認過期**才允許遷移,絕不「ping 不到即遷移」(SAFETY §4)。
-- 時鐘假設落地:NTP 同步 + 失步告警;margin 依實測設定(SAFETY §5,數值不硬編)。
+**這是唯一「錯了會直接虧錢」的缺口**,單獨足以否決任何會下單的策略上線。剩餘:
+- 框架強制每筆下單必經 `CheckBeforeOrder`(不能靠策略作者自覺)。
+- 遷移互鎖完備:unreachable 後自動遷移編排仍須等 lease 過期(手動 Deploy 跨機已擋)。
+- 時鐘假設落地:NTP 同步 + 失步告警;margin 依實測設定(SAFETY §5)。
 - 誠實標註殘餘風險,按策略能否容忍分流(SAFETY §3.3/§9)。
 
 **驗收**:SAFETY §8 的上線前檢查清單全過。
@@ -116,12 +115,12 @@
 
 ### B3.【安全面】mTLS enrollment(機器)+ Discord OAuth(人)
 
-**現狀**:agent 無 mTLS(機器身分無法驗證/撤銷);人向 API **無認證**,靠綁 `127.0.0.1` + 寬鬆 CORS 擋(`cmd/controlplane/main.go`)。
+**現狀**:AgentService 已支援 **offline Ed25519 mTLS**(`strategon-ca` + `--tls-*` / `--client-ca` / `--server-ca`;CN = machine id)。人向 API **仍無認證**,靠綁 `127.0.0.1` + 寬鬆 CORS 擋(`cmd/controlplane/main.go`)。線上 enrollment(token→CSR)與憑證撤銷尚未做。
 
 **拆成正交的軸,可分開上:**
 - **人 authN — Discord OAuth(定調)**:瀏覽器走 Discord OAuth flow → session/token → Connect **interceptor** 對每個 unary/streaming 呼叫驗證(unary + streaming 共用)。不碰 agent 路徑,自成一塊,可在被動策略試點時先上。
 - **人 authz — 暫定扁平(有意識的取捨)**:**任何通過 Discord 登入者 = 完整 operator 權限**,無 per-user 權限模型。這是明說的姿態而非遺漏(同 A4 的「有意識放棄」)。未定義問題第 10 點(誰能部署到哪台、能否看別人策略)**明確 park**,待多團隊/多租戶需求出現再開。
-- **機器 authN — mTLS enrollment**:一次性 token → CSR → 簽發長期 mTLS 憑證(PROTOCOL §6)。與人向認證正交,獨立節奏。
+- **機器 authN — mTLS**:offline CA 已落地;下一步是 PROTOCOL §6 的一次性 token → CSR → 簽發長期憑證,以及撤銷。與人向認證正交,獨立節奏。
 - **網路暴露**:控制面對公網隱身,agent 出站;跨區依雲廠商選 VPC peering / overlay(ARCHITECTURE §4)。
 
 ### B4.【核心功能·原始需求】Cron 本地執行器
@@ -132,9 +131,9 @@
 
 ### B5.【無擾運維】Agent 自我更新接管
 
-**現狀**:setsid 有;`Adopt` 有且測過,但**目前只接在 `processAlive` 的 pid 重用檢查**(`deploy.go`),**尚未接入啟動接管**——沒有監督狀態檔寫入、沒有 `rebuildActualState`。組裝為 0%。
+**現狀(MVP 已落地)**:`<--base>/agent/supervision.json` 原子持久化;`Run` 開頭 `rebuildActualState` + `Adopt` 再 reconcile——agent 重啟不再重複拉起策略。`processAlive` 仍用 Adopt 防 pid 重用。
 
-**修好後**:升級從「會重複」(A5)變「無擾」。含:狀態檔原子寫入與 schema 演進(舊 agent 寫的要能被新 agent 讀)、systemd guard 失敗回滾(A6)、canary 批次(RECONCILER §10)。
+**剩餘**:`desired_agent_version` 自我更新 worker、systemd guard 失敗回滾(A6)、canary 批次(RECONCILER §10);狀態檔 schema 演進路徑待第二版。
 
 **有利條件**:PR #4 的 driver 收屍(reap)已刻意只對 `owned`(自己 fork 的)進程動手,跳過 Adopt 的進程(接管後歸 init 收),故接管路徑不會被收屍邏輯回退。
 
@@ -203,15 +202,15 @@
 
 **Tranche 2 — 信任與暴露**
 - **B3-人 Discord OAuth**(authN;扁平 authz)——足以把 UI 擺在登入後做**非交易**試點。
-- **B3-機 mTLS enrollment**。
+- **B3-機** 線上 mTLS enrollment + 撤銷(offline Ed25519 mTLS 已落地)。
 - **B7 CI build → 可信環境算 digest → 自動註冊**(真正退掉 A4 的手動算 sha,且保住信任性質)。
 
 **Tranche 3 — 虧錢閘門(任何送真實訂單前,不可跳過)**
-- **B1** = 控制面 lease 授權 + 過期判定 + 遷移互鎖(SAFETY §4)**+ 全新策略 SDK**(lease 客戶端 + 下單前檢查 A2 + 優雅退出 A7)。SDK 是這條的**長桿**,且是 repo 裡尚不存在的綠地元件;agent 端已正確 no-op(`grpcstream` 目前明確忽略 lease 訊息),**不需新增 agent lease 代碼**。
+- **B1 剩餘** = 框架強制下單攔截、NTP/殘餘風險運維、持久化 leases、自動遷移編排完備 + SDK 優雅退出(A7)。MVP 已有:`LeaseService` + `sdk/lease` + Deploy 跨機互鎖;agent 串流 lease 仍正確 no-op。
 
 **Tranche 4 — 功能補完**
 - **B4 cron**(+ 與部署狀態機競態,未定義 #3;對交易策略還與 A7 退出/lease 自殺咬合——先做被動負載,交易負載待競態定義)。
-- **B5 自我更新接管**(Adopt 已在,差狀態檔 + `rebuildActualState`;PR #4 收屍已相容)。
+- **B5 剩餘**:自我更新 worker + systemd guard + canary(接管 MVP:狀態檔 + `rebuildActualState` 已落地)。
 - **B6 S3/OCI**、**B8 secrets**、**B9 每策略 user**、**B11 fleet UI**。
 
 **折衷上線路徑(不變,但更快)**:純被動、不下單的策略(行情記錄、監控、paper trading)無虧錢風險,B1 不擋。做完 **Tranche 0 + Tranche 1 + B3-人**,即可把這類負載擺上真實環境,驗證收斂/監控/回滾/日誌。**任何送真實訂單的策略必須等 Tranche 3(B1)。**

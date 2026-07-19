@@ -366,6 +366,9 @@ agent 版本本身是 `DesiredState.desired_agent_version` 的一部分，因此
 5. 新 reconciler 拿控制面最新 DesiredState → reconcile() → 因實際==期望，穩態，無擾
 ```
 
+> **實作狀態**:步驟 2/4 的監督狀態檔 + `rebuildActualState`/`Adopt` 已落地
+> (`<--base>/agent/supervision.json`)。步驟 1 的自我更新 worker 與 systemd guard 仍待做。
+
 `rebuildActualState()` 是不變式 5 的落地：新 agent 不信任任何記憶，實際狀態全靠觀察（狀態檔 + pidfd + symlink）重建。監督狀態檔自身也需版本化（schema 演進：舊 agent 寫的要能被新 agent 讀懂）。
 
 ---

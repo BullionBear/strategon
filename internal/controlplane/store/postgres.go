@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"sync"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
@@ -24,10 +25,13 @@ var migrationsFS embed.FS
 // Postgres is a Store backed by PostgreSQL. It mirrors Memory's semantics
 // (per-machine monotonic generation, spec/status write ownership, empty-target
 // rollback via previous_artifacts) with durable storage, so the control plane
-// can restart without losing desired state, status, catalog, or audit.
+// can restart without losing desired state, status, catalog, audit, or leases.
 type Postgres struct {
-	pool *pgxpool.Pool
-	hub  *Hub
+	pool        *pgxpool.Pool
+	hub         *Hub
+	leaseMu     sync.Mutex // guards leaseMargin only
+	leaseMargin time.Duration
+	now         func() time.Time
 }
 
 // querier is satisfied by both *pgxpool.Pool and pgx.Tx, so read helpers work
@@ -49,7 +53,12 @@ func NewPostgres(ctx context.Context, dsn string, hub *Hub) (*Postgres, error) {
 		pool.Close()
 		return nil, fmt.Errorf("postgres: ping: %w", err)
 	}
-	p := &Postgres{pool: pool, hub: hub}
+	p := &Postgres{
+		pool:        pool,
+		hub:         hub,
+		leaseMargin: DefaultLeaseMarginCP,
+		now:         time.Now,
+	}
 	if err := p.migrate(ctx); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("postgres: migrate: %w", err)
@@ -562,6 +571,156 @@ func (p *Postgres) PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef
 		return nil, false
 	}
 	return ref, true
+}
+
+// SetLeaseMarginCP sets the control-plane lease expiry margin.
+func (p *Postgres) SetLeaseMarginCP(d time.Duration) {
+	p.leaseMu.Lock()
+	defer p.leaseMu.Unlock()
+	if d < 0 {
+		d = 0
+	}
+	p.leaseMargin = d
+}
+
+func (p *Postgres) LeaseMarginCP() time.Duration {
+	p.leaseMu.Lock()
+	defer p.leaseMu.Unlock()
+	return p.leaseMargin
+}
+
+func (p *Postgres) GetLease(strategy string) (LeaseInfo, bool) {
+	ctx, cancel := opCtx()
+	defer cancel()
+	info, err := p.loadLease(ctx, p.pool, strategy, false)
+	if err != nil || info == nil {
+		return LeaseInfo{}, false
+	}
+	return *info, true
+}
+
+func (p *Postgres) AcquireLease(machineID, strategy string, ttl time.Duration) (LeaseResult, error) {
+	if machineID == "" || strategy == "" {
+		return LeaseResult{}, fmt.Errorf("acquire: machine_id and strategy are required")
+	}
+	if ttl <= 0 {
+		return LeaseResult{}, fmt.Errorf("acquire: ttl must be positive")
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	var out LeaseResult
+	err := p.inTx(ctx, func(tx pgx.Tx) error {
+		now := p.now()
+		cur, err := p.loadLease(ctx, tx, strategy, true)
+		if err != nil {
+			return err
+		}
+		margin := p.LeaseMarginCP()
+		if free, deny := leaseFreeFor(cur, machineID, now, margin); !free {
+			out = LeaseResult{DenyReason: deny}
+			return nil
+		}
+		id, err := newLeaseID()
+		if err != nil {
+			return err
+		}
+		exp := now.Add(ttl)
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO leases (strategy, machine_id, lease_id, expires_at, ttl_nanos)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (strategy) DO UPDATE SET
+				machine_id = EXCLUDED.machine_id,
+				lease_id = EXCLUDED.lease_id,
+				expires_at = EXCLUDED.expires_at,
+				ttl_nanos = EXCLUDED.ttl_nanos`,
+			strategy, machineID, id, exp.UTC(), ttl.Nanoseconds()); err != nil {
+			return err
+		}
+		out = LeaseResult{Granted: true, LeaseID: id, ExpiresAt: exp}
+		return nil
+	})
+	if err != nil {
+		return LeaseResult{}, err
+	}
+	if out.Granted {
+		p.notify(machineID)
+	}
+	return out, nil
+}
+
+func (p *Postgres) RenewLease(machineID, strategy, leaseID string, ttl time.Duration) (LeaseResult, error) {
+	if machineID == "" || strategy == "" || leaseID == "" {
+		return LeaseResult{}, fmt.Errorf("renew: machine_id, strategy, and lease_id are required")
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	var out LeaseResult
+	err := p.inTx(ctx, func(tx pgx.Tx) error {
+		now := p.now()
+		cur, err := p.loadLease(ctx, tx, strategy, true)
+		if err != nil {
+			return err
+		}
+		if cur == nil {
+			out = LeaseResult{DenyReason: "no lease"}
+			return nil
+		}
+		margin := p.LeaseMarginCP()
+		if cur.MachineID != machineID || cur.LeaseID != leaseID {
+			out = LeaseResult{DenyReason: denyHeld(cur.MachineID, cur.ExpiresAt.Add(margin))}
+			return nil
+		}
+		if !now.Before(cur.ExpiresAt) {
+			out = LeaseResult{DenyReason: "lease expired"}
+			return nil
+		}
+		if ttl <= 0 {
+			ttl = cur.TTL
+		}
+		if ttl <= 0 {
+			ttl = 30 * time.Second
+		}
+		exp := now.Add(ttl)
+		if _, err := tx.Exec(ctx, `
+			UPDATE leases SET expires_at=$1, ttl_nanos=$2
+			WHERE strategy=$3 AND machine_id=$4 AND lease_id=$5`,
+			exp.UTC(), ttl.Nanoseconds(), strategy, machineID, leaseID); err != nil {
+			return err
+		}
+		out = LeaseResult{Granted: true, LeaseID: leaseID, ExpiresAt: exp}
+		return nil
+	})
+	if err != nil {
+		return LeaseResult{}, err
+	}
+	if out.Granted {
+		p.notify(machineID)
+	}
+	return out, nil
+}
+
+func (p *Postgres) loadLease(ctx context.Context, q querier, strategy string, forUpdate bool) (*LeaseInfo, error) {
+	sql := `SELECT machine_id, lease_id, expires_at, ttl_nanos FROM leases WHERE strategy=$1`
+	if forUpdate {
+		sql += ` FOR UPDATE`
+	}
+	var machineID, leaseID string
+	var expiresAt time.Time
+	var ttlNanos int64
+	err := q.QueryRow(ctx, sql, strategy).Scan(&machineID, &leaseID, &expiresAt, &ttlNanos)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &LeaseInfo{
+		Strategy:  strategy,
+		MachineID: machineID,
+		LeaseID:   leaseID,
+		ExpiresAt: expiresAt,
+		TTL:       time.Duration(ttlNanos),
+	}, nil
 }
 
 // Compile-time assertions that both stores satisfy the interface.

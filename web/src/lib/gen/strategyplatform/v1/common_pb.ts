@@ -274,21 +274,22 @@ export const CronScheduleSchema: GenMessage<CronSchedule> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_common, 5);
 
 /**
- * LeaseSpec guards against double-trading; agent must renew before expiry or
- * commit suicide.
+ * LeaseSpec configures fencing-lease expectations for a strategy assignment.
+ * The strategy SDK (not the agent) acquires/renews the lease from LeaseService
+ * and must call CheckBeforeOrder before trading (IMPROVEMENT A1).
  *
  * @generated from message strategyplatform.v1.LeaseSpec
  */
 export type LeaseSpec = Message<"strategyplatform.v1.LeaseSpec"> & {
   /**
-   * whether the strategy must hold a lease before starting
+   * SDK must hold a lease before trading (not an agent start gate)
    *
    * @generated from field: bool required = 1;
    */
   required: boolean;
 
   /**
-   * lease TTL; renew before expiry or self-terminate
+   * lease TTL; SDK renews before expiry or self-terminates
    *
    * @generated from field: int32 ttl_seconds = 2;
    */

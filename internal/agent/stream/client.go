@@ -127,9 +127,10 @@ func (c *Client) handleControl(msg *pb.ControlMessage) {
 		c.Submit(p.DesiredState)
 	case *pb.ControlMessage_Ack:
 		// no-op for the foundation
-	case *pb.ControlMessage_TriggerRollback, *pb.ControlMessage_DrainNow, *pb.ControlMessage_LeaseResponse:
-		// Imperative commands and lease responses are deferred follow-ups; the
-		// full mechanism is expressible via DesiredState (ARCHITECTURE §7.2).
+	case *pb.ControlMessage_TriggerRollback, *pb.ControlMessage_DrainNow:
+		// Imperative commands are latency optimizations; DesiredState is truth.
+	case *pb.ControlMessage_LeaseResponse:
+		// Lease is owned by the strategy SDK via LeaseService (IMPROVEMENT A1).
 	}
 }
 

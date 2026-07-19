@@ -169,3 +169,42 @@ func TestRollbackToPrevious(t *testing.T) {
 		t.Fatalf("rollback should re-point desired to v1")
 	}
 }
+
+func TestDeployBlockedWhileOtherMachineHoldsLease(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	st.UpsertMachine(&pb.Register{MachineId: "m2"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+
+	if _, err := st.AcquireLease("m1", "s", time.Minute); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m2", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err == nil {
+		t.Fatal("expected deploy to m2 blocked by m1 lease")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code=%v, want FailedPrecondition", connect.CodeOf(err))
+	}
+
+	// Same-machine deploy still allowed.
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	})); err != nil {
+		t.Fatalf("same-machine deploy: %v", err)
+	}
+
+	got, err := client.GetMachine(ctx, connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Msg.GetStrategies()[0].GetLeaseHeld() {
+		t.Fatal("expected lease_held on m1 StrategyView")
+	}
+}
