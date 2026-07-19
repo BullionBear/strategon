@@ -96,3 +96,33 @@ func TestUpsertMachineStoresBuildVersion(t *testing.T) {
 		t.Fatalf("unexpected record: ok=%v %+v", ok, rec)
 	}
 }
+
+func TestApplyStatusPrunesRetiredStrategies(t *testing.T) {
+	s := NewMemory(nil)
+	s.UpsertMachine(&pb.Register{MachineId: "m1"})
+	if err := s.ApplyStatus("m1", &pb.StatusReport{
+		ObservedGeneration: 1,
+		Assignments: []*pb.StrategyAssignmentStatus{
+			{Strategy: "fleet1", Phase: pb.DeployPhase_DEPLOY_PHASE_DRAINING, Pid: 1},
+			{Strategy: "fleet2", Phase: pb.DeployPhase_DEPLOY_PHASE_HEALTHY, Pid: 2},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Agent finished draining fleet1 and omits it from the next snapshot.
+	if err := s.ApplyStatus("m1", &pb.StatusReport{
+		ObservedGeneration: 2,
+		Assignments: []*pb.StrategyAssignmentStatus{
+			{Strategy: "fleet2", Phase: pb.DeployPhase_DEPLOY_PHASE_HEALTHY, Pid: 2},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := s.GetMachine("m1")
+	if _, ok := rec.Status["fleet1"]; ok {
+		t.Fatalf("fleet1 status should be pruned after retire, got %+v", rec.Status["fleet1"])
+	}
+	if rec.Status["fleet2"].GetPid() != 2 {
+		t.Fatalf("fleet2 status = %+v", rec.Status["fleet2"])
+	}
+}

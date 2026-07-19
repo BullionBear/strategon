@@ -159,9 +159,11 @@ func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
 		m.mu.Unlock()
 		return fmt.Errorf("apply status: unknown machine %s", machineID)
 	}
+	next := make(map[string]*pb.StrategyAssignmentStatus, len(report.GetAssignments()))
 	for _, a := range report.GetAssignments() {
-		rec.Status[a.GetStrategy()] = proto.Clone(a).(*pb.StrategyAssignmentStatus)
+		next[a.GetStrategy()] = proto.Clone(a).(*pb.StrategyAssignmentStatus)
 	}
+	rec.Status = next
 	if report.GetObservedGeneration() > rec.ObservedGen {
 		rec.ObservedGen = report.GetObservedGeneration()
 	}

@@ -52,7 +52,10 @@ type Store interface {
 	// bumps the machine generation. Returns the new generation.
 	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error)
 
-	// ApplyStatus records an agent-reported StatusReport.
+	// ApplyStatus records an agent-reported StatusReport. The report's
+	// Assignments are a full snapshot of strategies the agent still tracks;
+	// statuses for strategies absent from the report are pruned (so a finished
+	// undeploy/drain does not leave a DRAINING tombstone in the UI).
 	ApplyStatus(machineID string, report *pb.StatusReport) error
 
 	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent versions).

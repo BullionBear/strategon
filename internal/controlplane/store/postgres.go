@@ -377,6 +377,7 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 		if err := requireMachine(ctx, tx, machineID, "apply status"); err != nil {
 			return err
 		}
+		keep := make([]string, 0, len(report.GetAssignments()))
 		for _, a := range report.GetAssignments() {
 			b, err := proto.Marshal(a)
 			if err != nil {
@@ -385,6 +386,20 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 			if _, err := tx.Exec(ctx, `INSERT INTO statuses (machine_id, strategy, status)
 				VALUES ($1,$2,$3) ON CONFLICT (machine_id, strategy) DO UPDATE SET status=EXCLUDED.status`,
 				machineID, a.GetStrategy(), b); err != nil {
+				return err
+			}
+			keep = append(keep, a.GetStrategy())
+		}
+		// StatusReport is a full snapshot: drop strategies the agent no longer
+		// tracks (finished undeploy/drain).
+		if len(keep) == 0 {
+			if _, err := tx.Exec(ctx, `DELETE FROM statuses WHERE machine_id=$1`, machineID); err != nil {
+				return err
+			}
+		} else {
+			if _, err := tx.Exec(ctx,
+				`DELETE FROM statuses WHERE machine_id=$1 AND NOT (strategy = ANY($2))`,
+				machineID, keep); err != nil {
 				return err
 			}
 		}
