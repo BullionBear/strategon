@@ -523,15 +523,30 @@ func (p *Postgres) RegisterArtifact(ref *pb.ArtifactRef) error {
 	if err := artifacturi.Validate(ref.GetUri()); err != nil {
 		return fmt.Errorf("register artifact: %w", err)
 	}
-	b, err := proto.Marshal(ref)
+	ctx, cancel := opCtx()
+	defer cancel()
+
+	cloned := proto.Clone(ref).(*pb.ArtifactRef)
+	now := time.Now().UTC()
+	// Preserve created_at on re-register of the same name+version.
+	var existingAt time.Time
+	err := p.pool.QueryRow(ctx,
+		`SELECT created_at FROM artifacts WHERE name=$1 AND version=$2`,
+		ref.GetName(), ref.GetVersion()).Scan(&existingAt)
+	if err == nil && !existingAt.IsZero() {
+		cloned.CreatedAt = timestamppb.New(existingAt)
+		now = existingAt
+	} else {
+		cloned.CreatedAt = timestamppb.New(now)
+	}
+
+	b, err := proto.Marshal(cloned)
 	if err != nil {
 		return err
 	}
-	ctx, cancel := opCtx()
-	defer cancel()
-	_, err = p.pool.Exec(ctx, `INSERT INTO artifacts (name, version, ref) VALUES ($1,$2,$3)
+	_, err = p.pool.Exec(ctx, `INSERT INTO artifacts (name, version, ref, created_at) VALUES ($1,$2,$3,$4)
 		ON CONFLICT (name, version) DO UPDATE SET ref=EXCLUDED.ref`,
-		ref.GetName(), ref.GetVersion(), b)
+		cloned.GetName(), cloned.GetVersion(), b, now)
 	return err
 }
 
@@ -539,7 +554,9 @@ func (p *Postgres) GetArtifact(name, version string) (*pb.ArtifactRef, bool) {
 	ctx, cancel := opCtx()
 	defer cancel()
 	var b []byte
-	err := p.pool.QueryRow(ctx, `SELECT ref FROM artifacts WHERE name=$1 AND version=$2`, name, version).Scan(&b)
+	var createdAt time.Time
+	err := p.pool.QueryRow(ctx, `SELECT ref, created_at FROM artifacts WHERE name=$1 AND version=$2`,
+		name, version).Scan(&b, &createdAt)
 	if err != nil {
 		return nil, false
 	}
@@ -547,14 +564,17 @@ func (p *Postgres) GetArtifact(name, version string) (*pb.ArtifactRef, bool) {
 	if err := proto.Unmarshal(b, ref); err != nil {
 		return nil, false
 	}
+	if ref.GetCreatedAt() == nil && !createdAt.IsZero() {
+		ref.CreatedAt = timestamppb.New(createdAt)
+	}
 	return ref, true
 }
 
 func (p *Postgres) ListArtifacts(name string) []*pb.ArtifactRef {
 	ctx, cancel := opCtx()
 	defer cancel()
-	rows, err := p.pool.Query(ctx, `SELECT ref FROM artifacts WHERE ($1='' OR name=$1)
-		ORDER BY name, version`, name)
+	rows, err := p.pool.Query(ctx, `SELECT ref, created_at FROM artifacts WHERE ($1='' OR name=$1)
+		ORDER BY name ASC, created_at DESC, version ASC`, name)
 	if err != nil {
 		return nil
 	}
@@ -562,12 +582,16 @@ func (p *Postgres) ListArtifacts(name string) []*pb.ArtifactRef {
 	var out []*pb.ArtifactRef
 	for rows.Next() {
 		var b []byte
-		if err := rows.Scan(&b); err != nil {
+		var createdAt time.Time
+		if err := rows.Scan(&b, &createdAt); err != nil {
 			return out
 		}
 		ref := &pb.ArtifactRef{}
 		if err := proto.Unmarshal(b, ref); err != nil {
 			return out
+		}
+		if ref.GetCreatedAt() == nil && !createdAt.IsZero() {
+			ref.CreatedAt = timestamppb.New(createdAt)
 		}
 		out = append(out, ref)
 	}

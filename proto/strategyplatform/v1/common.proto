@@ -48,6 +48,9 @@ message ArtifactRef {
   string version = 3; // human-readable, e.g. "v42"
   string digest = 4; // "sha256:..."; content-addressed, verification is free
   string uri = 5; // "s3://bucket/key" or registry ref
+  // Set by the control plane on RegisterArtifact (registration time). Defines
+  // "latest" for catalog UI / deploy convenience — not version-string order.
+  google.protobuf.Timestamp created_at = 6;
 }
 
 enum ExecutionDriver {

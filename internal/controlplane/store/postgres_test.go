@@ -173,9 +173,20 @@ func TestPostgresArtifactCatalog(t *testing.T) {
 		t.Fatalf("GetArtifact = %+v ok=%v", got, ok)
 	}
 	list := p.ListArtifacts("s")
-	if len(list) != 2 || list[0].GetVersion() != "v1" || list[1].GetVersion() != "v2" {
-		t.Fatalf("ListArtifacts = %v, want v1,v2 sorted", list)
+	if len(list) != 2 || list[0].GetVersion() != "v2" || list[1].GetVersion() != "v1" {
+		t.Fatalf("ListArtifacts = %v, want v2,v1 newest-first", versionsOf(list))
 	}
+	if list[0].GetCreatedAt() == nil || list[1].GetCreatedAt() == nil {
+		t.Fatal("created_at must be set on register")
+	}
+}
+
+func versionsOf(list []*pb.ArtifactRef) []string {
+	out := make([]string, len(list))
+	for i, a := range list {
+		out[i] = a.GetVersion()
+	}
+	return out
 }
 
 func TestPostgresDurabilityAcrossReconnect(t *testing.T) {

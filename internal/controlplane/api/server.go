@@ -100,6 +100,10 @@ func (s *Server) SetDeployment(_ context.Context, req *connect.Request[pb.SetDep
 // buildDeploymentSpec resolves artifact/config and assembles an assignment.
 // When setRuntime is true, args/env are replaced from the request (SetDeployment);
 // otherwise they are preserved from the existing assignment (Deploy).
+//
+// artifactVersion / configVersion may be the sentinel "latest": the control
+// plane resolves it to the newest registered version (by created_at) and
+// stores that concrete version in the deployment — never the string "latest".
 func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, configVersion string, args []string, env map[string]string, setRuntime bool) (*pb.StrategyAssignmentSpec, *pb.ArtifactRef, string, error) {
 	if machineID == "" || strategy == "" || artifactVersion == "" {
 		return nil, nil, "", connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id, strategy, and artifact_version are required"))
@@ -113,13 +117,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 	if existing := rec.Assignments[strategy]; existing != nil && existing.GetArtifact().GetName() != "" {
 		artName = existing.GetArtifact().GetName()
 	}
-	art, ok := s.store.GetArtifact(artName, artifactVersion)
-	if !ok {
-		art, ok = s.store.GetArtifact(strategy, artifactVersion)
-	}
-	if !ok {
-		return nil, nil, "", connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("artifact %q version %q not registered; call RegisterArtifact first", artName, artifactVersion))
+	art, err := s.resolveArtifact(artName, strategy, artifactVersion)
+	if err != nil {
+		return nil, nil, "", err
 	}
 
 	spec := defaultOrCloneSpec(rec.Assignments[strategy], strategy)
@@ -127,12 +127,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 	spec.Artifact = art
 
 	if configVersion != "" {
-		cfg, ok := s.store.GetArtifact(art.GetName()+"-config", configVersion)
-		if !ok {
-			cfg, ok = s.store.GetArtifact(strategy+"-config", configVersion)
-		}
-		if !ok {
-			return nil, nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("config version %q not registered", configVersion))
+		cfg, err := s.resolveArtifact(art.GetName()+"-config", strategy+"-config", configVersion)
+		if err != nil {
+			return nil, nil, "", err
 		}
 		spec.Config = cfg
 	}
@@ -154,6 +151,41 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 			fmt.Errorf("migration interlocking: lease for %q %s", strategy, reason))
 	}
 	return spec, art, fromVersion, nil
+}
+
+// resolveArtifact looks up name/version, trying primary then fallback name.
+// version "latest" selects the newest registered artifact by created_at and
+// returns that concrete ArtifactRef (deployment never stores "latest").
+func (s *Server) resolveArtifact(primaryName, fallbackName, version string) (*pb.ArtifactRef, error) {
+	if version == "latest" {
+		art, ok := latestArtifact(s.store, primaryName)
+		if !ok && fallbackName != "" && fallbackName != primaryName {
+			art, ok = latestArtifact(s.store, fallbackName)
+		}
+		if !ok {
+			return nil, connect.NewError(connect.CodeNotFound,
+				fmt.Errorf("artifact %q has no registered versions; call RegisterArtifact first", primaryName))
+		}
+		return art, nil
+	}
+	art, ok := s.store.GetArtifact(primaryName, version)
+	if !ok && fallbackName != "" && fallbackName != primaryName {
+		art, ok = s.store.GetArtifact(fallbackName, version)
+	}
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("artifact %q version %q not registered; call RegisterArtifact first", primaryName, version))
+	}
+	return art, nil
+}
+
+func latestArtifact(st store.Store, name string) (*pb.ArtifactRef, bool) {
+	list := st.ListArtifacts(name)
+	if len(list) == 0 {
+		return nil, false
+	}
+	// ListArtifacts returns newest-first within a name.
+	return list[0], true
 }
 
 func (s *Server) commitAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec, action, fromVersion, toVersion string) (int64, error) {

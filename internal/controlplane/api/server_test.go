@@ -326,6 +326,52 @@ func TestSetDeploymentSetsArgsEnvAndConfig(t *testing.T) {
 	}
 }
 
+func TestSetDeploymentResolvesLatestToConcreteVersion(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v2", Digest: "sha256:bbb", Uri: "file:///b"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s-config", Version: "c1", Digest: "sha256:c1", Uri: "file:///c1"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s-config", Version: "c2", Digest: "sha256:c2", Uri: "file:///c2"},
+	}))
+
+	_, err := client.SetDeployment(ctx, connect.NewRequest(&pb.SetDeploymentRequest{
+		MachineId:       "m1",
+		Strategy:        "s",
+		ArtifactVersion: "latest",
+		ConfigVersion:   "latest",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	spec := rec.Assignments["s"]
+	if spec.GetArtifact().GetVersion() != "v2" {
+		t.Fatalf("artifact pinned = %q, want v2 (not latest)", spec.GetArtifact().GetVersion())
+	}
+	if spec.GetConfig().GetVersion() != "c2" {
+		t.Fatalf("config pinned = %q, want c2 (not latest)", spec.GetConfig().GetVersion())
+	}
+
+	// Registering a newer version must not move the existing deployment.
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v3", Digest: "sha256:ccc", Uri: "file:///c"},
+	}))
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["s"].GetArtifact().GetVersion() != "v2" {
+		t.Fatalf("deployment must stay pinned at v2 after v3 register; got %q",
+			rec.Assignments["s"].GetArtifact().GetVersion())
+	}
+}
+
 func TestUndeployUnassignedFails(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
