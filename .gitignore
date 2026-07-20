@@ -37,3 +37,6 @@ web/.env.*
 
 # Cached release assets fetched by deploy/install-agent.sh
 /.cache/
+
+# Seeding
+/examples/
