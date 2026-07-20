@@ -40,6 +40,8 @@ func main() {
 	cgroupRoot := flag.String("cgroup-root", "", "delegated cgroup v2 root (empty disables confinement)")
 	agentVersion := flag.Int("agent-version", 1, "agent version")
 	metricsListen := flag.String("metrics-listen", "", "optional Prometheus text /metrics listen address (e.g. 127.0.0.1:9101); empty disables")
+	region := flag.String("region", "", "operator-assigned region label for fleet grouping (e.g. tw); empty groups as Unassigned")
+	zone := flag.String("zone", "", "operator-assigned zone label within a region")
 
 	tlsCert := flag.String("tls-cert", "", "client certificate PEM (enables mTLS with --tls-key and --server-ca)")
 	tlsKey := flag.String("tls-key", "", "client private key PEM")
@@ -120,7 +122,7 @@ func main() {
 			Hostname:          hostname,
 			AgentVersion:      int32(*agentVersion),
 			AgentBuildVersion: buildinfo.Version,
-			Spec:              telemetry.MachineSpecFromHost(),
+			Spec:              hostSpec(*region, *zone),
 		},
 		Client:      strategyplatformv1connect.NewAgentServiceClient(httpClient, *controlURL, connect.WithGRPC()),
 		Out:         out,
@@ -177,4 +179,14 @@ func h2cTransport() *http2.Transport {
 			return d.DialContext(ctx, network, addr)
 		},
 	}
+}
+
+// hostSpec fills the machine spec from the host and overlays the operator's
+// placement labels. Region and zone are policy, not something the host can
+// discover, so they arrive as flags rather than from /proc.
+func hostSpec(region, zone string) *pb.MachineSpec {
+	spec := telemetry.MachineSpecFromHost()
+	spec.Region = strings.TrimSpace(region)
+	spec.Zone = strings.TrimSpace(zone)
+	return spec
 }

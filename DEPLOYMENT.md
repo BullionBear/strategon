@@ -201,9 +201,13 @@ the machine identity. Nothing else authenticates an agent.
 Machines self-register on first connect — there is no separate registration
 step or RPC.
 
-| Machine | Host | Runs as |
-|---|---|---|
-| `yite` | `100.65.26.119` (Ubuntu 24.04, x86_64) | user `yite`, systemd user unit |
+| Machine | Region | Host | Runs as |
+|---|---|---|---|
+| `yite` | `tw` | `100.65.26.119` (Ubuntu 24.04, x86_64) | user `yite`, systemd user unit |
+
+Region and zone are operator labels passed with `--region` / `--zone`; the host
+cannot discover them. The fleet table groups by region and shows machines with
+no region under "Unassigned".
 
 Agent install layout on that host:
 
