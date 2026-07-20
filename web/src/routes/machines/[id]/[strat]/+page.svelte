@@ -209,7 +209,7 @@
 			{/if}
 		</div>
 
-		<!-- Phase state machine visualization (FRONTEND.md §4.1) -->
+		<!-- Phase state machine visualization -->
 		<ol class="pipeline" aria-label="Deploy phases">
 			{#each HAPPY_PATH as phase, i}
 				{@const done = !failing && idx > i}

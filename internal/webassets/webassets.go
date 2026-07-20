@@ -1,5 +1,5 @@
 // Package webassets embeds the built SvelteKit SPA so the control plane serves
-// its own UI out of a single static binary (CICD.md §1). The build order
+// its own UI out of a single static binary. The build order
 // matters: `pnpm build` must populate dist/ before `go build`, or an empty tree
 // gets embedded — see the web-build target in the Makefile and stage 1 of the
 // Dockerfile.

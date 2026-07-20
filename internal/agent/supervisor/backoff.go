@@ -1,5 +1,5 @@
 // Package supervisor holds the process-supervision primitives borrowed from
-// supervisord (RECONCILER.md §6.3, §7): startsecs classification, exponential
+// supervisord: startsecs classification, exponential
 // crash backoff with a cap, and the graceful-stop signal sequence. These are
 // kept as small, pure, injectable pieces so the reconciler can drive them and
 // tests can fast-forward without real sleeps.
@@ -14,7 +14,7 @@ const (
 	// baseBackoff is the first backoff step; subsequent steps double up to the
 	// cap.
 	baseBackoff = time.Second
-	// maxBackoffShift caps the doubling at 1s<<6 = 64s (RECONCILER §6.3).
+	// maxBackoffShift caps the doubling at 1s<<6 = 64s.
 	maxBackoffShift = 6
 )
 
@@ -72,7 +72,7 @@ func DefaultJitter(max time.Duration) time.Duration {
 // should be counted as a startup failure (crash) rather than a clean run.
 // A process must survive at least startsecs to count as successfully started;
 // otherwise a fast crash loop would be mistaken for N successful restarts and
-// mask a bad version (RECONCILER §6.3).
+// mask a bad version.
 func CrashedOnStart(lived time.Duration, startsecs int) bool {
 	return lived < time.Duration(startsecs)*time.Second
 }

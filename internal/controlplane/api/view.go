@@ -144,7 +144,7 @@ func latestDeployTimes(st store.Store, machineID string) map[string]*timestamppb
 	return out
 }
 
-// isConverged mirrors reconciler versionMatches + HEALTHY (FRONTEND.md §1.2).
+// isConverged mirrors reconciler versionMatches + HEALTHY.
 func isConverged(v *pb.StrategyView) bool {
 	if v.GetPhase() != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
 		return false

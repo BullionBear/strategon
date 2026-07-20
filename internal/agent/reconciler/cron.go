@@ -27,9 +27,9 @@ func scheduleKey(s *pb.CronSchedule) string {
 		s.GetAction(), s.GetJitterSeconds(), s.GetScriptRef())
 }
 
-// tickCron evaluates due schedules for all strategies (ARCHITECTURE §10).
+// tickCron evaluates due schedules for all strategies.
 // When a deploy is in flight (or the strategy is not HEALTHY), due actions are
-// deferred until the next eligible tick (IMPROVEMENT B4 / undefined #3).
+// deferred until the next eligible tick.
 func (r *Reconciler) tickCron(now time.Time) {
 	for name, spec := range r.desired {
 		st := r.actual[name]
@@ -113,7 +113,7 @@ func (r *Reconciler) ensureCronEntry(st *strategyState, name string, s *pb.CronS
 }
 
 // cronCanRun is true when a cron action may mutate process state.
-// Inflight deploys and non-steady phases defer (IMPROVEMENT undefined #3).
+// Inflight deploys and non-steady phases defer.
 func (r *Reconciler) cronCanRun(st *strategyState) bool {
 	if st.inflight != nil || st.stopping {
 		return false

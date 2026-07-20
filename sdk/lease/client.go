@@ -1,4 +1,4 @@
-// Package lease is the strategy-side fencing-lease SDK (IMPROVEMENT A1).
+// Package lease is the strategy-side fencing-lease SDK.
 // Strategies acquire/renew via LeaseService and must call CheckBeforeOrder
 // before trading. The agent process does not participate.
 package lease
@@ -20,7 +20,7 @@ import (
 	"golang.org/x/net/http2"
 )
 
-// DefaultMarginAgent is the strategy-side SAFETY §2 margin: the local deadline
+// DefaultMarginAgent is the strategy-side lease margin: the local deadline
 // expires this much before the control-plane expires_at.
 const DefaultMarginAgent = time.Second
 
@@ -165,7 +165,7 @@ func (c *Client) Close() {
 	}
 }
 
-// CheckBeforeOrder verifies the local lease is still valid (SAFETY §3.2a/b).
+// CheckBeforeOrder verifies the local lease is still valid before trading.
 // Call synchronously on the order path; on error do not send the order.
 func (c *Client) CheckBeforeOrder() error {
 	c.mu.Lock()

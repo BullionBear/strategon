@@ -1,5 +1,4 @@
-// Package health implements the three-layer health model (ARCHITECTURE.md §9.2,
-// RECONCILER.md §9):
+// Package health implements the three-layer health model:
 //
 //	Live            – process is alive (pidfd); owned by the reconciler.
 //	Ready           – strategy has connected market data/exchange, queues not

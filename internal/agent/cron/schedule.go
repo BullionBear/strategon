@@ -1,5 +1,5 @@
 // Package cron evaluates StrategyAssignmentSpec schedules locally on the agent
-// (ARCHITECTURE §10): crontab expression + explicit IANA timezone + optional
+// crontab expression + explicit IANA timezone + optional
 // jitter so multi-machine fleets do not restart in lockstep.
 package cron
 

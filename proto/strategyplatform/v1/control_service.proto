@@ -22,7 +22,7 @@ message Machine {
   int32 agent_version = 5; // capability version (monotonic)
   google.protobuf.Timestamp last_heartbeat = 6;
   // Per-strategy desired+actual merged view. Assembled by the control plane so
-  // the frontend never joins spec/status itself (FRONTEND.md §1.2).
+  // the frontend never joins spec/status itself.
   repeated StrategyView strategies = 7;
   // buildinfo.Version from the agent — display only; not for compatibility
   string agent_build_version = 8;
@@ -50,7 +50,7 @@ message StrategyView {
   string last_error = 12;
   // Convergence judgment (control plane computed; frontend just renders)
   bool converged = 13; // desired == running && phase == HEALTHY
-  bool lease_held = 14; // agent may leave unset; UI shows unknown until SAFETY lands
+  bool lease_held = 14; // agent may leave unset; UI shows unknown until lease state is reported
   google.protobuf.Timestamp lease_expires_at = 15;
   // Desired cron schedules (from StrategyAssignmentSpec); read-back for UI.
   repeated CronSchedule schedules = 16;
@@ -164,7 +164,7 @@ message MachineStatusEvent {
 }
 
 // Artifact catalog: Deploy resolves artifact_version against registered
-// artifacts (digest + uri). Additive follow-on to FRONTEND.md §2.2 so the
+// artifacts (digest + uri). Additive follow-on so the
 // human API can replace /admin/assign without requiring digest in every Deploy.
 message RegisterArtifactRequest {
   ArtifactRef artifact = 1;

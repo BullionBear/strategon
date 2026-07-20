@@ -1,12 +1,12 @@
-# Layers 2 and 3 (CICD.md §3, §4).
+# Layers 2 and 3: preview and release pipelines.
 #
 #   push to main -> preview image only (main-<sha>, latest-dev). Not deployable.
 #   push tag v*  -> release image + binaries + GitHub Release, then deploy.
 #
-# Only tagged artifacts reach production (§3.2): a tag is the explicit "this is
+# Only tagged artifacts reach production: a tag is the explicit "this is
 # a release" act. Scope is the platform itself — CP + embedded UI. Agent
 # binaries are published for bootstrap to pull, never pushed to trading hosts,
-# and strategies are deployed by the platform, not by CI (§0).
+# and strategies are deployed by the platform, not by CI.
 name: release
 
 on:
@@ -98,8 +98,8 @@ jobs:
           generate_release_notes: true
 
   # Layer 3. Single host, so a plain restart is fine: agents reconnect
-  # outbound and lease TTLs outlast the gap (§4.4). Schema migrations run at
-  # CP startup and must stay expand-only (§4.2) — a destructive migration
+  # outbound and lease TTLs outlast the gap. Schema migrations run at
+  # CP startup and must stay expand-only — a destructive migration
   # would break the old container still serving during the swap.
   deploy:
     if: startsWith(github.ref, 'refs/tags/v')

@@ -10,7 +10,7 @@ import (
 )
 
 // strategyState is the per-strategy actual state. It is read/written ONLY by
-// the reconciler goroutine (RECONCILER.md §0 invariant 1: single writer).
+// the reconciler goroutine (single writer).
 type strategyState struct {
 	strategy string
 	phase    pb.DeployPhase
@@ -45,7 +45,7 @@ type strategyState struct {
 	// honors the configured SIGTERM→SIGKILL grace.
 	stopGraceSeconds int32
 
-	// cron tracks next fire times for DesiredState schedules (ARCHITECTURE §10).
+	// cron tracks next fire times for DesiredState schedules.
 	cron map[string]*cronEntry
 }
 

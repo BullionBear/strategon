@@ -39,7 +39,7 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 	cmd.Dir = spec.WorkDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		// ① Independent session/process group: agent exit does not terminate
-		// the strategy (self-update prerequisite, SAFETY §6).
+		// the strategy (self-update prerequisite).
 		Setsid: true,
 	}
 

@@ -1,7 +1,7 @@
 //go:build linux
 
 // TestDeployWithConfigArgsEnvAndScheduleEndToEnd exercises the config/binary
-// separation feature (ARCHITECTURE §8.4) through the real control-plane human
+// separation feature through the real control-plane human
 // API (RegisterArtifact, SetDeployment, SetSchedule) down to a real forked
 // process: it proves that a strategy binary and its config are registered as
 // independent artifacts, that ${CONFIG}/${RELEASE_DIR}/${BINARY} placeholders
@@ -251,7 +251,7 @@ func TestDeployWithConfigArgsEnvAndScheduleEndToEnd(t *testing.T) {
 
 	// --- A version-only Deploy (no config/args/env in the request) must
 	// preserve them, per the same rule verified at the API layer. Convergence
-	// is digest-based (ARCHITECTURE §6.3), so v2 needs distinct content. ---
+	// is digest-based, so v2 needs distinct content. ---
 	binPathV2 := filepath.Join(srcDir, "strategy-v2.sh")
 	if err := os.WriteFile(binPathV2, []byte(script+"# v2\n"), 0o755); err != nil {
 		t.Fatal(err)

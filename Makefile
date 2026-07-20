@@ -26,11 +26,11 @@ tools:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.16.2
 
-## lint: enforce proto style (PROTOCOL.md discipline)
+## lint: enforce proto style
 lint:
 	buf lint
 
-## breaking: gate against breaking proto changes vs main (PROTOCOL.md §9)
+## breaking: gate against breaking proto changes vs main
 breaking:
 	buf breaking --against '.git#branch=main'
 
@@ -50,7 +50,7 @@ test:
 	go test ./...
 
 ## web-build: build the SPA and stage it where //go:embed picks it up.
-## Order matters (CICD.md §1): this must run before any go build that ships a
+## Order matters: this must run before any go build that ships a
 ## UI, or an empty dist/ gets embedded.
 web-build:
 	cd web && pnpm install --frozen-lockfile && pnpm build

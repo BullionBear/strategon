@@ -1,8 +1,8 @@
 // Package grpcstream implements the southbound/northbound AgentService bidi
-// stream endpoint (PROTOCOL.md §7.3, §10). The agent dials in (outbound); the
+// stream endpoint. The agent dials in (outbound); the
 // control plane never initiates a connection. The main mechanism is pushing
 // full DesiredState snapshots: on (re)connect, on every spec change, and on a
-// periodic resync to correct silent drift (PROTOCOL §10.5).
+// periodic resync to correct silent drift.
 package grpcstream
 
 import (
@@ -74,7 +74,7 @@ func (s *Server) Notify(machineID string) {
 	}
 }
 
-// Enroll is the online token→CSR bootstrap (PROTOCOL §6). Offline CA issuance
+// Enroll is the online token→CSR bootstrap. Offline CA issuance
 // via strategon-ca covers the current mTLS path; online enrollment remains
 // unimplemented so we never mint insecure certs from this RPC.
 func (s *Server) Enroll(context.Context, *connect.Request[pb.EnrollRequest]) (*connect.Response[pb.EnrollResponse], error) {
@@ -170,7 +170,7 @@ func (s *Server) handleAgentMessage(machineID string, msg *pb.AgentMessage) {
 			"in_reply_to", p.Nack.GetInReplyTo(), "reason", p.Nack.GetReason())
 	case *pb.AgentMessage_LeaseRequest, *pb.AgentMessage_LeaseRenew:
 		// Lease lifecycle is owned by the strategy SDK via LeaseService
-		// (IMPROVEMENT A1); the agent stream does not participate.
+		// the agent stream does not participate.
 		s.logger.Debug("lease stream message ignored (SDK-owned)", "machine_id", machineID)
 	default:
 		s.logger.Warn("unhandled agent message", "machine_id", machineID)

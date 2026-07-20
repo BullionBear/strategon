@@ -5,7 +5,7 @@
 -- serialized bytes in BYTEA columns; the scalar columns the Store interface
 -- reads or orders by (generation, heartbeat, reachable, ...) are promoted to
 -- real columns. spec is written only by the control plane, status only by
--- agents (PROTOCOL.md §0).
+-- agents.
 
 CREATE TABLE machines (
     machine_id      TEXT PRIMARY KEY,

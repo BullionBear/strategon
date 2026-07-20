@@ -1,5 +1,5 @@
 // Package lease implements LeaseService: unary fencing-lease RPCs for strategy
-// SDKs (IMPROVEMENT A1). Served on the agent port alongside AgentService.
+// SDKs. Served on the agent port alongside AgentService.
 package lease
 
 import (

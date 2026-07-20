@@ -1,6 +1,6 @@
 # Control plane image: SPA build -> Go build with the SPA embedded -> scratch.
 # The result is one statically linked binary serving gRPC (agents), the human
-# JSON API, and the UI (CICD.md §3.3).
+# JSON API, and the UI.
 
 # --- stage 1: frontend ---
 FROM node:22-alpine AS fe

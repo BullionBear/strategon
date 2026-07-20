@@ -44,7 +44,7 @@ func NewMemory(hub *Hub) *Memory {
 	}
 }
 
-// SetLeaseMarginCP sets the control-plane lease expiry margin (SAFETY §2).
+// SetLeaseMarginCP sets the control-plane lease expiry margin.
 func (m *Memory) SetLeaseMarginCP(d time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -151,7 +151,7 @@ func (m *Memory) SetAssignment(machineID, strategy string, spec *pb.StrategyAssi
 		}
 		rec.Assignments[strategy] = proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	}
-	rec.Generation++ // monotonic bump on every spec change (PROTOCOL §1)
+	rec.Generation++ // monotonic bump on every spec change
 	gen := rec.Generation
 	m.mu.Unlock()
 	m.notify(machineID)

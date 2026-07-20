@@ -6,7 +6,7 @@ import (
 )
 
 // StopSequence performs the graceful-stop timing shared by deploy DRAINING,
-// strategy retirement, and agent SIGTERM (RECONCILER §7):
+// strategy retirement, and agent SIGTERM:
 //
 //	1. call the strategy drain/cancel-orders hook, wait for it to report done
 //	2. SIGTERM the process group

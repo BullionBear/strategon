@@ -1,6 +1,6 @@
 import { DeployPhase } from '$lib/gen/strategyplatform/v1/status_pb';
 
-/** Happy-path deploy phases in order (FRONTEND.md §4.1). */
+/** Happy-path deploy phases in order. */
 export const HAPPY_PATH: DeployPhase[] = [
 	DeployPhase.PENDING,
 	DeployPhase.DOWNLOADING,

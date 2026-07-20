@@ -1,10 +1,9 @@
 // Package stream is the agent's outbound gRPC stream client. It dials the
-// control plane (agent-initiated, ARCHITECTURE.md §4.1), registers, routes
+// control plane (agent-initiated outbound connection), registers, routes
 // inbound DesiredState snapshots to the reconciler, forwards northbound
 // messages (StatusReport/Event) from the reconciler, and emits periodic
 // heartbeats. On disconnect it reconnects with backoff; because convergence is
-// level-triggered, reconnect simply re-receives the full snapshot and re-diffs
-// (RECONCILER.md §0, ARCHITECTURE §6.3).
+// level-triggered, reconnect simply re-receives the full snapshot and re-diffs.
 package stream
 
 import (
@@ -134,7 +133,7 @@ func (c *Client) handleControl(msg *pb.ControlMessage) {
 	case *pb.ControlMessage_TriggerRollback, *pb.ControlMessage_DrainNow:
 		// Imperative commands are latency optimizations; DesiredState is truth.
 	case *pb.ControlMessage_LeaseResponse:
-		// Lease is owned by the strategy SDK via LeaseService (IMPROVEMENT A1).
+		// Lease is owned by the strategy SDK via LeaseService.
 	}
 }
 

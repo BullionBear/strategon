@@ -12,7 +12,7 @@ export default defineConfig({
 			},
 
 			// SPA build: the control plane embeds build/ and serves it from a
-			// single Go binary (CICD.md §1), so there is no Node server to render
+			// single Go binary, so there is no Node server to render
 			// on. `fallback` sends unknown paths to index.html for the client
 			// router — /machines/:id and friends resolve at runtime.
 			adapter: adapter({
