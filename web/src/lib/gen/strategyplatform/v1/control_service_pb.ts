@@ -65,7 +65,7 @@ export type Machine = Message<"strategyplatform.v1.Machine"> & {
 
   /**
    * Per-strategy desired+actual merged view. Assembled by the control plane so
-   * the frontend never joins spec/status itself (FRONTEND.md §1.2).
+   * the frontend never joins spec/status itself.
    *
    * @generated from field: repeated strategyplatform.v1.StrategyView strategies = 7;
    */
@@ -685,8 +685,8 @@ export const MachineStatusEventSchema: GenMessage<MachineStatusEvent> = /*@__PUR
 
 /**
  * Artifact catalog: Deploy resolves artifact_version against registered
- * artifacts (digest + uri). Additive follow-on to FRONTEND.md §2.2 so the
- * human API can replace /admin/assign without requiring digest in every Deploy.
+ * artifacts (digest + uri). Additive so the human API can replace
+ * /admin/assign without requiring digest in every Deploy.
  *
  * @generated from message strategyplatform.v1.RegisterArtifactRequest
  */
