@@ -64,6 +64,19 @@ done
 log()  { printf '  %s\n' "$*"; }
 fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
 
+# Optional OpenSSH config (written by deploy/install-agents.sh) so fleet
+# installs can pass HostName/User/Port/IdentityFile without changing the
+# <ssh-target> contract.
+SSH_CFG=()
+SCP_CFG=()
+if [[ -n "${STRATEGON_SSH_CONFIG:-}" ]]; then
+  [[ -f "$STRATEGON_SSH_CONFIG" ]] || fail "STRATEGON_SSH_CONFIG not a file: $STRATEGON_SSH_CONFIG"
+  SSH_CFG=(-F "$STRATEGON_SSH_CONFIG")
+  SCP_CFG=(-F "$STRATEGON_SSH_CONFIG")
+fi
+ssh_cmd() { ssh "${SSH_CFG[@]}" "$@"; }
+scp_cmd() { scp "${SCP_CFG[@]}" "$@"; }
+
 command -v gh >/dev/null || fail "gh CLI not found (needed to read private release assets)"
 
 printf '\n=== %s (machine=%s region=%s) ===\n' "$TARGET" "$MACHINE_ID" "$REGION"
@@ -71,7 +84,7 @@ printf '\n=== %s (machine=%s region=%s) ===\n' "$TARGET" "$MACHINE_ID" "$REGION"
 # ---------------------------------------------------------------- remote facts
 # One round trip: everything needed to decide, before changing anything.
 read -r REMOTE_USER ARCH REMOTE_SHA UNIT_HASH TS_IP USER_UNIT <<<"$(
-  ssh -o BatchMode=yes "$TARGET" '
+  ssh_cmd -o BatchMode=yes "$TARGET" '
     printf "%s " "$(id -un)"
     case "$(uname -m)" in
       x86_64)  printf "amd64 " ;;
@@ -219,12 +232,12 @@ if [[ "$BINARY_ACTION" == "install" && ! -f "$CERT_DIR/cert.pem" ]]; then
 fi
 
 # --------------------------------------------------------------------- stage
-ssh -o BatchMode=yes "$TARGET" "rm -rf /tmp/agent-install && mkdir -p /tmp/agent-install"
-scp -q "$DEST/$ASSET" "$TARGET:/tmp/agent-install/agent"
-render_unit | ssh -o BatchMode=yes "$TARGET" "cat > /tmp/agent-install/unit"
+ssh_cmd -o BatchMode=yes "$TARGET" "rm -rf /tmp/agent-install && mkdir -p /tmp/agent-install"
+scp_cmd -q "$DEST/$ASSET" "$TARGET:/tmp/agent-install/agent"
+render_unit | ssh_cmd -o BatchMode=yes "$TARGET" "cat > /tmp/agent-install/unit"
 if [[ "$BINARY_ACTION" == "install" ]]; then
-  scp -q "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" "$TARGET:/tmp/agent-install/"
-  scp -q "$CA_DIR/ca-cert.pem" "$TARGET:/tmp/agent-install/ca-cert.pem"
+  scp_cmd -q "$CERT_DIR/cert.pem" "$CERT_DIR/key.pem" "$TARGET:/tmp/agent-install/"
+  scp_cmd -q "$CA_DIR/ca-cert.pem" "$TARGET:/tmp/agent-install/ca-cert.pem"
 fi
 
 # --------------------------------------------------------------------- apply
@@ -233,7 +246,7 @@ fi
 # directory the script itself deletes -- bash reads scripts incrementally, so a
 # self-deleting script can fail midway.
 APPLY=/tmp/strategon-apply.sh
-ssh -o BatchMode=yes "$TARGET" "cat > $APPLY" <<REMOTE
+ssh_cmd -o BatchMode=yes "$TARGET" "cat > $APPLY" <<REMOTE
 set -euo pipefail
 
 # Unprivileged service account: the agent spawns and supervises strategy
@@ -271,19 +284,19 @@ systemctl restart strategon-agent.service
 REMOTE
 
 if [[ -z "$SUDO" ]]; then
-  ssh -o BatchMode=yes "$TARGET" "bash $APPLY; rm -f $APPLY"
+  ssh_cmd -o BatchMode=yes "$TARGET" "bash $APPLY; rm -f $APPLY"
 else
   # -t allocates a terminal so sudo can prompt when the host requires a
   # password. Harmless where sudo is passwordless.
-  ssh -t "$TARGET" "sudo bash $APPLY; rm -f $APPLY"
+  ssh_cmd -t "$TARGET" "sudo bash $APPLY; rm -f $APPLY"
 fi
 
 # -------------------------------------------------------------------- verify
 sleep 3
-STATE="$(ssh -o BatchMode=yes "$TARGET" "systemctl is-active strategon-agent.service" || true)"
+STATE="$(ssh_cmd -o BatchMode=yes "$TARGET" "systemctl is-active strategon-agent.service" || true)"
 if [[ "$STATE" != "active" ]]; then
   printf 'error: agent is %s on %s\n' "$STATE" "$TARGET" >&2
-  ssh -o BatchMode=yes "$TARGET" "$SUDO journalctl -u strategon-agent -n 20 --no-pager" >&2
+  ssh_cmd -o BatchMode=yes "$TARGET" "$SUDO journalctl -u strategon-agent -n 20 --no-pager" >&2
   exit 1
 fi
 log "active on $TAG"
