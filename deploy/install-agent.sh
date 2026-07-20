@@ -70,7 +70,7 @@ printf '\n=== %s (machine=%s region=%s) ===\n' "$TARGET" "$MACHINE_ID" "$REGION"
 
 # ---------------------------------------------------------------- remote facts
 # One round trip: everything needed to decide, before changing anything.
-read -r REMOTE_USER ARCH REMOTE_SHA UNIT_HASH TS_IP <<<"$(
+read -r REMOTE_USER ARCH REMOTE_SHA UNIT_HASH TS_IP USER_UNIT <<<"$(
   ssh -o BatchMode=yes "$TARGET" '
     printf "%s " "$(id -un)"
     case "$(uname -m)" in
@@ -88,11 +88,34 @@ read -r REMOTE_USER ARCH REMOTE_SHA UNIT_HASH TS_IP <<<"$(
     else
       printf "none "
     fi
-    printf "%s\n" "$(tailscale ip -4 2>/dev/null | head -1 || echo none)"
+    printf "%s " "$(tailscale ip -4 2>/dev/null | head -1 || echo none)"
+    if [ -f "$HOME/.config/systemd/user/strategon-agent.service" ]; then
+      printf "user-unit\n"
+    else
+      printf "none\n"
+    fi
   '
 )" || fail "cannot reach $TARGET over SSH"
 
 [[ "$ARCH" == "unsupported" ]] && fail "unsupported CPU architecture on $TARGET"
+
+# A leftover user-level unit would keep running alongside the system unit this
+# script installs, giving two agents the same machine id and two writers for
+# one identity. Refuse rather than silently create that.
+if [[ "$USER_UNIT" == "user-unit" ]]; then
+  cat >&2 <<MSG
+error: $TARGET already runs a user-level agent unit.
+       Installing the system unit would start a second agent claiming
+       machine id "$MACHINE_ID". Remove the old one first, as that user:
+
+         systemctl --user disable --now strategon-agent.service
+         rm ~/.config/systemd/user/strategon-agent.service
+         rm -rf ~/strategon
+
+       Then re-run this script.
+MSG
+  exit 1
+fi
 
 SUDO=""
 [[ "$REMOTE_USER" != "root" ]] && SUDO="sudo"
@@ -205,7 +228,12 @@ if [[ "$BINARY_ACTION" == "install" ]]; then
 fi
 
 # --------------------------------------------------------------------- apply
-ssh -o BatchMode=yes "$TARGET" "$SUDO bash -s" <<REMOTE
+# Written to a file rather than piped: `sudo bash -s` consumes stdin, so sudo
+# has no terminal left to read a password from. Kept outside the staging
+# directory the script itself deletes -- bash reads scripts incrementally, so a
+# self-deleting script can fail midway.
+APPLY=/tmp/strategon-apply.sh
+ssh -o BatchMode=yes "$TARGET" "cat > $APPLY" <<REMOTE
 set -euo pipefail
 
 # Unprivileged service account: the agent spawns and supervises strategy
@@ -241,6 +269,14 @@ systemctl daemon-reload
 systemctl enable strategon-agent.service >/dev/null 2>&1 || true
 systemctl restart strategon-agent.service
 REMOTE
+
+if [[ -z "$SUDO" ]]; then
+  ssh -o BatchMode=yes "$TARGET" "bash $APPLY; rm -f $APPLY"
+else
+  # -t allocates a terminal so sudo can prompt when the host requires a
+  # password. Harmless where sudo is passwordless.
+  ssh -t "$TARGET" "sudo bash $APPLY; rm -f $APPLY"
+fi
 
 # -------------------------------------------------------------------- verify
 sleep 3

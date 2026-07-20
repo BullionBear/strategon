@@ -260,10 +260,20 @@ journalctl -u strategon-agent -f
 
 `yite` predates the installer and does not match the others: it runs from
 `~/strategon/` under a **user** unit as the `yite` account, on a locally built
-binary rather than a release. The installer cannot normalise it because sudo on
-that host requires a password. Doing so by hand means stopping and removing the
-user unit *first* — otherwise the system unit starts a second agent claiming the
-same machine ID.
+binary rather than a release.
+
+The installer refuses to touch a host with a user-level unit, because installing
+the system unit alongside it would leave two agents claiming the same machine ID.
+Migrate it by removing the old unit first, as the `yite` user:
+
+```bash
+systemctl --user disable --now strategon-agent.service
+rm ~/.config/systemd/user/strategon-agent.service
+rm -rf ~/strategon
+```
+
+Then re-run the installer. Sudo on that host needs a password, so run it from an
+interactive terminal — the script allocates a TTY so sudo can prompt.
 
 ---
 
