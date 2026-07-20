@@ -78,6 +78,58 @@ message StatusReport {
   repeated StrategyAssignmentStatus assignments = 2;
 }
 
+// List a directory under a strategy's WorkDir. path is relative to the
+// strategy root; "" or "." means the root itself.
+message ListDir {
+  string request_id = 1;
+  string strategy = 2;
+  string path = 3;
+}
+
+// Fetch one or more files under a strategy's WorkDir. One path streams the
+// file as-is; multiple paths stream a tar.gz the agent builds on the fly.
+message FetchFiles {
+  string request_id = 1;
+  string strategy = 2;
+  repeated string paths = 3;
+}
+
+message DirEntry {
+  string name = 1;
+  bool is_dir = 2;
+  int64 size = 3;
+  google.protobuf.Timestamp mod_time = 4;
+  bool is_symlink = 5;
+}
+
+message DirListing {
+  string request_id = 1;
+  string path = 2; // echoed, normalized
+  repeated DirEntry entries = 3;
+  string error = 4; // non-empty => request failed
+}
+
+enum TransferKind {
+  TRANSFER_KIND_UNSPECIFIED = 0;
+  TRANSFER_KIND_RAW_FILE = 1;
+  TRANSFER_KIND_TARBALL = 2;
+}
+
+// Streamed file/tarball body. The agent sends N of these per request:
+// seq increments from 0; the final message sets eof=true and carries sha256
+// of the whole payload. transfer_kind distinguishes a raw single file from a
+// generated archive so the UI names the download correctly.
+message FileChunk {
+  string request_id = 1;
+  string filename = 2; // suggested download name (only on seq 0)
+  uint32 seq = 3;
+  bytes data = 4;
+  bool eof = 5;
+  string sha256 = 6; // only on eof
+  string error = 7; // non-empty => aborted mid-stream
+  TransferKind transfer_kind = 8; // only on seq 0
+}
+
 // AgentMessage is the northbound envelope. Field 1 is always message_id; oneof
 // payloads start at field 2 and only ever grow.
 message AgentMessage {
@@ -90,6 +142,8 @@ message AgentMessage {
     Nack nack = 6;
     LeaseRequest lease_request = 7;
     LeaseRenew lease_renew = 8;
+    DirListing dir_listing = 9;
+    FileChunk file_chunk = 10;
   }
 }
 
@@ -103,6 +157,8 @@ message ControlMessage {
     DrainNow drain_now = 4;
     LeaseResponse lease_response = 5;
     Ack ack = 6;
+    ListDir list_dir = 7;
+    FetchFiles fetch_files = 8;
   }
 }
 

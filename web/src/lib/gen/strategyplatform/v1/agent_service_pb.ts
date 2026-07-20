@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/agent_service.proto.
  */
 export const file_strategyplatform_v1_agent_service: GenFile = /*@__PURE__*/
-  fileDesc("CidzdHJhdGVneXBsYXRmb3JtL3YxL2FnZW50X3NlcnZpY2UucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEiZwoMTGVhc2VSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSEgoKbWFjaGluZV9pZBgDIAEoCRIdChVyZXF1ZXN0ZWRfdHRsX3NlY29uZHMYBCABKAUiMAoKTGVhc2VSZW5ldxIQCghsZWFzZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCSKLAQoNTGVhc2VSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2dyYW50ZWQYAiABKAgSEAoIbGVhc2VfaWQYAyABKAkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGVueV9yZWFzb24YBSABKAkiTwoPVHJpZ2dlclJvbGxiYWNrEhIKCmNvbW1hbmRfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSFgoOdGFyZ2V0X3ZlcnNpb24YAyABKAkiRwoIRHJhaW5Ob3cSEgoKY29tbWFuZF9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCRIVCg1ncmFjZV9zZWNvbmRzGAMgASgFIhkKA0FjaxISCgpjb21tYW5kX2lkGAEgASgJIkIKBE5hY2sSEwoLaW5fcmVwbHlfdG8YASABKAkSDgoGcmVhc29uGAIgASgJEhUKDWFnZW50X3ZlcnNpb24YAyABKAUiiQIKBUV2ZW50Ei0KCXRpbWVzdGFtcBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoIc2V2ZXJpdHkYAiABKA4yIi5zdHJhdGVneXBsYXRmb3JtLnYxLkV2ZW50U2V2ZXJpdHkSEAoIc3RyYXRlZ3kYAyABKAkSDgoGcmVhc29uGAQgASgJEg8KB21lc3NhZ2UYBSABKAkSOAoHZGV0YWlscxgGIAMoCzInLnN0cmF0ZWd5cGxhdGZvcm0udjEuRXZlbnQuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIm8KDFN0YXR1c1JlcG9ydBIbChNvYnNlcnZlZF9nZW5lcmF0aW9uGAEgASgDEkIKC2Fzc2lnbm1lbnRzGAIgAygLMi0uc3RyYXRlZ3lwbGF0Zm9ybS52MS5TdHJhdGVneUFzc2lnbm1lbnRTdGF0dXMinQMKDEFnZW50TWVzc2FnZRISCgptZXNzYWdlX2lkGAEgASgJEjEKCHJlZ2lzdGVyGAIgASgLMh0uc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZWdpc3RlckgAEjMKCWhlYXJ0YmVhdBgDIAEoCzIeLnN0cmF0ZWd5cGxhdGZvcm0udjEuSGVhcnRiZWF0SAASOgoNc3RhdHVzX3JlcG9ydBgEIAEoCzIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RhdHVzUmVwb3J0SAASKwoFZXZlbnQYBSABKAsyGi5zdHJhdGVneXBsYXRmb3JtLnYxLkV2ZW50SAASKQoEbmFjaxgGIAEoCzIZLnN0cmF0ZWd5cGxhdGZvcm0udjEuTmFja0gAEjoKDWxlYXNlX3JlcXVlc3QYByABKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlUmVxdWVzdEgAEjYKC2xlYXNlX3JlbmV3GAggASgLMh8uc3RyYXRlZ3lwbGF0Zm9ybS52MS5MZWFzZVJlbmV3SABCCQoHcGF5bG9hZCLIAgoOQ29udHJvbE1lc3NhZ2USEgoKbWVzc2FnZV9pZBgBIAEoCRI6Cg1kZXNpcmVkX3N0YXRlGAIgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXNpcmVkU3RhdGVIABJAChB0cmlnZ2VyX3JvbGxiYWNrGAMgASgLMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5UcmlnZ2VyUm9sbGJhY2tIABIyCglkcmFpbl9ub3cYBCABKAsyHS5zdHJhdGVneXBsYXRmb3JtLnYxLkRyYWluTm93SAASPAoObGVhc2VfcmVzcG9uc2UYBSABKAsyIi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlUmVzcG9uc2VIABInCgNhY2sYBiABKAsyGC5zdHJhdGVneXBsYXRmb3JtLnYxLkFja0gAQgkKB3BheWxvYWQqfgoNRXZlbnRTZXZlcml0eRIeChpFVkVOVF9TRVZFUklUWV9VTlNQRUNJRklFRBAAEhcKE0VWRU5UX1NFVkVSSVRZX0lORk8QARIaChZFVkVOVF9TRVZFUklUWV9XQVJOSU5HEAISGAoURVZFTlRfU0VWRVJJVFlfRVJST1IQAzK4AQoMQWdlbnRTZXJ2aWNlElEKBkVucm9sbBIiLnN0cmF0ZWd5cGxhdGZvcm0udjEuRW5yb2xsUmVxdWVzdBojLnN0cmF0ZWd5cGxhdGZvcm0udjEuRW5yb2xsUmVzcG9uc2USVQoHQ29ubmVjdBIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuQWdlbnRNZXNzYWdlGiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Db250cm9sTWVzc2FnZSgBMAEyrgEKDExlYXNlU2VydmljZRJQCgdBY3F1aXJlEiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MZWFzZVJlcXVlc3QaIi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlUmVzcG9uc2USTAoFUmVuZXcSHy5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlUmVuZXcaIi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlUmVzcG9uc2VCTVpLZ2l0aHViLmNvbS9idWxsaW9uYmVhci9zdHJhdGVnb24vZ2VuL3N0cmF0ZWd5cGxhdGZvcm0vdjE7c3RyYXRlZ3lwbGF0Zm9ybXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_strategyplatform_v1_enrollment, file_strategyplatform_v1_spec, file_strategyplatform_v1_status, file_strategyplatform_v1_telemetry]);
+  fileDesc("CidzdHJhdGVneXBsYXRmb3JtL3YxL2FnZW50X3NlcnZpY2UucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEiZwoMTGVhc2VSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSEgoKbWFjaGluZV9pZBgDIAEoCRIdChVyZXF1ZXN0ZWRfdHRsX3NlY29uZHMYBCABKAUiMAoKTGVhc2VSZW5ldxIQCghsZWFzZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCSKLAQoNTGVhc2VSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB2dyYW50ZWQYAiABKAgSEAoIbGVhc2VfaWQYAyABKAkSLgoKZXhwaXJlc19hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLZGVueV9yZWFzb24YBSABKAkiTwoPVHJpZ2dlclJvbGxiYWNrEhIKCmNvbW1hbmRfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSFgoOdGFyZ2V0X3ZlcnNpb24YAyABKAkiRwoIRHJhaW5Ob3cSEgoKY29tbWFuZF9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCRIVCg1ncmFjZV9zZWNvbmRzGAMgASgFIhkKA0FjaxISCgpjb21tYW5kX2lkGAEgASgJIkIKBE5hY2sSEwoLaW5fcmVwbHlfdG8YASABKAkSDgoGcmVhc29uGAIgASgJEhUKDWFnZW50X3ZlcnNpb24YAyABKAUiiQIKBUV2ZW50Ei0KCXRpbWVzdGFtcBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoIc2V2ZXJpdHkYAiABKA4yIi5zdHJhdGVneXBsYXRmb3JtLnYxLkV2ZW50U2V2ZXJpdHkSEAoIc3RyYXRlZ3kYAyABKAkSDgoGcmVhc29uGAQgASgJEg8KB21lc3NhZ2UYBSABKAkSOAoHZGV0YWlscxgGIAMoCzInLnN0cmF0ZWd5cGxhdGZvcm0udjEuRXZlbnQuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIm8KDFN0YXR1c1JlcG9ydBIbChNvYnNlcnZlZF9nZW5lcmF0aW9uGAEgASgDEkIKC2Fzc2lnbm1lbnRzGAIgAygLMi0uc3RyYXRlZ3lwbGF0Zm9ybS52MS5TdHJhdGVneUFzc2lnbm1lbnRTdGF0dXMiPQoHTGlzdERpchISCgpyZXF1ZXN0X2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEgwKBHBhdGgYAyABKAkiQQoKRmV0Y2hGaWxlcxISCgpyZXF1ZXN0X2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEg0KBXBhdGhzGAMgAygJIngKCERpckVudHJ5EgwKBG5hbWUYASABKAkSDgoGaXNfZGlyGAIgASgIEgwKBHNpemUYAyABKAMSLAoIbW9kX3RpbWUYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmlzX3N5bWxpbmsYBSABKAgibQoKRGlyTGlzdGluZxISCgpyZXF1ZXN0X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSLgoHZW50cmllcxgDIAMoCzIdLnN0cmF0ZWd5cGxhdGZvcm0udjEuRGlyRW50cnkSDQoFZXJyb3IYBCABKAkisgEKCUZpbGVDaHVuaxISCgpyZXF1ZXN0X2lkGAEgASgJEhAKCGZpbGVuYW1lGAIgASgJEgsKA3NlcRgDIAEoDRIMCgRkYXRhGAQgASgMEgsKA2VvZhgFIAEoCBIOCgZzaGEyNTYYBiABKAkSDQoFZXJyb3IYByABKAkSOAoNdHJhbnNmZXJfa2luZBgIIAEoDjIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuVHJhbnNmZXJLaW5kIosECgxBZ2VudE1lc3NhZ2USEgoKbWVzc2FnZV9pZBgBIAEoCRIxCghyZWdpc3RlchgCIAEoCzIdLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVnaXN0ZXJIABIzCgloZWFydGJlYXQYAyABKAsyHi5zdHJhdGVneXBsYXRmb3JtLnYxLkhlYXJ0YmVhdEgAEjoKDXN0YXR1c19yZXBvcnQYBCABKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLlN0YXR1c1JlcG9ydEgAEisKBWV2ZW50GAUgASgLMhouc3RyYXRlZ3lwbGF0Zm9ybS52MS5FdmVudEgAEikKBG5hY2sYBiABKAsyGS5zdHJhdGVneXBsYXRmb3JtLnYxLk5hY2tIABI6Cg1sZWFzZV9yZXF1ZXN0GAcgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MZWFzZVJlcXVlc3RIABI2CgtsZWFzZV9yZW5ldxgIIAEoCzIfLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGVhc2VSZW5ld0gAEjYKC2Rpcl9saXN0aW5nGAkgASgLMh8uc3RyYXRlZ3lwbGF0Zm9ybS52MS5EaXJMaXN0aW5nSAASNAoKZmlsZV9jaHVuaxgKIAEoCzIeLnN0cmF0ZWd5cGxhdGZvcm0udjEuRmlsZUNodW5rSABCCQoHcGF5bG9hZCKyAwoOQ29udHJvbE1lc3NhZ2USEgoKbWVzc2FnZV9pZBgBIAEoCRI6Cg1kZXNpcmVkX3N0YXRlGAIgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXNpcmVkU3RhdGVIABJAChB0cmlnZ2VyX3JvbGxiYWNrGAMgASgLMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5UcmlnZ2VyUm9sbGJhY2tIABIyCglkcmFpbl9ub3cYBCABKAsyHS5zdHJhdGVneXBsYXRmb3JtLnYxLkRyYWluTm93SAASPAoObGVhc2VfcmVzcG9uc2UYBSABKAsyIi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlUmVzcG9uc2VIABInCgNhY2sYBiABKAsyGC5zdHJhdGVneXBsYXRmb3JtLnYxLkFja0gAEjAKCGxpc3RfZGlyGAcgASgLMhwuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MaXN0RGlySAASNgoLZmV0Y2hfZmlsZXMYCCABKAsyHy5zdHJhdGVneXBsYXRmb3JtLnYxLkZldGNoRmlsZXNIAEIJCgdwYXlsb2FkKn4KDUV2ZW50U2V2ZXJpdHkSHgoaRVZFTlRfU0VWRVJJVFlfVU5TUEVDSUZJRUQQABIXChNFVkVOVF9TRVZFUklUWV9JTkZPEAESGgoWRVZFTlRfU0VWRVJJVFlfV0FSTklORxACEhgKFEVWRU5UX1NFVkVSSVRZX0VSUk9SEAMqZAoMVHJhbnNmZXJLaW5kEh0KGVRSQU5TRkVSX0tJTkRfVU5TUEVDSUZJRUQQABIaChZUUkFOU0ZFUl9LSU5EX1JBV19GSUxFEAESGQoVVFJBTlNGRVJfS0lORF9UQVJCQUxMEAIyuAEKDEFnZW50U2VydmljZRJRCgZFbnJvbGwSIi5zdHJhdGVneXBsYXRmb3JtLnYxLkVucm9sbFJlcXVlc3QaIy5zdHJhdGVneXBsYXRmb3JtLnYxLkVucm9sbFJlc3BvbnNlElUKB0Nvbm5lY3QSIS5zdHJhdGVneXBsYXRmb3JtLnYxLkFnZW50TWVzc2FnZRojLnN0cmF0ZWd5cGxhdGZvcm0udjEuQ29udHJvbE1lc3NhZ2UoATABMq4BCgxMZWFzZVNlcnZpY2USUAoHQWNxdWlyZRIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGVhc2VSZXF1ZXN0GiIuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MZWFzZVJlc3BvbnNlEkwKBVJlbmV3Eh8uc3RyYXRlZ3lwbGF0Zm9ybS52MS5MZWFzZVJlbmV3GiIuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MZWFzZVJlc3BvbnNlQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_strategyplatform_v1_enrollment, file_strategyplatform_v1_spec, file_strategyplatform_v1_status, file_strategyplatform_v1_telemetry]);
 
 /**
  * @generated from message strategyplatform.v1.LeaseRequest
@@ -293,6 +293,204 @@ export const StatusReportSchema: GenMessage<StatusReport> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_agent_service, 8);
 
 /**
+ * List a directory under a strategy's WorkDir. path is relative to the
+ * strategy root; "" or "." means the root itself.
+ *
+ * @generated from message strategyplatform.v1.ListDir
+ */
+export type ListDir = Message<"strategyplatform.v1.ListDir"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string strategy = 2;
+   */
+  strategy: string;
+
+  /**
+   * @generated from field: string path = 3;
+   */
+  path: string;
+};
+
+/**
+ * Describes the message strategyplatform.v1.ListDir.
+ * Use `create(ListDirSchema)` to create a new message.
+ */
+export const ListDirSchema: GenMessage<ListDir> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_agent_service, 9);
+
+/**
+ * Fetch one or more files under a strategy's WorkDir. One path streams the
+ * file as-is; multiple paths stream a tar.gz the agent builds on the fly.
+ *
+ * @generated from message strategyplatform.v1.FetchFiles
+ */
+export type FetchFiles = Message<"strategyplatform.v1.FetchFiles"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * @generated from field: string strategy = 2;
+   */
+  strategy: string;
+
+  /**
+   * @generated from field: repeated string paths = 3;
+   */
+  paths: string[];
+};
+
+/**
+ * Describes the message strategyplatform.v1.FetchFiles.
+ * Use `create(FetchFilesSchema)` to create a new message.
+ */
+export const FetchFilesSchema: GenMessage<FetchFiles> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_agent_service, 10);
+
+/**
+ * @generated from message strategyplatform.v1.DirEntry
+ */
+export type DirEntry = Message<"strategyplatform.v1.DirEntry"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: bool is_dir = 2;
+   */
+  isDir: boolean;
+
+  /**
+   * @generated from field: int64 size = 3;
+   */
+  size: bigint;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp mod_time = 4;
+   */
+  modTime?: Timestamp | undefined;
+
+  /**
+   * @generated from field: bool is_symlink = 5;
+   */
+  isSymlink: boolean;
+};
+
+/**
+ * Describes the message strategyplatform.v1.DirEntry.
+ * Use `create(DirEntrySchema)` to create a new message.
+ */
+export const DirEntrySchema: GenMessage<DirEntry> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_agent_service, 11);
+
+/**
+ * @generated from message strategyplatform.v1.DirListing
+ */
+export type DirListing = Message<"strategyplatform.v1.DirListing"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * echoed, normalized
+   *
+   * @generated from field: string path = 2;
+   */
+  path: string;
+
+  /**
+   * @generated from field: repeated strategyplatform.v1.DirEntry entries = 3;
+   */
+  entries: DirEntry[];
+
+  /**
+   * non-empty => request failed
+   *
+   * @generated from field: string error = 4;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message strategyplatform.v1.DirListing.
+ * Use `create(DirListingSchema)` to create a new message.
+ */
+export const DirListingSchema: GenMessage<DirListing> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_agent_service, 12);
+
+/**
+ * Streamed file/tarball body. The agent sends N of these per request:
+ * seq increments from 0; the final message sets eof=true and carries sha256
+ * of the whole payload. transfer_kind distinguishes a raw single file from a
+ * generated archive so the UI names the download correctly.
+ *
+ * @generated from message strategyplatform.v1.FileChunk
+ */
+export type FileChunk = Message<"strategyplatform.v1.FileChunk"> & {
+  /**
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * suggested download name (only on seq 0)
+   *
+   * @generated from field: string filename = 2;
+   */
+  filename: string;
+
+  /**
+   * @generated from field: uint32 seq = 3;
+   */
+  seq: number;
+
+  /**
+   * @generated from field: bytes data = 4;
+   */
+  data: Uint8Array;
+
+  /**
+   * @generated from field: bool eof = 5;
+   */
+  eof: boolean;
+
+  /**
+   * only on eof
+   *
+   * @generated from field: string sha256 = 6;
+   */
+  sha256: string;
+
+  /**
+   * non-empty => aborted mid-stream
+   *
+   * @generated from field: string error = 7;
+   */
+  error: string;
+
+  /**
+   * only on seq 0
+   *
+   * @generated from field: strategyplatform.v1.TransferKind transfer_kind = 8;
+   */
+  transferKind: TransferKind;
+};
+
+/**
+ * Describes the message strategyplatform.v1.FileChunk.
+ * Use `create(FileChunkSchema)` to create a new message.
+ */
+export const FileChunkSchema: GenMessage<FileChunk> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_agent_service, 13);
+
+/**
  * AgentMessage is the northbound envelope. Field 1 is always message_id; oneof
  * payloads start at field 2 and only ever grow.
  *
@@ -349,6 +547,18 @@ export type AgentMessage = Message<"strategyplatform.v1.AgentMessage"> & {
      */
     value: LeaseRenew;
     case: "leaseRenew";
+  } | {
+    /**
+     * @generated from field: strategyplatform.v1.DirListing dir_listing = 9;
+     */
+    value: DirListing;
+    case: "dirListing";
+  } | {
+    /**
+     * @generated from field: strategyplatform.v1.FileChunk file_chunk = 10;
+     */
+    value: FileChunk;
+    case: "fileChunk";
   } | { case: undefined; value?: undefined };
 };
 
@@ -357,7 +567,7 @@ export type AgentMessage = Message<"strategyplatform.v1.AgentMessage"> & {
  * Use `create(AgentMessageSchema)` to create a new message.
  */
 export const AgentMessageSchema: GenMessage<AgentMessage> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_agent_service, 9);
+  messageDesc(file_strategyplatform_v1_agent_service, 14);
 
 /**
  * ControlMessage is the southbound envelope. DesiredState is the main message;
@@ -408,6 +618,18 @@ export type ControlMessage = Message<"strategyplatform.v1.ControlMessage"> & {
      */
     value: Ack;
     case: "ack";
+  } | {
+    /**
+     * @generated from field: strategyplatform.v1.ListDir list_dir = 7;
+     */
+    value: ListDir;
+    case: "listDir";
+  } | {
+    /**
+     * @generated from field: strategyplatform.v1.FetchFiles fetch_files = 8;
+     */
+    value: FetchFiles;
+    case: "fetchFiles";
   } | { case: undefined; value?: undefined };
 };
 
@@ -416,7 +638,7 @@ export type ControlMessage = Message<"strategyplatform.v1.ControlMessage"> & {
  * Use `create(ControlMessageSchema)` to create a new message.
  */
 export const ControlMessageSchema: GenMessage<ControlMessage> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_agent_service, 10);
+  messageDesc(file_strategyplatform_v1_agent_service, 15);
 
 /**
  * @generated from enum strategyplatform.v1.EventSeverity
@@ -450,6 +672,32 @@ export const EventSeveritySchema: GenEnum<EventSeverity> = /*@__PURE__*/
   enumDesc(file_strategyplatform_v1_agent_service, 0);
 
 /**
+ * @generated from enum strategyplatform.v1.TransferKind
+ */
+export enum TransferKind {
+  /**
+   * @generated from enum value: TRANSFER_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TRANSFER_KIND_RAW_FILE = 1;
+   */
+  RAW_FILE = 1,
+
+  /**
+   * @generated from enum value: TRANSFER_KIND_TARBALL = 2;
+   */
+  TARBALL = 2,
+}
+
+/**
+ * Describes the enum strategyplatform.v1.TransferKind.
+ */
+export const TransferKindSchema: GenEnum<TransferKind> = /*@__PURE__*/
+  enumDesc(file_strategyplatform_v1_agent_service, 1);
+
+/**
  * @generated from service strategyplatform.v1.AgentService
  */
 export const AgentService: GenService<{
@@ -480,7 +728,7 @@ export const AgentService: GenService<{
   serviceDesc(file_strategyplatform_v1_agent_service, 0);
 
 /**
- * LeaseService is the fencing-lease authority (IMPROVEMENT A1 / SAFETY).
+ * LeaseService is the fencing-lease authority.
  * Strategy SDKs call these unary RPCs on the agent port (mTLS/h2c); the agent
  * bidi stream does not participate in lease acquire/renew.
  *

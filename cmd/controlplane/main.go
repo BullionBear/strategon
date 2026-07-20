@@ -21,6 +21,7 @@ import (
 	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/api"
+	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/grpcstream"
 	cpLease "github.com/bullionbear/strategon/internal/controlplane/lease"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
@@ -100,9 +101,10 @@ func main() {
 		st = mem
 		logger.Info("using in-memory store (state lost on restart; set --db for durability)")
 	}
-	agentSrv := grpcstream.New(st, grpcstream.WithResync(*resync), grpcstream.WithLogger(logger))
+	broker := filetransfer.New()
+	agentSrv := grpcstream.New(st, grpcstream.WithResync(*resync), grpcstream.WithLogger(logger), grpcstream.WithBroker(broker))
 	leaseSrv := cpLease.New(st, logger)
-	humanSrv := api.New(st, hub, agentSrv, logger)
+	humanSrv := api.NewWithBroker(st, hub, agentSrv, broker, logger)
 
 	agentMux := http.NewServeMux()
 	agentPath, agentHandler := strategyplatformv1connect.NewAgentServiceHandler(agentSrv)

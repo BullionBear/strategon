@@ -5,6 +5,7 @@ package strategyplatform.v1;
 option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
 
 import "google/protobuf/timestamp.proto";
+import "strategyplatform/v1/agent_service.proto";
 import "strategyplatform/v1/common.proto";
 import "strategyplatform/v1/enrollment.proto";
 import "strategyplatform/v1/status.proto";
@@ -138,11 +139,37 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Undeploy"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Undeploy" | "DownloadFiles"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
   string to_version = 7;
+  // Free-form context (e.g. downloaded paths for DownloadFiles).
+  string detail = 8;
+}
+
+message BrowseDirRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  string path = 3; // relative to strategy WorkDir; "" or "." = root
+}
+
+message BrowseDirResponse {
+  repeated DirEntry entries = 1;
+  string path = 2; // echoed, normalized
+}
+
+message DownloadFilesRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  repeated string paths = 3;
+}
+
+message DownloadChunk {
+  bytes data = 1;
+  string filename = 2; // set on first chunk
+  TransferKind transfer_kind = 3; // set on first chunk
+  bool eof = 4;
 }
 
 message ListAuditRequest {
@@ -231,4 +258,11 @@ service ControlPlaneService {
 
   // Short-term resource trend from the PG sliding window (not a TSDB).
   rpc GetMachineMetrics(GetMachineMetricsRequest) returns (GetMachineMetricsResponse);
+
+  // Browse a strategy WorkDir on a connected agent (one directory level).
+  rpc BrowseDir(BrowseDirRequest) returns (BrowseDirResponse);
+
+  // Download one or more WorkDir paths. A single regular file streams as-is;
+  // multiple paths (or a directory) stream as a tar.gz built on the agent.
+  rpc DownloadFiles(DownloadFilesRequest) returns (stream DownloadChunk);
 }

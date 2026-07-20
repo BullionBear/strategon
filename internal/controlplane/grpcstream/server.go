@@ -17,9 +17,17 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/clock"
+	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/mtls"
 )
+
+// session holds per-machine Connect-loop channels. All stream.Send calls stay
+// on the Connect goroutine via sendCh.
+type session struct {
+	notify chan struct{}
+	sendCh chan *pb.ControlMessage
+}
 
 // Server implements strategyplatformv1connect.AgentServiceHandler.
 type Server struct {
@@ -27,9 +35,10 @@ type Server struct {
 	clock  clock.Clock
 	resync time.Duration
 	logger *slog.Logger
+	broker *filetransfer.Broker
 
-	mu        sync.Mutex
-	notifiers map[string]chan struct{} // machineID -> re-push signal
+	mu       sync.Mutex
+	sessions map[string]*session // machineID -> session
 }
 
 // Option configures a Server.
@@ -44,14 +53,17 @@ func WithClock(c clock.Clock) Option { return func(s *Server) { s.clock = c } }
 // WithLogger sets the logger.
 func WithLogger(l *slog.Logger) Option { return func(s *Server) { s.logger = l } }
 
+// WithBroker attaches the file-transfer correlation broker.
+func WithBroker(b *filetransfer.Broker) Option { return func(s *Server) { s.broker = b } }
+
 // New constructs a Server backed by st.
 func New(st store.Store, opts ...Option) *Server {
 	s := &Server{
-		store:     st,
-		clock:     clock.Real{},
-		resync:    30 * time.Second,
-		logger:    slog.Default(),
-		notifiers: map[string]chan struct{}{},
+		store:    st,
+		clock:    clock.Real{},
+		resync:   30 * time.Second,
+		logger:   slog.Default(),
+		sessions: map[string]*session{},
 	}
 	for _, o := range opts {
 		o(s)
@@ -63,14 +75,32 @@ func New(st store.Store, opts ...Option) *Server {
 // (called by the human API after a spec change).
 func (s *Server) Notify(machineID string) {
 	s.mu.Lock()
-	ch := s.notifiers[machineID]
+	sess := s.sessions[machineID]
 	s.mu.Unlock()
-	if ch == nil {
+	if sess == nil {
 		return
 	}
 	select {
-	case ch <- struct{}{}:
+	case sess.notify <- struct{}{}:
 	default: // a re-push is already pending
+	}
+}
+
+// SendControl queues a southbound ControlMessage for a connected machine.
+// Returns Unavailable if the agent is not connected. The Connect loop owns
+// all stream.Send calls.
+func (s *Server) SendControl(ctx context.Context, machineID string, msg *pb.ControlMessage) error {
+	s.mu.Lock()
+	sess := s.sessions[machineID]
+	s.mu.Unlock()
+	if sess == nil {
+		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("machine %q is not connected", machineID))
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case sess.sendCh <- msg:
+		return nil
 	}
 }
 
@@ -103,8 +133,8 @@ func (s *Server) Connect(ctx context.Context, stream *connect.BidiStream[pb.Agen
 	s.logger.Info("agent connected", "machine_id", machineID,
 		"agent_version", reg.GetAgentVersion(), "agent_build_version", reg.GetAgentBuildVersion())
 
-	notify := s.registerNotifier(machineID)
-	defer s.unregisterNotifier(machineID)
+	sess := s.registerSession(machineID)
+	defer s.unregisterSession(machineID)
 	defer func() { _ = s.store.SetReachable(machineID, false) }()
 
 	// Initial full snapshot on connect (idempotent; agent diffs and converges).
@@ -135,8 +165,12 @@ func (s *Server) Connect(ctx context.Context, stream *connect.BidiStream[pb.Agen
 				return nil
 			}
 			return err
-		case <-notify:
+		case <-sess.notify:
 			if err := s.pushDesired(stream, machineID); err != nil {
+				return err
+			}
+		case msg := <-sess.sendCh:
+			if err := stream.Send(msg); err != nil {
 				return err
 			}
 		case <-resync.C():
@@ -172,21 +206,38 @@ func (s *Server) handleAgentMessage(machineID string, msg *pb.AgentMessage) {
 		// Lease lifecycle is owned by the strategy SDK via LeaseService
 		// the agent stream does not participate.
 		s.logger.Debug("lease stream message ignored (SDK-owned)", "machine_id", machineID)
+	case *pb.AgentMessage_DirListing:
+		// Deliver off the receive loop so a slow BrowseDir waiter cannot
+		// stall StatusReport / Heartbeat / Nack handling for this machine.
+		if s.broker != nil {
+			listing := p.DirListing
+			go s.broker.DeliverListing(listing)
+		}
+	case *pb.AgentMessage_FileChunk:
+		// Same as DirListing: never block the receive goroutine on a slow
+		// DownloadFiles consumer (chunk channel backpressure).
+		if s.broker != nil {
+			chunk := p.FileChunk
+			go s.broker.DeliverChunk(chunk)
+		}
 	default:
 		s.logger.Warn("unhandled agent message", "machine_id", machineID)
 	}
 }
 
-func (s *Server) registerNotifier(machineID string) chan struct{} {
-	ch := make(chan struct{}, 1)
+func (s *Server) registerSession(machineID string) *session {
+	sess := &session{
+		notify: make(chan struct{}, 1),
+		sendCh: make(chan *pb.ControlMessage, 8),
+	}
 	s.mu.Lock()
-	s.notifiers[machineID] = ch
+	s.sessions[machineID] = sess
 	s.mu.Unlock()
-	return ch
+	return sess
 }
 
-func (s *Server) unregisterNotifier(machineID string) {
+func (s *Server) unregisterSession(machineID string) {
 	s.mu.Lock()
-	delete(s.notifiers, machineID)
+	delete(s.sessions, machineID)
 	s.mu.Unlock()
 }

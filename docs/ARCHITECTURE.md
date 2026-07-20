@@ -110,6 +110,27 @@ Key packages:
 - Reconcile: `internal/agent/reconciler`
 - View join: `internal/controlplane/api/view.go`
 
+### File browse & retrieval
+
+Operators can browse a strategy **WorkDir** (`Manager.StrategyDir` =
+`<base>/<strategy>`) and download files from the UI. There is no object
+storage: bytes flow agent → control plane → browser over the existing
+agent-initiated `Connect` bidi stream.
+
+- Human RPCs: `BrowseDir` (unary), `DownloadFiles` (server-stream).
+- Southbound: `ListDir` / `FetchFiles` on `ControlMessage`.
+- Northbound: `DirListing` / `FileChunk` on `AgentMessage`.
+- Control plane correlates with an in-memory broker (`filetransfer.Broker`)
+  keyed by `request_id`. Southbound sends go through a per-machine send
+  channel owned by the Connect loop (no concurrent `stream.Send`).
+- Path safety: agent jails all access with `os.OpenRoot(strategyDir)`.
+- Caps: single file ≤ 256 MiB; tarball ≤ 500 files and ≤ 512 MiB uncompressed;
+  browse timeout 30s; download timeout 5m; chunk size 64 KiB.
+- Capability gate: `agent_version >= 2`. Older agents Nack unknown payloads.
+- Audit: a successful download (EOF) appends `action=DownloadFiles` with
+  `detail` including paths, filename, transfer kind, and byte count. Failed
+  agent validation does not write an audit entry.
+
 ## Core concepts
 
 ### Machine and assignment
