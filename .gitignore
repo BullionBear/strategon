@@ -34,3 +34,6 @@ web/build/
 web/.env
 web/.env.*
 !web/.env.example
+
+# Cached release assets fetched by deploy/install-agent.sh
+/.cache/

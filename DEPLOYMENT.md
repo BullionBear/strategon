@@ -182,7 +182,7 @@ in `/opt/strategon/tls/`, mounted read-only at `/tls`.
 |---|---|---|---|
 | Root CA | `strategon-ca` | — | offline; cert only on hosts |
 | Server | `control-plane` | `IP:100.108.10.2` | `/opt/strategon/tls/` on CP host |
-| Client | `yite` | — | `~/strategon/tls/` on the agent host |
+| Client | one per machine (`cp`, `sys`, `ori-1`, `ori-2`, `yite`) | — | `/opt/strategon-agent/tls/` on each agent host |
 
 The server certificate's IP SAN pins it to the Tailscale address — reaching the
 control plane by any other address fails verification.
@@ -199,40 +199,71 @@ the machine identity. Nothing else authenticates an agent.
 ### Registered agents
 
 Machines self-register on first connect — there is no separate registration
-step or RPC.
+step or RPC. The machine ID is the client-certificate CN.
 
-| Machine | Region | Host | Runs as |
+| Machine | Region | Host | Service account |
 |---|---|---|---|
-| `yite` | `tw` | `100.65.26.119` (Ubuntu 24.04, x86_64) | user `yite`, systemd user unit |
+| `cp` | jp | `139.162.74.23` — shares the control-plane host | `strategon` (system unit) |
+| `sys` | jp | `172.237.19.123` | `strategon` (system unit) |
+| `ori-1` | jp | `ems`, EC2 ap-northeast-1 | `strategon` (system unit) |
+| `ori-2` | jp | `mm`, EC2 ap-northeast-1 | `strategon` (system unit) |
+| `yite` | tw | `100.65.26.119` | `yite` (**user** unit — see below) |
 
-Region and zone are operator labels passed with `--region` / `--zone`; the host
-cannot discover them. The fleet table groups by region and shows machines with
-no region under "Unassigned".
+### Installing and upgrading
 
-Agent install layout on that host:
+[`deploy/install-agent.sh`](deploy/install-agent.sh) is idempotent — safe to
+re-run across the fleet at any time.
+
+```bash
+deploy/install-agent.sh <ssh-target> <machine-id> <region> [metrics-ip]
+deploy/install-agent.sh --check <ssh-target> <machine-id> <region>
+
+deploy/install-agent.sh ems ori-1 jp     # install, upgrade, or no-op
+deploy/install-agent.sh --check mm ori-2 jp
+```
+
+It compares the installed binary's SHA256 against the checksum published in the
+release's `SHA256SUMS`: absent means install, different means upgrade (stop,
+replace, start), identical means skip. Unit-file drift is reconciled either way.
+
+Checksums rather than version strings deliberately — `internal/buildinfo`
+states its values are for display only and must not drive upgrade decisions,
+and a checksum also catches a locally rebuilt binary wearing a released tag.
+
+It runs from an operator workstation rather than on the host, because the two
+things it needs must never live on a trading machine: the GitHub token that
+reads a private repo's release assets, and the CA private key that signs agent
+identities. Certificates are issued only on first install; reissuing would
+orphan the identity the control plane already knows.
+
+Agents run as an unprivileged `strategon` system account. The agent spawns and
+supervises strategy processes, so root would mean root for every strategy —
+which matters most on `cp`, which also hosts Traefik, the control plane and two
+unrelated applications.
+
+Install layout:
 
 ```
-~/strategon/agent                 # static binary
-~/strategon/tls/{cert,key,ca-cert}.pem
-~/strategies/                     # --base, strategy release trees
-~/.config/systemd/user/strategon-agent.service
+/opt/strategon-agent/agent
+/opt/strategon-agent/tls/{cert,key,ca-cert}.pem
+/opt/strategon-agent/.installed-release
+/var/lib/strategon-agent/strategies      # --base
+/etc/systemd/system/strategon-agent.service
 ```
 
 ```bash
-systemctl --user status strategon-agent
-journalctl --user -u strategon-agent -f
+systemctl status strategon-agent
+journalctl -u strategon-agent -f
 ```
 
-The unit runs **unprivileged**. The agent forks and supervises strategy
-processes, so running it as root would hand every strategy root on that box.
+### Known drift
 
-Two consequences of that choice, both currently unresolved:
-
-- **`loginctl enable-linger yite` must be set**, or the user-level systemd
-  manager exits when the last session closes and the agent stops with it.
-- **`--cgroup-root` is empty, so strategies run without cgroup confinement.**
-  Delegating a cgroup subtree to a non-root user needs a systemd drop-in. Worth
-  doing before running anything real on that machine.
+`yite` predates the installer and does not match the others: it runs from
+`~/strategon/` under a **user** unit as the `yite` account, on a locally built
+binary rather than a release. The installer cannot normalise it because sudo on
+that host requires a password. Doing so by hand means stopping and removing the
+user unit *first* — otherwise the system unit starts a second agent claiming the
+same machine ID.
 
 ---
 
@@ -312,6 +343,10 @@ For rebuilding from scratch:
 - Agent certificates carry no expiry-driven rotation process yet. Reissue with
   `strategon-ca sign` and restart the unit; there is no revocation list, so a
   compromised agent key means reissuing the CA and every certificate under it.
+  With five agents sharing one CA, that blast radius is now worth reducing.
+- Enrollment is still manual: `install-agent.sh` signs a certificate locally and
+  copies the private key over SSH. CICD.md §0 assumes bootstrap mTLS enrollment
+  instead, where the agent generates its own key and never transmits it.
 - `DISCORD_BOT_TOKEN` is not used anywhere. Guild membership is checked through
   the user's own OAuth grant, so no bot credential sits on the host.
 - No backups are configured for the `strategon` database. The control plane is
