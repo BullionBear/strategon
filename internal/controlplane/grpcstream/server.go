@@ -207,12 +207,18 @@ func (s *Server) handleAgentMessage(machineID string, msg *pb.AgentMessage) {
 		// the agent stream does not participate.
 		s.logger.Debug("lease stream message ignored (SDK-owned)", "machine_id", machineID)
 	case *pb.AgentMessage_DirListing:
+		// Deliver off the receive loop so a slow BrowseDir waiter cannot
+		// stall StatusReport / Heartbeat / Nack handling for this machine.
 		if s.broker != nil {
-			s.broker.DeliverListing(p.DirListing)
+			listing := p.DirListing
+			go s.broker.DeliverListing(listing)
 		}
 	case *pb.AgentMessage_FileChunk:
+		// Same as DirListing: never block the receive goroutine on a slow
+		// DownloadFiles consumer (chunk channel backpressure).
 		if s.broker != nil {
-			s.broker.DeliverChunk(p.FileChunk)
+			chunk := p.FileChunk
+			go s.broker.DeliverChunk(chunk)
 		}
 	default:
 		s.logger.Warn("unhandled agent message", "machine_id", machineID)

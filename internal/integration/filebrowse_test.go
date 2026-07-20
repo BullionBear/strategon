@@ -61,8 +61,8 @@ func TestWorkDirBrowseAndDownloadEndToEnd(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(work, "logs", "app.log"), []byte("line1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Larger payload to exercise chunking during heartbeat window.
-	big := bytes.Repeat([]byte("x"), 200*1024)
+	// Larger payload to exercise chunking across multiple heartbeat intervals.
+	big := bytes.Repeat([]byte("x"), 2*1024*1024)
 	if err := os.WriteFile(filepath.Join(work, "big.bin"), big, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +150,7 @@ func TestWorkDirBrowseAndDownloadEndToEnd(t *testing.T) {
 		t.Fatalf("single name=%q data=%q", singleName, singleBuf.String())
 	}
 
-	// --- Multi download (tarball) while heartbeats continue ---
+	// --- Multi download (tarball): heartbeats must advance mid-transfer ---
 	hbBefore, _ := st.GetMachine("m-browse")
 	lastHB := hbBefore.LastHeartbeat
 
@@ -165,6 +165,7 @@ func TestWorkDirBrowseAndDownloadEndToEnd(t *testing.T) {
 	var multiBuf bytes.Buffer
 	var multiName string
 	var kind pb.TransferKind
+	sawHBDuring := false
 	for multi.Receive() {
 		chunk := multi.Msg()
 		if chunk.GetFilename() != "" {
@@ -174,6 +175,11 @@ func TestWorkDirBrowseAndDownloadEndToEnd(t *testing.T) {
 			kind = chunk.GetTransferKind()
 		}
 		multiBuf.Write(chunk.GetData())
+		if !sawHBDuring {
+			if rec, ok := st.GetMachine("m-browse"); ok && rec.LastHeartbeat > lastHB {
+				sawHBDuring = true
+			}
+		}
 		if chunk.GetEof() {
 			break
 		}
@@ -190,22 +196,46 @@ func TestWorkDirBrowseAndDownloadEndToEnd(t *testing.T) {
 	if multiBuf.Bytes()[0] != 0x1f || multiBuf.Bytes()[1] != 0x8b {
 		t.Fatal("expected gzip magic")
 	}
-
-	waitUntil(t, 3*time.Second, func() bool {
-		rec, ok := st.GetMachine("m-browse")
-		return ok && rec.LastHeartbeat > lastHB
-	}, "heartbeat during/after transfer")
+	if !sawHBDuring {
+		// Transfer of a 2 MiB payload at 100ms heartbeat should overlap at least one beat.
+		waitUntil(t, 2*time.Second, func() bool {
+			rec, ok := st.GetMachine("m-browse")
+			return ok && rec.LastHeartbeat > lastHB
+		}, "heartbeat during large transfer (starvation check)")
+	}
 
 	audits := st.ListAudit("m-browse", strategy)
 	found := false
 	for _, a := range audits {
 		if a.GetAction() == "DownloadFiles" {
 			found = true
+			if a.GetDetail() == "" || !bytes.Contains([]byte(a.GetDetail()), []byte("bytes=")) {
+				t.Fatalf("audit detail should include outcome bytes, got %q", a.GetDetail())
+			}
 			break
 		}
 	}
 	if !found {
-		t.Fatal("expected DownloadFiles audit entry")
+		t.Fatal("expected DownloadFiles audit entry after successful EOF")
+	}
+
+	// Failed download (path escape) must not create an audit entry.
+	auditCount := len(st.ListAudit("m-browse", strategy))
+	failStream, err := humanClient.DownloadFiles(ctx, connect.NewRequest(&pb.DownloadFilesRequest{
+		MachineId: "m-browse",
+		Strategy:  strategy,
+		Paths:     []string{"../escape"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for failStream.Receive() {
+	}
+	if failStream.Err() == nil {
+		t.Fatal("expected download of ../escape to fail")
+	}
+	if got := len(st.ListAudit("m-browse", strategy)); got != auditCount {
+		t.Fatalf("failed download should not append audit: before=%d after=%d", auditCount, got)
 	}
 }
 

@@ -109,9 +109,16 @@
 	}
 
 	function entryType(e: DirEntry): string {
+		// Symlinks are never navigable (agent does not follow them for browse).
 		if (e.isSymlink) return 'symlink';
 		if (e.isDir) return 'dir';
 		return 'file';
+	}
+
+	function entryLabel(e: DirEntry): string {
+		if (e.isSymlink) return `${e.name} →`;
+		if (e.isDir) return `${e.name}/`;
+		return e.name;
 	}
 
 	onMount(() => {
@@ -211,12 +218,16 @@
 							</td>
 							<td class="mono name">
 								{#if e.isDir && !e.isSymlink}
-									<button type="button" class="linkish" onclick={() => openDir(e.name)}>{e.name}/</button>
+									<button type="button" class="linkish" onclick={() => openDir(e.name)}
+										>{entryLabel(e)}</button
+									>
 								{:else}
-									{e.name}
+									<span class:symlink={e.isSymlink} title={e.isSymlink ? 'Symlink (not followed)' : undefined}
+										>{entryLabel(e)}</span
+									>
 								{/if}
 							</td>
-							<td class="mono muted">{e.isDir ? '—' : formatBytes(e.size)}</td>
+							<td class="mono muted">{e.isDir || e.isSymlink ? '—' : formatBytes(e.size)}</td>
 							<td class="mono muted tiny">{e.modTime ? formatClock(e.modTime) : '—'}</td>
 							<td class="muted tiny">{entryType(e)}</td>
 						</tr>
@@ -301,6 +312,10 @@
 	}
 	.linkish:hover {
 		text-decoration: underline;
+	}
+	.symlink {
+		color: var(--ink-muted);
+		font-style: italic;
 	}
 	.pill {
 		display: inline-block;

@@ -5,7 +5,9 @@ package filetransfer
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
@@ -18,11 +20,14 @@ const (
 	DownloadTimeout = 5 * time.Minute
 )
 
+var reqIDFallback atomic.Uint64
+
 // Pending is a registered in-flight browse or download request.
 type Pending struct {
 	MachineID string
 	ListingCh chan *pb.DirListing
 	ChunkCh   chan *pb.FileChunk
+	done      chan struct{} // closed on cancel; unblocks Deliver* waiters
 	cancel    func()
 }
 
@@ -42,11 +47,13 @@ func New() *Broker {
 func (b *Broker) NewListing(machineID string) (requestID string, listingCh <-chan *pb.DirListing, cancel func()) {
 	id := newRequestID()
 	ch := make(chan *pb.DirListing, 1)
-	p := &Pending{MachineID: machineID, ListingCh: ch}
+	done := make(chan struct{})
+	p := &Pending{MachineID: machineID, ListingCh: ch, done: done}
 	var once sync.Once
 	cancel = func() {
 		once.Do(func() {
 			b.remove(id)
+			close(done)
 			drainListing(ch)
 		})
 	}
@@ -61,11 +68,13 @@ func (b *Broker) NewListing(machineID string) (requestID string, listingCh <-cha
 func (b *Broker) NewDownload(machineID string) (requestID string, chunkCh <-chan *pb.FileChunk, cancel func()) {
 	id := newRequestID()
 	ch := make(chan *pb.FileChunk, 32)
-	p := &Pending{MachineID: machineID, ChunkCh: ch}
+	done := make(chan struct{})
+	p := &Pending{MachineID: machineID, ChunkCh: ch, done: done}
 	var once sync.Once
 	cancel = func() {
 		once.Do(func() {
 			b.remove(id)
+			close(done)
 			drainChunks(ch)
 		})
 	}
@@ -77,6 +86,9 @@ func (b *Broker) NewDownload(machineID string) (requestID string, chunkCh <-chan
 }
 
 // DeliverListing completes a browse waiter. Unknown request_ids are ignored.
+// May block until the waiter receives or the request is cancelled — callers
+// that must not stall (e.g. the agent stream receive loop) should invoke this
+// from a goroutine.
 func (b *Broker) DeliverListing(listing *pb.DirListing) {
 	if listing == nil {
 		return
@@ -89,14 +101,14 @@ func (b *Broker) DeliverListing(listing *pb.DirListing) {
 	}
 	select {
 	case p.ListingCh <- listing:
-	default:
-		// Already delivered or cancelled.
+	case <-p.done:
 	}
 }
 
 // DeliverChunk forwards a file chunk. Unknown request_ids are ignored.
-// The channel may block briefly under backpressure; callers should not hold
-// locks across this call.
+// May block until the human-API consumer drains the channel or the request is
+// cancelled. Callers on the agent receive path must invoke this asynchronously
+// so a slow DownloadFiles client cannot stall StatusReport/Heartbeat handling.
 func (b *Broker) DeliverChunk(chunk *pb.FileChunk) {
 	if chunk == nil {
 		return
@@ -109,12 +121,7 @@ func (b *Broker) DeliverChunk(chunk *pb.FileChunk) {
 	}
 	select {
 	case p.ChunkCh <- chunk:
-	default:
-		// Buffer full — try blocking briefly so we don't drop mid-stream.
-		select {
-		case p.ChunkCh <- chunk:
-		case <-time.After(5 * time.Second):
-		}
+	case <-p.done:
 	}
 }
 
@@ -147,7 +154,8 @@ func drainChunks(ch chan *pb.FileChunk) {
 func newRequestID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return hex.EncodeToString([]byte(time.Now().Format(time.RFC3339Nano)))
+		n := reqIDFallback.Add(1)
+		return fmt.Sprintf("fb-%d-%d", time.Now().UnixNano(), n)
 	}
 	return hex.EncodeToString(b[:])
 }

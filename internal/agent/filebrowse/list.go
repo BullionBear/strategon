@@ -45,11 +45,12 @@ func List(root *os.Root, requestID, relPath string) *pb.DirListing {
 			de.Size = info.Size()
 			de.ModTime = timestamppb.New(info.ModTime())
 			de.IsSymlink = info.Mode()&os.ModeSymlink != 0
-			// For symlinks, IsDir reflects the target via FileInfo from ReadDir
-			// on most systems; keep Mode-based IsDir from DirEntry.
-			if de.IsSymlink {
-				de.IsDir = false
-			}
+		}
+		// Never treat symlinks as navigable directories: OpenRoot refuses to
+		// follow links that escape the jail, and we do not follow in-root
+		// links for browse either. UI should show these as symlink entries.
+		if de.IsSymlink {
+			de.IsDir = false
 		}
 		out.Entries = append(out.Entries, de)
 	}

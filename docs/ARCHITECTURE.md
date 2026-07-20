@@ -127,8 +127,9 @@ agent-initiated `Connect` bidi stream.
 - Caps: single file ≤ 256 MiB; tarball ≤ 500 files and ≤ 512 MiB uncompressed;
   browse timeout 30s; download timeout 5m; chunk size 64 KiB.
 - Capability gate: `agent_version >= 2`. Older agents Nack unknown payloads.
-- Audit: every download appends `action=DownloadFiles` with `detail` listing
-  the requested paths.
+- Audit: a successful download (EOF) appends `action=DownloadFiles` with
+  `detail` including paths, filename, transfer kind, and byte count. Failed
+  agent validation does not write an audit entry.
 
 ## Core concepts
 

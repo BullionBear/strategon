@@ -586,20 +586,12 @@ func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.Down
 		return err
 	}
 
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp: timestamppb.Now(),
-		Actor:     auth.ActorFromContext(ctx),
-		Action:    "DownloadFiles",
-		MachineId: msg.GetMachineId(),
-		Strategy:  msg.GetStrategy(),
-		Detail:    strings.Join(paths, "\n"),
-	})
-
 	deadline := time.NewTimer(filetransfer.DownloadTimeout)
 	defer deadline.Stop()
 
 	var filename string
 	var kind pb.TransferKind
+	var bytesSent int64
 	for {
 		select {
 		case <-ctx.Done():
@@ -619,6 +611,7 @@ func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.Down
 			if chunk.GetTransferKind() != pb.TransferKind_TRANSFER_KIND_UNSPECIFIED {
 				kind = chunk.GetTransferKind()
 			}
+			bytesSent += int64(len(chunk.GetData()))
 			out := &pb.DownloadChunk{
 				Data:         chunk.GetData(),
 				Filename:     filename,
@@ -629,6 +622,17 @@ func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.Down
 				return err
 			}
 			if chunk.GetEof() {
+				// Audit only after a successful delivery so failed agent
+				// validation (rejected paths, caps, etc.) is not logged as a download.
+				_ = s.store.AppendAudit(&pb.AuditEntry{
+					Timestamp: timestamppb.Now(),
+					Actor:     auth.ActorFromContext(ctx),
+					Action:    "DownloadFiles",
+					MachineId: msg.GetMachineId(),
+					Strategy:  msg.GetStrategy(),
+					Detail: fmt.Sprintf("paths=%s\nfilename=%s\nkind=%s\nbytes=%d",
+						strings.Join(paths, ","), filename, kind.String(), bytesSent),
+				})
 				return nil
 			}
 		}
