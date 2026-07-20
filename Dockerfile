@@ -35,6 +35,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
 
 # --- stage 3: runtime ---
 FROM scratch
+# Links the GHCR package to this repository, which is what lets a workflow's
+# GITHUB_TOKEN push to it. Without the link, pushes are 403 regardless of the
+# workflow's `packages: write` permission.
+LABEL org.opencontainers.image.source="https://github.com/BullionBear/strategon"
+LABEL org.opencontainers.image.description="Strategon control plane (UI + human API + AgentService)"
 # Needed for the outbound TLS call to Discord's OAuth endpoints.
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 # Postgres DSN parsing and OAuth state both want a real clock/zone table.
