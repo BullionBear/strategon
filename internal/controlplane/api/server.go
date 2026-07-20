@@ -9,20 +9,33 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/agent/filebrowse"
 	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
+	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// MinFileBrowseAgentVersion is the capability version that advertises
+// ListDir/FetchFiles support.
+const MinFileBrowseAgentVersion int32 = 2
+
 // AgentNotifier pushes a fresh DesiredState to a connected agent after a write.
 type AgentNotifier interface {
 	Notify(machineID string)
+}
+
+// AgentController extends AgentNotifier with imperative southbound sends.
+type AgentController interface {
+	AgentNotifier
+	SendControl(ctx context.Context, machineID string, msg *pb.ControlMessage) error
 }
 
 // Server implements strategyplatformv1connect.ControlPlaneServiceHandler.
@@ -30,15 +43,21 @@ type Server struct {
 	store  store.Store
 	hub    *store.Hub
 	agents AgentNotifier
+	broker *filetransfer.Broker
 	logger *slog.Logger
 }
 
 // New constructs a human-API server.
 func New(st store.Store, hub *store.Hub, agents AgentNotifier, logger *slog.Logger) *Server {
+	return NewWithBroker(st, hub, agents, nil, logger)
+}
+
+// NewWithBroker constructs a human-API server with file-transfer correlation.
+func NewWithBroker(st store.Store, hub *store.Hub, agents AgentNotifier, broker *filetransfer.Broker, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{store: st, hub: hub, agents: agents, logger: logger}
+	return &Server{store: st, hub: hub, agents: agents, broker: broker, logger: logger}
 }
 
 func (s *Server) ListMachines(_ context.Context, req *connect.Request[pb.ListMachinesRequest]) (*connect.Response[pb.ListMachinesResponse], error) {
@@ -485,4 +504,160 @@ func defaultOrCloneSpec(existing *pb.StrategyAssignmentSpec, strategy string) *p
 			EnableAutoRollback:  true,
 		},
 	}
+}
+
+func (s *Server) BrowseDir(ctx context.Context, req *connect.Request[pb.BrowseDirRequest]) (*connect.Response[pb.BrowseDirResponse], error) {
+	msg := req.Msg
+	if err := s.gateFileBrowse(msg.GetMachineId(), msg.GetStrategy()); err != nil {
+		return nil, err
+	}
+	ctrl, err := s.agentControl()
+	if err != nil {
+		return nil, err
+	}
+	if s.broker == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("file transfer broker not configured"))
+	}
+
+	reqID, listingCh, cancel := s.broker.NewListing(msg.GetMachineId())
+	defer cancel()
+
+	if err := ctrl.SendControl(ctx, msg.GetMachineId(), &pb.ControlMessage{
+		MessageId: reqID,
+		Payload: &pb.ControlMessage_ListDir{ListDir: &pb.ListDir{
+			RequestId: reqID,
+			Strategy:  msg.GetStrategy(),
+			Path:      msg.GetPath(),
+		}},
+	}); err != nil {
+		return nil, err
+	}
+
+	timer := time.NewTimer(filetransfer.BrowseTimeout)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-timer.C:
+		return nil, connect.NewError(connect.CodeDeadlineExceeded, errors.New("browse timed out waiting for agent"))
+	case listing := <-listingCh:
+		if listing.GetError() != "" {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(listing.GetError()))
+		}
+		return connect.NewResponse(&pb.BrowseDirResponse{
+			Entries: listing.GetEntries(),
+			Path:    listing.GetPath(),
+		}), nil
+	}
+}
+
+func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.DownloadFilesRequest], stream *connect.ServerStream[pb.DownloadChunk]) error {
+	msg := req.Msg
+	if err := s.gateFileBrowse(msg.GetMachineId(), msg.GetStrategy()); err != nil {
+		return err
+	}
+	paths := msg.GetPaths()
+	if len(paths) == 0 {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("paths is required"))
+	}
+	if len(paths) > filebrowse.MaxTarballFiles {
+		return connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("at most %d paths allowed", filebrowse.MaxTarballFiles))
+	}
+	ctrl, err := s.agentControl()
+	if err != nil {
+		return err
+	}
+	if s.broker == nil {
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New("file transfer broker not configured"))
+	}
+
+	reqID, chunkCh, cancel := s.broker.NewDownload(msg.GetMachineId())
+	defer cancel()
+
+	if err := ctrl.SendControl(ctx, msg.GetMachineId(), &pb.ControlMessage{
+		MessageId: reqID,
+		Payload: &pb.ControlMessage_FetchFiles{FetchFiles: &pb.FetchFiles{
+			RequestId: reqID,
+			Strategy:  msg.GetStrategy(),
+			Paths:     paths,
+		}},
+	}); err != nil {
+		return err
+	}
+
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp: timestamppb.Now(),
+		Actor:     auth.ActorFromContext(ctx),
+		Action:    "DownloadFiles",
+		MachineId: msg.GetMachineId(),
+		Strategy:  msg.GetStrategy(),
+		Detail:    strings.Join(paths, "\n"),
+	})
+
+	deadline := time.NewTimer(filetransfer.DownloadTimeout)
+	defer deadline.Stop()
+
+	var filename string
+	var kind pb.TransferKind
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline.C:
+			return connect.NewError(connect.CodeDeadlineExceeded, errors.New("download timed out waiting for agent"))
+		case chunk, ok := <-chunkCh:
+			if !ok {
+				return connect.NewError(connect.CodeAborted, errors.New("download cancelled"))
+			}
+			if chunk.GetError() != "" {
+				return connect.NewError(connect.CodeFailedPrecondition, errors.New(chunk.GetError()))
+			}
+			if chunk.GetFilename() != "" {
+				filename = chunk.GetFilename()
+			}
+			if chunk.GetTransferKind() != pb.TransferKind_TRANSFER_KIND_UNSPECIFIED {
+				kind = chunk.GetTransferKind()
+			}
+			out := &pb.DownloadChunk{
+				Data:         chunk.GetData(),
+				Filename:     filename,
+				TransferKind: kind,
+				Eof:          chunk.GetEof(),
+			}
+			if err := stream.Send(out); err != nil {
+				return err
+			}
+			if chunk.GetEof() {
+				return nil
+			}
+		}
+	}
+}
+
+func (s *Server) gateFileBrowse(machineID, strategy string) error {
+	if machineID == "" || strategy == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
+	}
+	rec, ok := s.store.GetMachine(machineID)
+	if !ok {
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
+	}
+	if !rec.Reachable {
+		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("machine %q is not reachable", machineID))
+	}
+	if rec.AgentVersion < MinFileBrowseAgentVersion {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("machine %q agent_version %d does not support file browse (need >= %d)",
+				machineID, rec.AgentVersion, MinFileBrowseAgentVersion))
+	}
+	return nil
+}
+
+func (s *Server) agentControl() (AgentController, error) {
+	ctrl, ok := s.agents.(AgentController)
+	if !ok || s.agents == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("agent control not available"))
+	}
+	return ctrl, nil
 }

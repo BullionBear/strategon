@@ -72,6 +72,12 @@ const (
 	// ControlPlaneServiceGetMachineMetricsProcedure is the fully-qualified name of the
 	// ControlPlaneService's GetMachineMetrics RPC.
 	ControlPlaneServiceGetMachineMetricsProcedure = "/strategyplatform.v1.ControlPlaneService/GetMachineMetrics"
+	// ControlPlaneServiceBrowseDirProcedure is the fully-qualified name of the ControlPlaneService's
+	// BrowseDir RPC.
+	ControlPlaneServiceBrowseDirProcedure = "/strategyplatform.v1.ControlPlaneService/BrowseDir"
+	// ControlPlaneServiceDownloadFilesProcedure is the fully-qualified name of the
+	// ControlPlaneService's DownloadFiles RPC.
+	ControlPlaneServiceDownloadFilesProcedure = "/strategyplatform.v1.ControlPlaneService/DownloadFiles"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -90,6 +96,8 @@ var (
 	controlPlaneServiceListArtifactsMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("ListArtifacts")
 	controlPlaneServiceGetControlPlaneVersionMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("GetControlPlaneVersion")
 	controlPlaneServiceGetMachineMetricsMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachineMetrics")
+	controlPlaneServiceBrowseDirMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("BrowseDir")
+	controlPlaneServiceDownloadFilesMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("DownloadFiles")
 )
 
 // ControlPlaneServiceClient is a client for the strategyplatform.v1.ControlPlaneService service.
@@ -110,6 +118,11 @@ type ControlPlaneServiceClient interface {
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
 	GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error)
+	// Browse a strategy WorkDir on a connected agent (one directory level).
+	BrowseDir(context.Context, *connect.Request[v1.BrowseDirRequest]) (*connect.Response[v1.BrowseDirResponse], error)
+	// Download one or more WorkDir paths. A single regular file streams as-is;
+	// multiple paths (or a directory) stream as a tar.gz built on the agent.
+	DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest]) (*connect.ServerStreamForClient[v1.DownloadChunk], error)
 }
 
 // NewControlPlaneServiceClient constructs a client for the strategyplatform.v1.ControlPlaneService
@@ -200,6 +213,18 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceGetMachineMetricsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		browseDir: connect.NewClient[v1.BrowseDirRequest, v1.BrowseDirResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceBrowseDirProcedure,
+			connect.WithSchema(controlPlaneServiceBrowseDirMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		downloadFiles: connect.NewClient[v1.DownloadFilesRequest, v1.DownloadChunk](
+			httpClient,
+			baseURL+ControlPlaneServiceDownloadFilesProcedure,
+			connect.WithSchema(controlPlaneServiceDownloadFilesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -218,6 +243,8 @@ type controlPlaneServiceClient struct {
 	listArtifacts          *connect.Client[v1.ListArtifactsRequest, v1.ListArtifactsResponse]
 	getControlPlaneVersion *connect.Client[v1.GetControlPlaneVersionRequest, v1.ControlPlaneVersion]
 	getMachineMetrics      *connect.Client[v1.GetMachineMetricsRequest, v1.GetMachineMetricsResponse]
+	browseDir              *connect.Client[v1.BrowseDirRequest, v1.BrowseDirResponse]
+	downloadFiles          *connect.Client[v1.DownloadFilesRequest, v1.DownloadChunk]
 }
 
 // ListMachines calls strategyplatform.v1.ControlPlaneService.ListMachines.
@@ -285,6 +312,16 @@ func (c *controlPlaneServiceClient) GetMachineMetrics(ctx context.Context, req *
 	return c.getMachineMetrics.CallUnary(ctx, req)
 }
 
+// BrowseDir calls strategyplatform.v1.ControlPlaneService.BrowseDir.
+func (c *controlPlaneServiceClient) BrowseDir(ctx context.Context, req *connect.Request[v1.BrowseDirRequest]) (*connect.Response[v1.BrowseDirResponse], error) {
+	return c.browseDir.CallUnary(ctx, req)
+}
+
+// DownloadFiles calls strategyplatform.v1.ControlPlaneService.DownloadFiles.
+func (c *controlPlaneServiceClient) DownloadFiles(ctx context.Context, req *connect.Request[v1.DownloadFilesRequest]) (*connect.ServerStreamForClient[v1.DownloadChunk], error) {
+	return c.downloadFiles.CallServerStream(ctx, req)
+}
+
 // ControlPlaneServiceHandler is an implementation of the strategyplatform.v1.ControlPlaneService
 // service.
 type ControlPlaneServiceHandler interface {
@@ -304,6 +341,11 @@ type ControlPlaneServiceHandler interface {
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
 	GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error)
+	// Browse a strategy WorkDir on a connected agent (one directory level).
+	BrowseDir(context.Context, *connect.Request[v1.BrowseDirRequest]) (*connect.Response[v1.BrowseDirResponse], error)
+	// Download one or more WorkDir paths. A single regular file streams as-is;
+	// multiple paths (or a directory) stream as a tar.gz built on the agent.
+	DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest], *connect.ServerStream[v1.DownloadChunk]) error
 }
 
 // NewControlPlaneServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -390,6 +432,18 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceGetMachineMetricsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceBrowseDirHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceBrowseDirProcedure,
+		svc.BrowseDir,
+		connect.WithSchema(controlPlaneServiceBrowseDirMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceDownloadFilesHandler := connect.NewServerStreamHandler(
+		ControlPlaneServiceDownloadFilesProcedure,
+		svc.DownloadFiles,
+		connect.WithSchema(controlPlaneServiceDownloadFilesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/strategyplatform.v1.ControlPlaneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ControlPlaneServiceListMachinesProcedure:
@@ -418,6 +472,10 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceGetControlPlaneVersionHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceGetMachineMetricsProcedure:
 			controlPlaneServiceGetMachineMetricsHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceBrowseDirProcedure:
+			controlPlaneServiceBrowseDirHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceDownloadFilesProcedure:
+			controlPlaneServiceDownloadFilesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -477,4 +535,12 @@ func (UnimplementedControlPlaneServiceHandler) GetControlPlaneVersion(context.Co
 
 func (UnimplementedControlPlaneServiceHandler) GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.GetMachineMetrics is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) BrowseDir(context.Context, *connect.Request[v1.BrowseDirRequest]) (*connect.Response[v1.BrowseDirResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.BrowseDir is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest], *connect.ServerStream[v1.DownloadChunk]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.DownloadFiles is not implemented"))
 }

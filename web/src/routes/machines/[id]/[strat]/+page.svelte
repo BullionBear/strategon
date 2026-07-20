@@ -8,6 +8,7 @@
 	import { HAPPY_PATH, FAIL_PATH, phaseLabel, happyIndex, isFailPhase } from '$lib/phases';
 	import { barTone, formatBytes, formatClock, formatUptime } from '$lib/fleet';
 	import Sparkline from '$lib/Sparkline.svelte';
+	import WorkDirBrowser from '$lib/WorkDirBrowser.svelte';
 
 	let machine = $state<Machine | null>(null);
 	let pendingGen = $state<bigint | number | null>(null);
@@ -245,6 +246,15 @@
 					</li>
 				{/if}
 			</ol>
+		{/if}
+
+		{#if machine}
+			<WorkDirBrowser
+				machineId={id}
+				strategy={strat}
+				reachable={machine.reachable}
+				agentVersion={machine.agentVersion}
+			/>
 		{/if}
 	{/if}
 </section>

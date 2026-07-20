@@ -284,7 +284,7 @@ export const CronScheduleSchema: GenMessage<CronSchedule> = /*@__PURE__*/
 /**
  * LeaseSpec configures fencing-lease expectations for a strategy assignment.
  * The strategy SDK (not the agent) acquires/renews the lease from LeaseService
- * and must call CheckBeforeOrder before trading (IMPROVEMENT A1).
+ * and must call CheckBeforeOrder before trading.
  *
  * @generated from message strategyplatform.v1.LeaseSpec
  */

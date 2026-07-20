@@ -9,10 +9,13 @@ package stream
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
+	"github.com/bullionbear/strategon/internal/agent/artifact"
+	"github.com/bullionbear/strategon/internal/agent/filebrowse"
 	"github.com/bullionbear/strategon/internal/clock"
 )
 
@@ -23,6 +26,9 @@ type Client struct {
 	Out         <-chan *pb.AgentMessage // northbound messages from the reconciler
 	Submit      func(*pb.DesiredState)  // deliver DesiredState to the reconciler
 	ObservedGen func() int64            // for heartbeat stamping
+	// Artifacts provides StrategyDir for WorkDir browse/fetch. Optional; if
+	// nil, ListDir/FetchFiles are Nack'd.
+	Artifacts *artifact.Manager
 	// Resources / Processes supply the latest instantaneous telemetry snapshot
 	// for Heartbeat (sampled off the reconciler critical path).
 	Resources  func() *pb.MachineResources
@@ -31,6 +37,10 @@ type Client struct {
 	Heartbeat  time.Duration
 	MaxBackoff time.Duration
 	Logger     *slog.Logger
+
+	// transferSem bounds concurrent browse/fetch handlers (created lazily).
+	transferOnce sync.Once
+	transferSem  chan struct{}
 }
 
 func (c *Client) heartbeatInterval() time.Duration {
@@ -45,6 +55,13 @@ func (c *Client) logger() *slog.Logger {
 		return slog.Default()
 	}
 	return c.Logger
+}
+
+func (c *Client) sem() chan struct{} {
+	c.transferOnce.Do(func() {
+		c.transferSem = make(chan struct{}, filebrowse.MaxConcurrentTransfers)
+	})
+	return c.transferSem
 }
 
 // Run maintains the stream until ctx is cancelled, reconnecting with capped
@@ -88,6 +105,18 @@ func (c *Client) session(ctx context.Context) error {
 		return err
 	}
 
+	// Dedicated send path for filebrowse replies — blocks under backpressure
+	// (unlike reconciler Out which drops on full).
+	fileSend := make(chan *pb.AgentMessage, 16)
+	sendFile := func(ctx context.Context, msg *pb.AgentMessage) error {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case fileSend <- msg:
+			return nil
+		}
+	}
+
 	recvErr := make(chan error, 1)
 	go func() {
 		for {
@@ -96,13 +125,24 @@ func (c *Client) session(ctx context.Context) error {
 				recvErr <- err
 				return
 			}
-			c.handleControl(msg)
+			c.handleControl(ctx, msg, sendFile)
 		}
 	}()
 
 	hb := c.Clock.Ticker(c.heartbeatInterval())
 	defer hb.Stop()
 	for {
+		// Prefer heartbeats when due so large FileChunk transfers cannot starve them.
+		select {
+		case <-hb.C():
+			if err := stream.Send(c.buildHeartbeat()); err != nil {
+				_ = stream.CloseRequest()
+				return err
+			}
+			continue
+		default:
+		}
+
 		select {
 		case <-ctx.Done():
 			_ = stream.CloseRequest()
@@ -111,6 +151,11 @@ func (c *Client) session(ctx context.Context) error {
 			_ = stream.CloseRequest()
 			return err
 		case msg := <-c.Out:
+			if err := stream.Send(msg); err != nil {
+				_ = stream.CloseRequest()
+				return err
+			}
+		case msg := <-fileSend:
 			if err := stream.Send(msg); err != nil {
 				_ = stream.CloseRequest()
 				return err
@@ -124,7 +169,7 @@ func (c *Client) session(ctx context.Context) error {
 	}
 }
 
-func (c *Client) handleControl(msg *pb.ControlMessage) {
+func (c *Client) handleControl(ctx context.Context, msg *pb.ControlMessage, send filebrowse.SendFunc) {
 	switch p := msg.GetPayload().(type) {
 	case *pb.ControlMessage_DesiredState:
 		c.Submit(p.DesiredState)
@@ -134,7 +179,103 @@ func (c *Client) handleControl(msg *pb.ControlMessage) {
 		// Imperative commands are latency optimizations; DesiredState is truth.
 	case *pb.ControlMessage_LeaseResponse:
 		// Lease is owned by the strategy SDK via LeaseService.
+	case *pb.ControlMessage_ListDir:
+		c.handleListDir(ctx, p.ListDir, send)
+	case *pb.ControlMessage_FetchFiles:
+		c.handleFetchFiles(ctx, p.FetchFiles, send)
+	default:
+		_ = send(ctx, &pb.AgentMessage{
+			Payload: &pb.AgentMessage_Nack{Nack: &pb.Nack{
+				InReplyTo:    msg.GetMessageId(),
+				Reason:       "UnknownCommand",
+				AgentVersion: c.Register.GetAgentVersion(),
+			}},
+		})
 	}
+}
+
+func (c *Client) handleListDir(ctx context.Context, req *pb.ListDir, send filebrowse.SendFunc) {
+	go func() {
+		sem := c.sem()
+		select {
+		case <-ctx.Done():
+			return
+		case sem <- struct{}{}:
+		}
+		defer func() { <-sem }()
+
+		listing := c.listDir(req)
+		_ = send(ctx, &pb.AgentMessage{
+			Payload: &pb.AgentMessage_DirListing{DirListing: listing},
+		})
+	}()
+}
+
+func (c *Client) listDir(req *pb.ListDir) *pb.DirListing {
+	out := &pb.DirListing{RequestId: req.GetRequestId(), Path: req.GetPath()}
+	if c.Artifacts == nil {
+		out.Error = "file browse not configured"
+		return out
+	}
+	if err := filebrowse.ValidateStrategy(req.GetStrategy()); err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	root, err := filebrowse.Root(c.Artifacts.StrategyDir(req.GetStrategy()))
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	defer root.Close()
+	return filebrowse.List(root, req.GetRequestId(), req.GetPath())
+}
+
+func (c *Client) handleFetchFiles(ctx context.Context, req *pb.FetchFiles, send filebrowse.SendFunc) {
+	go func() {
+		sem := c.sem()
+		select {
+		case <-ctx.Done():
+			return
+		case sem <- struct{}{}:
+		}
+		defer func() { <-sem }()
+
+		if c.Artifacts == nil {
+			_ = send(ctx, &pb.AgentMessage{
+				Payload: &pb.AgentMessage_FileChunk{FileChunk: &pb.FileChunk{
+					RequestId: req.GetRequestId(),
+					Error:     "file browse not configured",
+					Eof:       true,
+				}},
+			})
+			return
+		}
+		if err := filebrowse.ValidateStrategy(req.GetStrategy()); err != nil {
+			_ = send(ctx, &pb.AgentMessage{
+				Payload: &pb.AgentMessage_FileChunk{FileChunk: &pb.FileChunk{
+					RequestId: req.GetRequestId(),
+					Error:     err.Error(),
+					Eof:       true,
+				}},
+			})
+			return
+		}
+		root, err := filebrowse.Root(c.Artifacts.StrategyDir(req.GetStrategy()))
+		if err != nil {
+			_ = send(ctx, &pb.AgentMessage{
+				Payload: &pb.AgentMessage_FileChunk{FileChunk: &pb.FileChunk{
+					RequestId: req.GetRequestId(),
+					Error:     err.Error(),
+					Eof:       true,
+				}},
+			})
+			return
+		}
+		defer root.Close()
+		if err := filebrowse.Fetch(ctx, root, req.GetStrategy(), req.GetRequestId(), req.GetPaths(), send); err != nil {
+			c.logger().Warn("fetch files failed", "request_id", req.GetRequestId(), "err", err)
+		}
+	}()
 }
 
 func (c *Client) buildHeartbeat() *pb.AgentMessage {
