@@ -10,7 +10,7 @@ import (
 )
 
 // rebuildActualState loads the supervision snapshot and Adopt-s still-running
-// strategy processes before the first reconcile (RECONCILER §10 step 4).
+// strategy processes before the first reconcile.
 // Missing/corrupt files yield an empty actual map (cold start).
 func (r *Reconciler) rebuildActualState() {
 	if r.deps.BaseDir == "" {

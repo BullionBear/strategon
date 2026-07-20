@@ -1,6 +1,6 @@
-# Layer 1 (CICD.md §2): unit tests only. Fast, no external dependencies.
+# Layer 1: unit tests only. Fast, no external dependencies.
 # Integration tests exist behind `//go:build integration` and are deliberately
-# not run here — they need Postgres, /proc and process forking (§2.1).
+# not run here — they need Postgres, /proc and process forking.
 name: test
 
 on:
@@ -26,7 +26,7 @@ jobs:
         run: touch internal/webassets/dist/.gitkeep
       - run: go vet ./...
       - run: go test ./...
-      # Guards the CGO_ENABLED=0 premise the whole pipeline rests on (§1):
+      # Guards the CGO_ENABLED=0 premise the whole pipeline rests on:
       # a cgo dependency would break cross-compilation and the scratch runtime.
       - name: Verify static cross-compilation
         run: |

@@ -25,7 +25,7 @@
 
 	<div class="panel notice" style="margin-top:1rem">
 		<strong>Limited history:</strong> entries live only in the in-memory store. Durable audit
-		requires the Postgres store (ARCHITECTURE §16.3).
+		requires the Postgres store.
 	</div>
 
 	{#if error}

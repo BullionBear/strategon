@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// DefaultLeaseMarginCP is the control-plane side of the SAFETY §2 inequality
+// DefaultLeaseMarginCP is the control-plane side of the lease expiry margin
 // (margin_agent + margin_cp > skew + RTT). Tunable via --lease-margin-cp.
 const DefaultLeaseMarginCP = 2 * time.Second
 

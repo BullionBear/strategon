@@ -15,7 +15,7 @@ import (
 )
 
 // beginDeploy starts the deploy state machine for a new target version. The IO
-// steps run in a worker goroutine; the main loop only records phase (§4).
+// steps run in a worker goroutine; the main loop only records phase.
 func (r *Reconciler) beginDeploy(spec *pb.StrategyAssignmentSpec, st *strategyState) {
 	ctx, cancel := context.WithCancel(r.ctx)
 	st.inflight = &deployOp{target: spec.GetArtifact(), config: spec.GetConfig(), cancel: cancel}
@@ -59,7 +59,7 @@ func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentS
 	}
 
 	// Only now do we tear down the old process (download/verify failure keeps
-	// the old process running, RECONCILER §11).
+	// the old process running.
 	send(pb.DeployPhase_DEPLOY_PHASE_DRAINING, nil, nil)
 	if oldProc != nil {
 		r.gracefulStop(oldProc, spec.GetDeployPolicy().GetStopGraceSeconds())
@@ -145,7 +145,7 @@ func (r *Reconciler) applyWorkerEvent(ev workerEvent) {
 
 // beginRollback re-points the symlink to the previous good version and restarts
 // (O(1), no download), marking the failed version bad so reconcile() stops
-// pulling it back up (§4.1, §6.3).
+// pulling it back up.
 func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategyState) {
 	badVersion := spec.GetArtifact().GetVersion()
 	if st.inflight != nil {
@@ -219,7 +219,7 @@ func (r *Reconciler) spawnDrain(st *strategyState, spec *pb.StrategyAssignmentSp
 	}()
 }
 
-// gracefulStop runs the shared SIGTERM->grace->SIGKILL sequence (RECONCILER §7)
+// gracefulStop runs the shared SIGTERM->grace->SIGKILL sequence.
 // against a process handle using the driver.
 func (r *Reconciler) gracefulStop(proc *driver.Process, graceSecs int32) {
 	if proc == nil {

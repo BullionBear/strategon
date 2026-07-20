@@ -1,10 +1,10 @@
 // Package driver abstracts how a strategy workload is executed. The default
 // (and only v1) driver is "exec": a bare process placed in its own session via
 // setsid, optionally confined by a cgroup v2 subtree, and monitored via a
-// Linux pidfd. See RECONCILER.md §6 and SAFETY.md §6.
+// Linux pidfd.
 //
-// The abstraction exists so an OCI driver can be added later (ARCHITECTURE
-// §14) without touching the reconciler, which only depends on this interface.
+// The abstraction exists so an OCI driver can be added later without touching
+// the reconciler, which only depends on this interface.
 package driver
 
 import (
@@ -65,7 +65,7 @@ type ExitInfo struct {
 type Driver interface {
 	// Start forks/execs the workload in its own session (setsid) and returns a
 	// handle. The process is NOT killed when the agent exits (self-update
-	// prerequisite, SAFETY §6 / RECONCILER §7).
+	// prerequisite).
 	Start(spec StartSpec, now time.Time) (*Process, error)
 
 	// WatchExit blocks until the process exits and returns exit info. It is
@@ -78,7 +78,6 @@ type Driver interface {
 	Signal(p *Process, sig syscall.Signal) error
 
 	// Adopt re-attaches to an already-running process by pid, validating
-	// startTime to reject PID reuse. Used after agent self-update
-	// (RECONCILER §10).
+	// startTime to reject PID reuse. Used after agent self-update.
 	Adopt(pid int, startTime uint64, startedAt time.Time) (*Process, error)
 }

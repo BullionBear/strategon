@@ -35,7 +35,7 @@ type Machine struct {
 	AgentVersion  int32                  `protobuf:"varint,5,opt,name=agent_version,json=agentVersion,proto3" json:"agent_version,omitempty"` // capability version (monotonic)
 	LastHeartbeat *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat,omitempty"`
 	// Per-strategy desired+actual merged view. Assembled by the control plane so
-	// the frontend never joins spec/status itself (FRONTEND.md §1.2).
+	// the frontend never joins spec/status itself.
 	Strategies []*StrategyView `protobuf:"bytes,7,rep,name=strategies,proto3" json:"strategies,omitempty"`
 	// buildinfo.Version from the agent — display only; not for compatibility
 	AgentBuildVersion string `protobuf:"bytes,8,opt,name=agent_build_version,json=agentBuildVersion,proto3" json:"agent_build_version,omitempty"`
@@ -1321,8 +1321,8 @@ func (x *MachineStatusEvent) GetAt() *timestamppb.Timestamp {
 }
 
 // Artifact catalog: Deploy resolves artifact_version against registered
-// artifacts (digest + uri). Additive follow-on to FRONTEND.md §2.2 so the
-// human API can replace /admin/assign without requiring digest in every Deploy.
+// artifacts (digest + uri). Additive so the human API can replace
+// /admin/assign without requiring digest in every Deploy.
 type RegisterArtifactRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Artifact      *ArtifactRef           `protobuf:"bytes,1,opt,name=artifact,proto3" json:"artifact,omitempty"`

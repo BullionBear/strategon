@@ -1,6 +1,6 @@
 -- 0002_leases.sql — durable fencing leases (one holder per strategy).
 -- Survives control-plane restart so migration interlocking / mutual exclusion
--- is not lost when the process recycles (IMPROVEMENT B1 + B2 alignment).
+-- is not lost when the process recycles.
 
 CREATE TABLE leases (
     strategy    TEXT PRIMARY KEY,

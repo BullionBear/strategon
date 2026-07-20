@@ -1,5 +1,5 @@
-// Package reconciler implements the agent's level-triggered convergence loop
-// (RECONCILER.md). A single goroutine owns all mutable state and serializes
+// Package reconciler implements the agent's level-triggered convergence loop.
+// A single goroutine owns all mutable state and serializes
 // four event sources — new DesiredState, process exits, deploy-worker events,
 // and a unified tick — each of which runs the same path: update local state,
 // call reconcile(), diff desired vs actual, and act. There are no per-command
@@ -197,7 +197,7 @@ func (r *Reconciler) Run(ctx context.Context) {
 func (r *Reconciler) now() time.Time { return r.deps.Clock.Now() }
 
 // applyDesired overwrites the local desired copy and cancels any in-flight
-// deploy whose target no longer matches (deploy withdrawal, RECONCILER §12).
+// deploy whose target no longer matches (deploy withdrawal).
 func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 	if ds == nil {
 		return
@@ -221,7 +221,7 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 	r.desired = next
 }
 
-// reconcile is the sole convergence entry point (RECONCILER §3).
+// reconcile is the sole convergence entry point.
 func (r *Reconciler) reconcile() {
 	for name, spec := range r.desired {
 		st := r.actual[name]
@@ -261,7 +261,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		}
 		return // otherwise wait for worker events
 	}
-	// FAILED is terminal for this desired generation (RECONCILER §4.1): report
+	// FAILED is terminal for this desired generation: report
 	// the error and wait for the next desired change (new generation) rather
 	// than hammering download forever on a bad URI/digest.
 	if st.phase == pb.DeployPhase_DEPLOY_PHASE_FAILED && st.failedAtGen == r.generation {
@@ -293,7 +293,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 	}
 }
 
-// retireStrategy drains and removes a strategy no longer in desired (§5).
+// retireStrategy drains and removes a strategy no longer in desired.
 func (r *Reconciler) retireStrategy(st *strategyState) {
 	if st.inflight != nil {
 		st.inflight.cancel()
@@ -310,7 +310,7 @@ func (r *Reconciler) retireStrategy(st *strategyState) {
 }
 
 // startProcess forks/execs the strategy on the CURRENT symlinked binary and
-// begins supervising it. Called in the main loop (RECONCILER §6.1) for
+// begins supervising it. Called in the main loop for
 // crash-restart and rollback; deploy STARTING happens in the worker.
 func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState) {
 	sp, err := r.buildStartSpec(spec)
@@ -371,7 +371,7 @@ func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec) (driver.Sta
 }
 
 // renderArgs expands ${CONFIG}/${RELEASE_DIR}/${BINARY} against the current
-// symlink. Unknown placeholders fail explicitly (PROTOCOL §9).
+// symlink. Unknown placeholders fail explicitly.
 func (r *Reconciler) renderArgs(spec *pb.StrategyAssignmentSpec) ([]string, error) {
 	raw := spec.GetArgs()
 	if len(raw) == 0 {
@@ -436,7 +436,7 @@ func expandPlaceholders(arg string, vals map[string]string) (string, error) {
 	return out, nil
 }
 
-// handleExit processes a process-exit notification (RECONCILER §6.3).
+// handleExit processes a process-exit notification.
 func (r *Reconciler) handleExit(ex processExit) {
 	st := r.actual[ex.strategy]
 	if st == nil || st.proc == nil || st.proc.PID != ex.info.PID || st.proc.StartTime != ex.info.StartTime {
@@ -477,7 +477,7 @@ func (r *Reconciler) handleExit(ex processExit) {
 }
 
 // tick drives time-based work: health-window evaluation, async readiness
-// probing, and local cron schedule evaluation (ARCHITECTURE §10). Backoff
+// probing, and local cron schedule evaluation. Backoff
 // wakeups are handled by reconcile() running after every tick.
 func (r *Reconciler) tick(now time.Time) {
 	for _, st := range r.actual {
@@ -561,13 +561,12 @@ func (r *Reconciler) recomputeObservedGeneration() {
 
 func (r *Reconciler) shutdown() {
 	// Agent SIGTERM: do NOT kill strategy processes (setsid-detached). Persist
-	// supervision so the next agent can Adopt; strategies keep running
-	// (RECONCILER §7 / §10).
+	// supervision so the next agent can Adopt; strategies keep running.
 	r.persistSupervision()
 }
 
 // versionMatches compares desired vs actual by content digest (artifact +
-// config). Content addressing is the only trustworthy equality (RECONCILER §3).
+// config). Content addressing is the only trustworthy equality.
 func versionMatches(spec *pb.StrategyAssignmentSpec, st *strategyState) bool {
 	if st.runningArtifact == nil {
 		return false

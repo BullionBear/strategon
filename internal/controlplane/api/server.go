@@ -1,5 +1,5 @@
-// Package api implements the human-facing ControlPlaneService over Connect
-// (FRONTEND.md): unary reads/writes and WatchMachine server-streaming.
+// Package api implements the human-facing ControlPlaneService over Connect:
+// unary reads/writes and WatchMachine server-streaming.
 // It is a different connection from AgentService — low-frequency, browser/CLI,
 // curl-able HTTP/JSON — and shares the same store + DesiredState push path.
 package api
@@ -385,7 +385,7 @@ func (s *Server) WatchMachine(ctx context.Context, req *connect.Request[pb.GetMa
 		return connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
 	}
 
-	// Initial full snapshot (FRONTEND.md §2.3 — same mental model as agent resync).
+	// Initial full snapshot — same mental model as agent resync.
 	if err := s.sendMachineEvent(stream, machineID); err != nil {
 		return err
 	}

@@ -7,7 +7,7 @@
 # Traefik already owns :80/:443 on this host and discovers containers on the
 # external `web` network, so nothing here publishes a port.
 #
-# Postgres is a separate long-lived substrate (CICD.md §4.3) — not managed here.
+# Postgres is a separate long-lived substrate — not managed here.
 
 # Fixed project name so containers are strategon-controlplane-1 regardless of
 # the directory CI happens to run compose from.

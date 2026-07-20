@@ -1,10 +1,9 @@
 // Package store is the control plane's state boundary: desired state (spec),
 // observed state (status), machine registry, artifact catalog, and audit log.
-// spec is written ONLY by the control plane; status is written ONLY by agents
-// (PROTOCOL.md §0).
+// spec is written ONLY by the control plane; status is written ONLY by agents.
 //
 // The interface keeps the backing store swappable; the v1 implementation is
-// in-memory (Postgres/sqlc is a deferred follow-up, ARCHITECTURE.md §16.3).
+// in-memory (Postgres/sqlc is a deferred follow-up).
 // Every spec mutation bumps a per-machine monotonically increasing generation,
 // the sole coupling between desired and observed.
 package store
@@ -42,7 +41,7 @@ type MachineRecord struct {
 	Assignments       map[string]*pb.StrategyAssignmentSpec // strategy -> spec
 	Status            map[string]*pb.StrategyAssignmentStatus
 	// PreviousArtifacts tracks the last replaced artifact per strategy so
-	// Rollback with empty target_version can re-point desired state (FRONTEND.md §2.2).
+	// Rollback with empty target_version can re-point desired state.
 	PreviousArtifacts map[string]*pb.ArtifactRef
 	ObservedGen       int64
 }
@@ -103,9 +102,8 @@ type Store interface {
 	// for the given machine/strategy (for empty-target Rollback).
 	PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef, bool)
 
-	// AcquireLease grants or refreshes a fencing lease for strategy on machineID
-	// (PROTOCOL §10.4). Denied when another machine holds an unexpired lease
-	// (including margin_cp).
+	// AcquireLease grants or refreshes a fencing lease for strategy on machineID.
+	// Denied when another machine holds an unexpired lease (including margin_cp).
 	AcquireLease(machineID, strategy string, ttl time.Duration) (LeaseResult, error)
 
 	// RenewLease extends a lease; only the current holder with matching lease_id.
@@ -114,6 +112,6 @@ type Store interface {
 	// GetLease returns the current lease record for strategy, if any.
 	GetLease(strategy string) (LeaseInfo, bool)
 
-	// LeaseMarginCP returns the control-plane expiry margin (SAFETY §2).
+	// LeaseMarginCP returns the control-plane lease expiry margin.
 	LeaseMarginCP() time.Duration
 }

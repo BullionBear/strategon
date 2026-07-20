@@ -2,8 +2,8 @@ package store
 
 import "sync"
 
-// Hub fans out per-machine change notifications to WatchMachine subscribers
-// (FRONTEND.md §2.3). Buffered channels coalesce bursts so a slow UI never
+// Hub fans out per-machine change notifications to WatchMachine subscribers.
+// Buffered channels coalesce bursts so a slow UI never
 // blocks the agent stream or write path.
 type Hub struct {
 	mu   sync.Mutex

@@ -1,5 +1,5 @@
 // Package supervisefile persists and loads the agent's supervision snapshot
-// used for self-update / restart takeover (RECONCILER.md §10, IMPROVEMENT B5).
+// used for self-update / restart takeover.
 package supervisefile
 
 import (

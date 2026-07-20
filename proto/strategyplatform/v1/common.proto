@@ -91,7 +91,7 @@ enum CronAction {
 
 // LeaseSpec configures fencing-lease expectations for a strategy assignment.
 // The strategy SDK (not the agent) acquires/renews the lease from LeaseService
-// and must call CheckBeforeOrder before trading (IMPROVEMENT A1).
+// and must call CheckBeforeOrder before trading.
 message LeaseSpec {
   bool required = 1; // SDK must hold a lease before trading (not an agent start gate)
   int32 ttl_seconds = 2; // lease TTL; SDK renews before expiry or self-terminates

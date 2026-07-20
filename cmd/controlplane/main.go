@@ -3,7 +3,7 @@
 //   - AgentService on --agent-addr (default :8080) — agent-outbound bidi stream
 //   - ControlPlaneService on --human-addr (default 127.0.0.1:8081) — human HTTP/JSON
 //
-// Separate ports match FRONTEND.md §0: different clients, different mental
+// Separate ports for different clients and different mental
 // models. The human port optionally requires Discord/mock auth (--auth-mode).
 // Agent port optionally requires mTLS (--tls-cert/--tls-key/--client-ca).
 package main
@@ -41,7 +41,7 @@ func main() {
 	tlsCert := flag.String("tls-cert", "", "AgentService TLS certificate (PEM); enables mTLS with --tls-key and --client-ca")
 	tlsKey := flag.String("tls-key", "", "AgentService TLS private key (PEM)")
 	clientCA := flag.String("client-ca", "", "CA PEM used to verify agent client certificates")
-	leaseMarginCP := flag.Duration("lease-margin-cp", store.DefaultLeaseMarginCP, "control-plane lease expiry margin (SAFETY §2)")
+	leaseMarginCP := flag.Duration("lease-margin-cp", store.DefaultLeaseMarginCP, "control-plane lease expiry margin")
 
 	authMode := flag.String("auth-mode", "none", "human API auth: none|mock|discord (default none for local/CI)")
 	sessionSecret := flag.String("auth-session-secret", "", "HMAC secret for session cookies; random if empty")

@@ -13,8 +13,7 @@ import (
 // TestCronRestartRerendersConfigPlaceholder proves the config/binary
 // separation feature and the cron scheduler compose correctly: a
 // CRON_ACTION_RESTART drain+respawn must re-render ${CONFIG} against the
-// *current* release, exactly like the initial deploy does (RECONCILER §6.1,
-// ARCHITECTURE §8.4, §10).
+// *current* release, exactly like the initial deploy does.
 func TestCronRestartRerendersConfigPlaceholder(t *testing.T) {
 	t0 := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	r, fd, mgr, _, _ := newTestReconciler(t, t0)

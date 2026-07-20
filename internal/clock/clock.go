@@ -1,6 +1,6 @@
 // Package clock provides a Clock abstraction so that time-dependent logic
 // (backoff, health windows, lease TTLs, resync ticks) can be driven by a fake
-// clock in tests without sleeping real time. See RECONCILER.md §12.
+// clock in tests without sleeping real time.
 package clock
 
 import "time"

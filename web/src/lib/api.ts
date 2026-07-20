@@ -29,7 +29,7 @@ export const client: Client<typeof ControlPlaneService> = createClient(
 
 /**
  * Watch a machine with exponential-backoff reconnect. Each event's Machine is
- * the full truth — replace the store, never merge (FRONTEND.md §3.2).
+ * the full truth — replace the store, never merge.
  */
 export async function watchMachine(
 	machineId: string,

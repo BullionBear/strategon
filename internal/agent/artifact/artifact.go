@@ -1,5 +1,5 @@
 // Package artifact manages the on-disk, immutable release layout and atomic
-// version switching described in ARCHITECTURE.md §8.1:
+// version switching layout:
 //
 //	<base>/<strategy>/releases/<version>/bin           # the strategy binary
 //	<base>/<strategy>/releases/<version>/config[.ext]  # optional config (ext from URI)
