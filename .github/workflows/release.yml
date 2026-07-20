@@ -150,3 +150,112 @@ jobs:
           ssh -o BatchMode=yes "root@${HOST}" \
             "cd /opt/strategon/deploy && docker compose logs --tail=80 controlplane" >&2
           exit 1
+
+  notify:
+    name: Notify Discord
+    needs: [image, binaries, deploy]
+    if: always() && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve commit message
+        id: meta
+        run: |
+          MSG=$(git log -1 --pretty=%B | tr -d '\r' | head -c 1000)
+          echo "message<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$MSG" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Send Discord notification (Success)
+        if: ${{ needs.image.result == 'success' && needs.binaries.result == 'success' && needs.deploy.result == 'success' }}
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ steps.meta.outputs.message }}
+          ACTOR: ${{ github.actor }}
+          SERVER_URL: ${{ github.server_url }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK_URL secret is not set; skipping notify"
+            exit 0
+          fi
+          SHORT_SHA="${COMMIT_SHA::7}"
+          jq -n \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg commit "[${SHORT_SHA}](${SERVER_URL}/${REPO}/commit/${COMMIT_SHA})" \
+            --arg message "${COMMIT_MESSAGE:-"(no message)"}" \
+            --arg actor "$ACTOR" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{embeds: [{
+              title: "✅ Release Deployed",
+              description: "Strategon has been released and deployed to production.",
+              color: 3066993,
+              fields: [
+                {name: "Repository", value: $repo, inline: true},
+                {name: "Tag", value: $branch, inline: true},
+                {name: "Commit", value: $commit, inline: false},
+                {name: "Message", value: $message, inline: false},
+                {name: "Triggered by", value: $actor, inline: true}
+              ],
+              timestamp: $ts
+            }]}' \
+          | curl -sf -H "Content-Type: application/json" -X POST -d @- "$DISCORD_WEBHOOK"
+
+      - name: Send Discord notification (Failure)
+        if: ${{ needs.image.result == 'failure' || needs.binaries.result == 'failure' || needs.deploy.result == 'failure' }}
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ steps.meta.outputs.message }}
+          SERVER_URL: ${{ github.server_url }}
+          RUN_ID: ${{ github.run_id }}
+          IMAGE_RESULT: ${{ needs.image.result }}
+          BINARIES_RESULT: ${{ needs.binaries.result }}
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK" ]; then
+            echo "DISCORD_WEBHOOK_URL secret is not set; skipping notify"
+            exit 0
+          fi
+          SHORT_SHA="${COMMIT_SHA::7}"
+          if [ "$IMAGE_RESULT" != "success" ]; then
+            TITLE="🔴 Image Build Failed"
+            DESCRIPTION="Release image build has failed. Deployment skipped."
+          elif [ "$BINARIES_RESULT" != "success" ]; then
+            TITLE="🔴 Binaries / Release Failed"
+            DESCRIPTION="Release binaries or GitHub Release publishing has failed."
+          else
+            TITLE="❌ Deployment Failed"
+            DESCRIPTION="Strategon deployment to production has failed."
+          fi
+          jq -n \
+            --arg title "$TITLE" \
+            --arg description "$DESCRIPTION" \
+            --arg repo "$REPO" \
+            --arg branch "$BRANCH" \
+            --arg commit "[${SHORT_SHA}](${SERVER_URL}/${REPO}/commit/${COMMIT_SHA})" \
+            --arg message "${COMMIT_MESSAGE:-"(no message)"}" \
+            --arg run "[View Logs](${SERVER_URL}/${REPO}/actions/runs/${RUN_ID})" \
+            --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{embeds: [{
+              title: $title,
+              description: $description,
+              color: 15158332,
+              fields: [
+                {name: "Repository", value: $repo, inline: true},
+                {name: "Tag", value: $branch, inline: true},
+                {name: "Commit", value: $commit, inline: false},
+                {name: "Message", value: $message, inline: false},
+                {name: "Workflow Run", value: $run, inline: true}
+              ],
+              timestamp: $ts
+            }]}' \
+          | curl -sf -H "Content-Type: application/json" -X POST -d @- "$DISCORD_WEBHOOK"
