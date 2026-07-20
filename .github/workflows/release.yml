@@ -1,0 +1,152 @@
+# Layers 2 and 3 (CICD.md §3, §4).
+#
+#   push to main -> preview image only (main-<sha>, latest-dev). Not deployable.
+#   push tag v*  -> release image + binaries + GitHub Release, then deploy.
+#
+# Only tagged artifacts reach production (§3.2): a tag is the explicit "this is
+# a release" act. Scope is the platform itself — CP + embedded UI. Agent
+# binaries are published for bootstrap to pull, never pushed to trading hosts,
+# and strategies are deployed by the platform, not by CI (§0).
+name: release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE: ghcr.io/bullionbear/strategon
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        id: meta
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=main-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+          echo "build_time=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+      - name: Compute image tags
+        id: tags
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tags=${IMAGE}:${{ steps.meta.outputs.version }},${IMAGE}:latest" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=${IMAGE}:${{ steps.meta.outputs.version }},${IMAGE}:latest-dev" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_TIME=${{ steps.meta.outputs.build_time }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Static binaries for hosts without a container runtime, and for agent
+  # bootstrap to curl. Tag builds only — preview binaries have no consumer.
+  binaries:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+      # `make release` runs web-build first, so the CP binaries embed the UI.
+      - run: make release
+        env:
+          GOTOOLCHAIN: auto
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+
+  # Layer 3. Single host, so a plain restart is fine: agents reconnect
+  # outbound and lease TTLs outlast the gap (§4.4). Schema migrations run at
+  # CP startup and must stay expand-only (§4.2) — a destructive migration
+  # would break the old container still serving during the swap.
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [image, binaries]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Add deploy key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      # Registry auth is job-scoped and expires with the run, so no long-lived
+      # pull credential sits on the host.
+      - name: Authenticate host to GHCR
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$TOKEN" | ssh -o BatchMode=yes "root@${HOST}" \
+            "docker login ghcr.io -u ${{ github.actor }} --password-stdin"
+      - name: Pull and restart
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          VERSION: ${{ needs.image.outputs.version }}
+        run: |
+          ssh -o BatchMode=yes "root@${HOST}" \
+            "cd /opt/strategon/deploy && \
+             sed -i 's|^STRATEGON_VERSION=.*|STRATEGON_VERSION=${VERSION}|' .env && \
+             docker compose pull && \
+             docker compose up -d && \
+             docker compose ps"
+      # Probes through Traefik, so this also proves routing and the certificate
+      # survived the swap — not just that the process came up.
+      - name: Wait for health
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS https://s7n.lynkora.com/healthz >/dev/null; then
+              echo "control plane healthy"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "control plane did not become healthy" >&2
+          ssh -o BatchMode=yes "root@${HOST}" \
+            "cd /opt/strategon/deploy && docker compose logs --tail=80 controlplane" >&2
+          exit 1

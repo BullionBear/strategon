@@ -23,6 +23,12 @@ type Config struct {
 	DiscordClientSecret string
 	DiscordRedirectURL  string // e.g. http://127.0.0.1:8081/auth/callback
 
+	// DiscordGuildID restricts login to members of one Discord guild.
+	// Authorization is flat — any principal who logs in is a full operator —
+	// so on a public deployment this is the only thing standing between the
+	// internet and SetDeployment. Empty means any Discord account may log in.
+	DiscordGuildID string
+
 	// FrontendURL is where browsers return after login/logout.
 	FrontendURL string
 
@@ -37,6 +43,7 @@ type Service struct {
 	discordClientID     string
 	discordClientSecret string
 	discordRedirectURL  string
+	discordGuildID      string
 	frontendURL         string
 	tokens              *tokenStore
 	exchanges           *exchangeStore
@@ -82,6 +89,7 @@ func New(cfg Config) (*Service, error) {
 		discordClientID:     strings.TrimSpace(cfg.DiscordClientID),
 		discordClientSecret: strings.TrimSpace(cfg.DiscordClientSecret),
 		discordRedirectURL:  strings.TrimSpace(cfg.DiscordRedirectURL),
+		discordGuildID:      strings.TrimSpace(cfg.DiscordGuildID),
 		frontendURL:         strings.TrimRight(strings.TrimSpace(cfg.FrontendURL), "/"),
 		tokens:              newTokenStore(),
 		exchanges:           newExchangeStore(),
@@ -97,6 +105,9 @@ func New(cfg Config) (*Service, error) {
 	case ModeDiscord:
 		if s.discordClientID == "" || s.discordClientSecret == "" || s.discordRedirectURL == "" {
 			return nil, fmt.Errorf("auth-mode=discord requires --discord-client-id, --discord-client-secret, and --discord-redirect-url")
+		}
+		if s.discordGuildID == "" {
+			logger.Warn("auth-mode=discord without --discord-guild-id: ANY Discord account can log in and operate this control plane")
 		}
 	default:
 		return nil, fmt.Errorf("unknown auth mode %q", mode)

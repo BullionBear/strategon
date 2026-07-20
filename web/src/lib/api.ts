@@ -3,10 +3,8 @@ import { createConnectTransport } from '@connectrpc/connect-web';
 import { ControlPlaneService } from '$lib/gen/strategyplatform/v1/control_service_pb';
 import type { Machine } from '$lib/gen/strategyplatform/v1/control_service_pb';
 import { getAccessToken } from '$lib/auth';
+import { baseUrl } from '$lib/baseUrl';
 
-const baseUrl =
-	(typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) ||
-	'http://127.0.0.1:8081';
 
 const authInterceptor: Interceptor = (next) => async (req) => {
 	const tok = getAccessToken();

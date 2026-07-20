@@ -1,6 +1,4 @@
-const baseUrl =
-	(typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE) ||
-	'http://127.0.0.1:8081';
+import { baseUrl } from '$lib/baseUrl';
 
 const TOKEN_KEY = 'strategon_access_token';
 
