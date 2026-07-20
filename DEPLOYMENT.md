@@ -19,11 +19,17 @@ which specifies the pipeline; this describes what is actually deployed.
                      ┌─────────────────────────────────────────┐
                      │ strategon-controlplane-1                │
                      │   :8081 UI + human API + /auth  ◀ Traefik│
-                     │   :8080 AgentService (network-internal)  │
+                     │   :8080 AgentService  ◀── mTLS, published │
+                     │        on 100.108.10.2:8443 (Tailscale)  │
                      │   one static binary, scratch image       │
-                     └────────────────────┬────────────────────┘
-                                          │
-                                          ▼
+                     └──────────┬─────────────────────┬────────┘
+                                │                     │ private-CA mTLS
+                                │                     ▼
+                                │        ┌──────────────────────────┐
+                                │        │ agent "yite"             │
+                                │        │ 100.65.26.119, unprivil. │
+                                │        └──────────────────────────┘
+                                ▼
                      ┌─────────────────────────────────────────┐
                      │ Postgres 172.238.24.139:5432/strategon   │
                      │ separate host, not managed by this repo  │
@@ -153,26 +159,76 @@ with `invalid_redirect_uri`. This cannot be automated via the bot token:
 
 ---
 
-## 6. Exposing the agent endpoint
+## 6. Agent endpoint and mTLS
 
-**Currently network-internal.** `AgentService` listens on `:8080` inside the
-`web` docker network and is not published to the host.
+`AgentService` is published on **`100.108.10.2:8443`** — the control-plane
+host's Tailscale address only. It is not reachable on `139.162.74.23`; the
+public interface exposes nothing but Traefik's 80/443.
 
-It speaks plaintext h2c unless `--tls-cert`, `--tls-key` and `--client-ca` are
-all supplied. Publishing the port before that would expose strategy deployment
-control to the internet with no client-certificate check — so the port stays
-closed until mTLS material exists.
+Traefik is deliberately not in this path. It would terminate TLS and strip the
+client certificate the control plane needs to verify, so the endpoint carries
+its own private-CA TLS end to end and the control plane enforces
+`RequireAndVerifyClientCert`. A connection without a client certificate fails
+the handshake.
 
-To enable, once a CA and server certificate have been issued with
-`cmd/strategon-ca`:
+### The CA
 
-1. Mount the material into the container and add the three flags.
-2. Publish the port: `ports: ["8443:8080"]`.
-3. Add a DNS A record for the agent hostname pointing at `139.162.74.23`.
+Ed25519 root CA issued by `cmd/strategon-ca`. **`ca/ca-key.pem` is offline** —
+it exists only on the operator's machine and must never reach a server. The
+host holds the CA *certificate* (to verify agents) and its own server keypair,
+in `/opt/strategon/tls/`, mounted read-only at `/tls`.
 
-Traefik is deliberately not involved: it would terminate TLS and strip the
-client certificate the control plane needs to verify. The agent endpoint
-carries its own private-CA TLS end to end.
+| Certificate | CN | SANs | Location |
+|---|---|---|---|
+| Root CA | `strategon-ca` | — | offline; cert only on hosts |
+| Server | `control-plane` | `IP:100.108.10.2` | `/opt/strategon/tls/` on CP host |
+| Client | `yite` | — | `~/strategon/tls/` on the agent host |
+
+The server certificate's IP SAN pins it to the Tailscale address — reaching the
+control plane by any other address fails verification.
+
+Issuing another agent identity:
+
+```bash
+./bin/strategon-ca sign --ca ./ca/ --cn <machine-id> --out ./certs/<machine-id>/
+```
+
+The agent's machine ID defaults to its client-certificate CN, so the CN *is*
+the machine identity. Nothing else authenticates an agent.
+
+### Registered agents
+
+Machines self-register on first connect — there is no separate registration
+step or RPC.
+
+| Machine | Host | Runs as |
+|---|---|---|
+| `yite` | `100.65.26.119` (Ubuntu 24.04, x86_64) | user `yite`, systemd user unit |
+
+Agent install layout on that host:
+
+```
+~/strategon/agent                 # static binary
+~/strategon/tls/{cert,key,ca-cert}.pem
+~/strategies/                     # --base, strategy release trees
+~/.config/systemd/user/strategon-agent.service
+```
+
+```bash
+systemctl --user status strategon-agent
+journalctl --user -u strategon-agent -f
+```
+
+The unit runs **unprivileged**. The agent forks and supervises strategy
+processes, so running it as root would hand every strategy root on that box.
+
+Two consequences of that choice, both currently unresolved:
+
+- **`loginctl enable-linger yite` must be set**, or the user-level systemd
+  manager exits when the last session closes and the agent stops with it.
+- **`--cgroup-root` is empty, so strategies run without cgroup confinement.**
+  Delegating a cgroup subtree to a non-root user needs a systemd drop-in. Worth
+  doing before running anything real on that machine.
 
 ---
 
@@ -249,6 +305,9 @@ For rebuilding from scratch:
 
 - The Hostinger API token lives in `credentials/` (gitignored). It is not used
   by any automation — DNS was a one-time manual step.
+- Agent certificates carry no expiry-driven rotation process yet. Reissue with
+  `strategon-ca sign` and restart the unit; there is no revocation list, so a
+  compromised agent key means reissuing the CA and every certificate under it.
 - `DISCORD_BOT_TOKEN` is not used anywhere. Guild membership is checked through
   the user's own OAuth grant, so no bot credential sits on the host.
 - No backups are configured for the `strategon` database. The control plane is
