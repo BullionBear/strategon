@@ -128,14 +128,24 @@
 		};
 	});
 
+	// The parent re-renders on every WatchMachine push (live metrics tick
+	// constantly), which re-reads the reachable/agentVersion props and re-runs
+	// this effect even though their values are unchanged. Dedupe on the browse
+	// target's identity so live updates don't reload the listing — which would
+	// reset the current path and clear the selection out from under the user.
+	// A plain (non-reactive) variable is used so reading/writing it here does
+	// not itself feed back into the effect's dependencies.
+	let lastLoadKey: string | null = null;
+
 	$effect(() => {
-		const _m = machineId;
-		const _s = strategy;
-		const _r = reachable;
-		const _ok = supported;
-		if (_r && _ok && _m && _s) {
-			load('.');
+		if (!reachable || !supported || !machineId || !strategy) {
+			lastLoadKey = null; // re-load when the target next becomes browsable
+			return;
 		}
+		const key = `${machineId}\n${strategy}`;
+		if (key === lastLoadKey) return;
+		lastLoadKey = key;
+		load('.');
 	});
 </script>
 
