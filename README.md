@@ -5,14 +5,11 @@ strategy processes, built on **level-triggered desired-state convergence**
 (kubelet-inspired): publish, rollback, and disaster recovery are unified into one
 mechanism — change the desired state and let the agent converge.
 
-Design docs: `ARCHITECTURE.md`, `PROTOCOL.md`, `RECONCILER.md`, `SAFETY.md`,
-`FRONTEND.md`.
-
 ## Status
 
-Foundation (agent reconciler + agent stream) plus the **human API and Svelte UI**
-(`FRONTEND.md`): Connect `ControlPlaneService`, `StrategyView` join, deploy-phase
-tracker, fleet panel.
+Foundation (agent reconciler + agent stream) plus the **human API and Svelte UI**:
+Connect `ControlPlaneService`, `StrategyView` join, deploy-phase tracker, fleet
+panel.
 
 ```mermaid
 flowchart LR
@@ -157,8 +154,8 @@ so the agent URL host verifies (e.g. `https://cp.internal:8080` needs
 ### 2c. Fencing lease (strategy SDK)
 
 Lease lifecycle is owned by the **strategy process** (`sdk/lease`), not the
-agent (IMPROVEMENT A1). `LeaseService` is on the agent port. Deploy to another
-machine is blocked while a lease is held (+ `--lease-margin-cp`).
+agent. `LeaseService` is on the agent port. Deploy to another machine is blocked
+while a lease is held (+ `--lease-margin-cp`).
 
 ```bash
 # Demo process that acquires/renews and calls CheckBeforeOrder each second
@@ -211,7 +208,7 @@ curl -N -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/W
 
 - Artifacts/S3 + Postgres store
 - Cron local executor (UI writes spec today; agent does not run it yet)
-- Remaining SAFETY §8 hardening (NTP ops, residual-risk labeling); CP lease
+- Remaining safety hardening (NTP ops, residual-risk labeling); CP lease
   authority + SDK `CheckBeforeOrder` + Deploy interlocking are implemented
 - Online mTLS enrollment (token→CSR) + SSO/authz on the human API
   (offline Ed25519 mTLS via `strategon-ca` is implemented)
