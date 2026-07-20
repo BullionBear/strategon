@@ -1,0 +1,72 @@
+# Production stack for s7n.lynkora.com.
+#
+# Lives at /opt/strategon/deploy/docker-compose.yml on the host. CI only ever
+# rewrites STRATEGON_VERSION in .env and runs `docker compose up -d`; secrets in
+# .env are never overwritten by a deploy.
+#
+# Traefik already owns :80/:443 on this host and discovers containers on the
+# external `web` network, so nothing here publishes a port.
+#
+# Postgres is a separate long-lived substrate — not managed here.
+
+# Fixed project name so containers are strategon-controlplane-1 regardless of
+# the directory CI happens to run compose from.
+name: strategon
+
+services:
+  controlplane:
+    image: ghcr.io/bullionbear/strategon:${STRATEGON_VERSION:-latest}
+    restart: unless-stopped
+    command:
+      # Container-local bind: the default is loopback, which Traefik cannot reach.
+      - --human-addr=0.0.0.0:8081
+      # Binds all container interfaces, but `ports` below publishes it only on
+      # the host's Tailscale address — the container cannot bind a host IP
+      # directly, so the restriction is expressed at the publish step.
+      - --agent-addr=0.0.0.0:8080
+      # mTLS: the control plane terminates TLS itself and verifies agent client
+      # certificates against the private CA. Traefik is deliberately not in this
+      # path — it would strip the client certificate.
+      - --tls-cert=/tls/cert.pem
+      - --tls-key=/tls/key.pem
+      - --client-ca=/tls/ca-cert.pem
+      - --db=${STRATEGON_DB_DSN}
+      - --auth-mode=discord
+      - --auth-session-secret=${SESSION_SECRET}
+      - --discord-client-id=${DISCORD_CLIENT_ID}
+      - --discord-client-secret=${DISCORD_CLIENT_SECRET}
+      # Authorization is flat: whoever logs in is a full operator. Guild
+      # membership is the only gate on this public endpoint — never blank it.
+      - --discord-guild-id=${DISCORD_GUILD_ID}
+      - --discord-redirect-url=https://s7n.lynkora.com/auth/callback
+      - --auth-frontend-url=https://s7n.lynkora.com
+    ports:
+      # Tailscale-only. Binding the host's 100.x address keeps AgentService off
+      # the public interface entirely — 139.162.74.23:8443 stays closed.
+      - "100.108.10.2:8443:8080"
+    volumes:
+      # Server keypair + the CA that agent client certs are verified against.
+      # The CA *private* key is never here; it stays offline on the operator's
+      # machine.
+      - /opt/strategon/tls:/tls:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.strategon.rule=Host(`s7n.lynkora.com`)"
+      - "traefik.http.routers.strategon.entrypoints=websecure"
+      - "traefik.http.routers.strategon.tls.certresolver=le"
+      # One binary serves the UI, the human API and /auth — a single router
+      # covers the whole host, no path rules needed.
+      - "traefik.http.services.strategon.loadbalancer.server.port=8081"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - web
+
+networks:
+  web:
+    name: web
+    external: true
