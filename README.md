@@ -13,6 +13,9 @@ loop — change the desired state and wait for convergence.
 The project is small on purpose: one control plane, one agent per host, and a
 simple human API (plus an embedded UI) for deploy and observe.
 
+For a map of the repository and control loop, see
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Quick start
 
 Minimum path: run a control plane in Docker, connect an agent, deploy a sample
