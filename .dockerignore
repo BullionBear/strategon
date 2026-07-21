@@ -1,0 +1,11 @@
+.git
+**/.git
+**/node_modules
+web/node_modules
+web/build
+web/.svelte-kit
+**/bin
+**/certs
+**/.pnpm-store
+**/.DS_Store
+agent-transcripts

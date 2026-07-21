@@ -116,7 +116,7 @@
 	async function undeploy() {
 		if (
 			!confirm(
-				`Undeploy ${strat} from ${id}? This deletes the deployment and its logs/history from the UI. Use Stop to halt the process while keeping history.`
+				`Undeploy ${strat} from ${id}? This deletes the assignment and its logs/history from the UI. Use Stop to halt the process while keeping history.`
 			)
 		) {
 			return;
@@ -252,7 +252,7 @@
 
 		{#if view.stopped}
 			<p class="stopped-note muted" style="margin-top:2rem">
-				Process halted. Deployment, WorkDir, and logs are retained — use
+				Process halted. Assignment, WorkDir, and logs are retained — use
 				<strong>Start</strong> to resume the pinned version, or
 				<strong>Undeploy</strong> to delete everything.
 			</p>
