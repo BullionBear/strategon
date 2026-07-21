@@ -10,11 +10,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
@@ -31,7 +34,17 @@ import (
 	"golang.org/x/net/http2/h2c"
 )
 
+const shutdownTimeout = 10 * time.Second
+
 func main() {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	if err := run(logger); err != nil {
+		logger.Error("control plane exited", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(logger *slog.Logger) error {
 	agentAddr := flag.String("agent-addr", ":8080", "AgentService listen address")
 	humanAddr := flag.String("human-addr", "127.0.0.1:8081", "ControlPlaneService listen address (bind loopback by default)")
 	// Legacy alias for agent addr.
@@ -59,37 +72,17 @@ func main() {
 		*agentAddr = *legacyAddr
 	}
 
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
-
-	mode, err := auth.ParseMode(*authMode)
-	if err != nil {
-		logger.Error("invalid --auth-mode", "err", err)
-		os.Exit(1)
-	}
-	authSvc, err := auth.New(auth.Config{
-		Mode:                mode,
-		SessionSecret:       *sessionSecret,
-		MockUser:            *mockUser,
-		MockID:              *mockID,
-		DiscordClientID:     *discordClientID,
-		DiscordClientSecret: *discordClientSecret,
-		DiscordRedirectURL:  *discordRedirect,
-		DiscordGuildID:      *discordGuildID,
-		FrontendURL:         *frontendURL,
-		Logger:              logger,
-	})
-	if err != nil {
-		logger.Error("auth init failed", "err", err)
-		os.Exit(1)
-	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	hub := store.NewHub()
 	var st store.Store
+	var pg *store.Postgres
 	if *dbDSN != "" {
-		pg, err := store.NewPostgres(context.Background(), *dbDSN, hub)
+		var err error
+		pg, err = store.NewPostgres(ctx, *dbDSN, hub)
 		if err != nil {
-			logger.Error("postgres store init failed", "err", err)
-			os.Exit(1)
+			return fmt.Errorf("postgres store init: %w", err)
 		}
 		defer pg.Close()
 		pg.SetLeaseMarginCP(*leaseMarginCP)
@@ -101,6 +94,32 @@ func main() {
 		st = mem
 		logger.Info("using in-memory store (state lost on restart; set --db for durability)")
 	}
+
+	mode, err := auth.ParseMode(*authMode)
+	if err != nil {
+		return fmt.Errorf("invalid --auth-mode: %w", err)
+	}
+	authSvc, err := auth.New(auth.Config{
+		Mode:                mode,
+		SessionSecret:       *sessionSecret,
+		MockUser:            *mockUser,
+		MockID:              *mockID,
+		DiscordClientID:     *discordClientID,
+		DiscordClientSecret: *discordClientSecret,
+		DiscordRedirectURL:  *discordRedirect,
+		DiscordGuildID:      *discordGuildID,
+		FrontendURL:         *frontendURL,
+		Store:               st,
+		Logger:              logger,
+	})
+	if err != nil {
+		return fmt.Errorf("auth init: %w", err)
+	}
+	if err := authSvc.LoadTokens(ctx); err != nil {
+		return fmt.Errorf("load api tokens: %w", err)
+	}
+	go authSvc.RunTokenFlusher(ctx, auth.DefaultTokenFlushInterval)
+
 	broker := filetransfer.New()
 	agentSrv := grpcstream.New(st, grpcstream.WithResync(*resync), grpcstream.WithLogger(logger), grpcstream.WithBroker(broker))
 	leaseSrv := cpLease.New(st, logger)
@@ -127,36 +146,62 @@ func main() {
 	humanMux.Handle("/", webassets.Handler())
 
 	h2s := &http2.Server{}
+	agentHTTP, err := newAgentServer(*agentAddr, mtls.PeerCNHandler(agentMux), h2s, *tlsCert, *tlsKey, *clientCA)
+	if err != nil {
+		return err
+	}
+	humanHTTP := &http.Server{Addr: *humanAddr, Handler: h2c.NewHandler(withCORS(humanMux), h2s)}
+
+	errCh := make(chan error, 2)
 	go func() {
-		agentHandler := mtls.PeerCNHandler(agentMux)
-		if err := serveAgent(logger, *agentAddr, agentHandler, h2s, *tlsCert, *tlsKey, *clientCA); err != nil {
-			logger.Error("agent server exited", "err", err)
-			os.Exit(1)
+		logger.Info("agent service listening", "addr", *agentAddr, "mtls", *tlsCert != "")
+		if err := listenAgent(agentHTTP, *tlsCert != ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("agent server: %w", err)
+		}
+	}()
+	go func() {
+		logger.Info("human API listening", "addr", *humanAddr, "auth_mode", mode, "ui_embedded", webassets.Available(),
+			"build_version", buildinfo.Version, "commit", buildinfo.CommitHash, "build_time", buildinfo.BuildTime)
+		if err := humanHTTP.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("human server: %w", err)
 		}
 	}()
 
-	logger.Info("human API listening", "addr", *humanAddr, "auth_mode", mode, "ui_embedded", webassets.Available(),
-		"build_version", buildinfo.Version, "commit", buildinfo.CommitHash, "build_time", buildinfo.BuildTime)
-	humanHTTP := &http.Server{Addr: *humanAddr, Handler: h2c.NewHandler(withCORS(humanMux), h2s)}
-	if err := humanHTTP.ListenAndServe(); err != nil {
-		logger.Error("human server exited", "err", err)
-		os.Exit(1)
+	select {
+	case <-ctx.Done():
+		logger.Info("shutdown signal received")
+	case err := <-errCh:
+		stop()
+		return err
 	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if err := humanHTTP.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("human server shutdown", "err", err)
+	}
+	if err := agentHTTP.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("agent server shutdown", "err", err)
+	}
+	if err := authSvc.FlushTokens(shutdownCtx); err != nil {
+		logger.Warn("api token flush", "err", err)
+	}
+	return nil
 }
 
-func serveAgent(logger *slog.Logger, addr string, handler http.Handler, h2s *http2.Server, certFile, keyFile, clientCAFile string) error {
+func newAgentServer(addr string, handler http.Handler, h2s *http2.Server, certFile, keyFile, clientCAFile string) (*http.Server, error) {
 	tlsMode := certFile != "" || keyFile != "" || clientCAFile != ""
 	if tlsMode {
 		if certFile == "" || keyFile == "" || clientCAFile == "" {
-			return fmt.Errorf("mTLS requires --tls-cert, --tls-key, and --client-ca together")
+			return nil, fmt.Errorf("mTLS requires --tls-cert, --tls-key, and --client-ca together")
 		}
 		cert, err := mtls.LoadCert(certFile, keyFile)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		clientCA, err := mtls.LoadCAPool(clientCAFile)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		srv := &http.Server{
 			Addr:      addr,
@@ -164,15 +209,18 @@ func serveAgent(logger *slog.Logger, addr string, handler http.Handler, h2s *htt
 			TLSConfig: mtls.ServerConfig(cert, clientCA),
 		}
 		if err := http2.ConfigureServer(srv, h2s); err != nil {
-			return err
+			return nil, err
 		}
-		logger.Info("agent service listening (mTLS)", "addr", addr)
+		return srv, nil
+	}
+	return &http.Server{Addr: addr, Handler: h2c.NewHandler(handler, h2s)}, nil
+}
+
+func listenAgent(srv *http.Server, mtlsEnabled bool) error {
+	if mtlsEnabled {
 		// Certificates are already in TLSConfig; empty paths are intentional.
 		return srv.ListenAndServeTLS("", "")
 	}
-
-	logger.Info("agent service listening (h2c)", "addr", addr)
-	srv := &http.Server{Addr: addr, Handler: h2c.NewHandler(handler, h2s)}
 	return srv.ListenAndServe()
 }
 

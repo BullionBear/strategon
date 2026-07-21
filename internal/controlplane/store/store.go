@@ -9,6 +9,7 @@
 package store
 
 import (
+	"context"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
@@ -25,6 +26,19 @@ type ResourceSample struct {
 	SampledAt  time.Time
 	CPUPercent float64
 	MemBytes   int64
+}
+
+// TokenRow is a persisted API token. Only the SHA-256 hash of the plaintext
+// secret is stored — never the secret itself.
+type TokenRow struct {
+	ID        string
+	TokenHash string
+	Name      string
+	UserID    string
+	Username  string
+	CreatedAt time.Time
+	LastUsed  time.Time // zero if never used / unknown
+	RevokedAt time.Time // zero if active (soft-delete when set)
 }
 
 // MachineRecord is the control plane's view of a machine.
@@ -114,4 +128,18 @@ type Store interface {
 
 	// LeaseMarginCP returns the control-plane lease expiry margin.
 	LeaseMarginCP() time.Duration
+
+	// LoadAPITokens returns all active (non-revoked) API tokens.
+	LoadAPITokens(ctx context.Context) ([]TokenRow, error)
+
+	// InsertAPIToken persists a newly issued token (hash only).
+	InsertAPIToken(ctx context.Context, t TokenRow) error
+
+	// RevokeAPIToken soft-deletes a token owned by userID (sets revoked_at).
+	// Returns false when no matching active token exists.
+	RevokeAPIToken(ctx context.Context, userID, id string) (bool, error)
+
+	// TouchAPITokens batch-updates last_used for the given token ids.
+	// Best-effort telemetry; callers may lose unflushed updates on hard kill.
+	TouchAPITokens(ctx context.Context, lastUsed map[string]time.Time) error
 }

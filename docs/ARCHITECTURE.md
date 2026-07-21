@@ -186,6 +186,11 @@ dev; process restart loses state. Postgres migrations live under
 A change hub (`store.Hub`) fans out machine updates to `WatchMachine`
 subscribers so the UI can stream without polling.
 
+The control plane handles `SIGINT`/`SIGTERM` with a bounded drain (~10s): stop
+accepting on both ports, flush best-effort API-token `last_used` timestamps,
+then close the Postgres pool. Deploy platforms should send `SIGTERM` (not
+`SIGKILL`) and allow a grace period ≥ that drain timeout.
+
 ## Auth and mTLS
 
 **Human API** (`--auth-mode`):
@@ -196,7 +201,17 @@ subscribers so the UI can stream without polling.
 | `mock` | Session via `/auth/mock-login` |
 | `discord` | Discord OAuth; optional guild gate; flat authz (any login = operator) |
 
-Logged-in operators can mint Bearer API tokens for CLI use.
+Logged-in operators can mint Bearer API tokens (`str_live_…`) for CLI/SDK use.
+With `--db` (Postgres), tokens are durable: create/revoke write through to
+`api_tokens` (hash only; soft-delete via `revoked_at`), and validation is served
+from an in-memory cache loaded at boot. `last_used` is best-effort (batched
+flush every ~30s, plus a final flush on graceful shutdown). Without Postgres,
+tokens live only in the memory store and are lost on restart — same as other
+in-memory state.
+
+**Migrating deploy note:** the first release that introduces `api_tokens` has no
+prior durable source, so any in-memory tokens from before that deploy are lost
+once. Operators must re-issue tokens after that one migrate.
 
 **Agent port mTLS** (optional, orthogonal to human auth): enable with
 `--tls-cert` / `--tls-key` / `--client-ca` on the control plane and matching

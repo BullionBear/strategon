@@ -1,9 +1,13 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
+
+	"github.com/bullionbear/strategon/internal/controlplane/store"
 )
 
 // Config configures the human-API auth service.
@@ -31,6 +35,11 @@ type Config struct {
 
 	// FrontendURL is where browsers return after login/logout.
 	FrontendURL string
+
+	// Store persists API tokens (create/revoke write-through; LastUsed batched).
+	// Nil keeps tokens in-process only (unit tests). Production should pass the
+	// control-plane Store (Postgres for durability; Memory for --db="").
+	Store store.Store
 
 	Logger *slog.Logger
 }
@@ -91,7 +100,7 @@ func New(cfg Config) (*Service, error) {
 		discordRedirectURL:  strings.TrimSpace(cfg.DiscordRedirectURL),
 		discordGuildID:      strings.TrimSpace(cfg.DiscordGuildID),
 		frontendURL:         strings.TrimRight(strings.TrimSpace(cfg.FrontendURL), "/"),
-		tokens:              newTokenStore(),
+		tokens:              newTokenStore(cfg.Store),
 		exchanges:           newExchangeStore(),
 		logger:              logger,
 	}
@@ -125,4 +134,20 @@ func (s *Service) MockUser() *User {
 		u.Source = SourceMock
 	}
 	return &u
+}
+
+// LoadTokens loads active API tokens from the backing store into the cache.
+// Fail-fast: a load error should abort control-plane startup.
+func (s *Service) LoadTokens(ctx context.Context) error {
+	return s.tokens.load(ctx)
+}
+
+// FlushTokens forces a flush of pending LastUsed timestamps.
+func (s *Service) FlushTokens(ctx context.Context) error {
+	return s.tokens.flush(ctx)
+}
+
+// RunTokenFlusher periodically flushes LastUsed until ctx is cancelled.
+func (s *Service) RunTokenFlusher(ctx context.Context, interval time.Duration) {
+	s.tokens.runFlusher(ctx, interval)
 }

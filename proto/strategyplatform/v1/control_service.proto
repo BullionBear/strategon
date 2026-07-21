@@ -161,7 +161,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;

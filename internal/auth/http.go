@@ -222,7 +222,7 @@ func (s *Service) handleTokens(w http.ResponseWriter, r *http.Request) {
 		if owner.Source == SourceAPIToken {
 			owner.Source = SourceDiscord
 		}
-		plaintext, meta, err := s.tokens.create(owner, body.Name)
+		plaintext, meta, err := s.tokens.create(r.Context(), owner, body.Name)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
@@ -253,7 +253,12 @@ func (s *Service) handleTokenByID(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing token id", http.StatusBadRequest)
 		return
 	}
-	if !s.tokens.revoke(u.ID, id) {
+	ok, err := s.tokens.revoke(r.Context(), u, id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "revoke failed"})
+		return
+	}
+	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
 		return
 	}
