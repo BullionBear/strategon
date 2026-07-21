@@ -27,7 +27,8 @@ const LABELS: Record<number, string> = {
 	[DeployPhase.HEALTHY]: 'Healthy',
 	[DeployPhase.ROLLING_BACK]: 'Rolling back',
 	[DeployPhase.ROLLED_BACK]: 'Rolled back',
-	[DeployPhase.FAILED]: 'Failed'
+	[DeployPhase.FAILED]: 'Failed',
+	[DeployPhase.STOPPED]: 'Stopped'
 };
 
 export function phaseLabel(p: DeployPhase | number | undefined): string {

@@ -5,7 +5,7 @@
 	import { client } from '$lib/api';
 	import type { ArtifactRef } from '$lib/gen/strategyplatform/v1/common_pb';
 	import type { Machine } from '$lib/gen/strategyplatform/v1/control_service_pb';
-	import { latestVersion, versionsFor } from '$lib/artifacts';
+	import { groupArtifacts, latestVersion, versionsFor } from '$lib/artifacts';
 
 	let machines = $state<Machine[]>([]);
 	let artifacts = $state<ArtifactRef[]>([]);
@@ -20,6 +20,7 @@
 	let info = $state('');
 	let versionTouched = $state(false);
 	let configTouched = $state(false);
+	let strategyOpen = $state(false);
 
 	onMount(async () => {
 		machineId = page.url.searchParams.get('machine') || '';
@@ -40,6 +41,23 @@
 		artifacts = res.artifacts;
 	}
 
+	/** Distinct binary artifact names (exclude `-config` siblings). */
+	const strategyOptions = $derived(
+		groupArtifacts(artifacts)
+			.filter((g) => g.kind === 'binary')
+			.map((g) => g.name)
+	);
+
+	const strategyFiltered = $derived.by(() => {
+		const q = strategy.trim().toLowerCase();
+		if (!q) return strategyOptions;
+		return strategyOptions.filter((n) => n.toLowerCase().includes(q));
+	});
+
+	const strategyExact = $derived(
+		strategyOptions.some((n) => n.toLowerCase() === strategy.trim().toLowerCase())
+	);
+
 	const binaryOptions = $derived(strategy ? versionsFor(artifacts, strategy) : []);
 	const configOptions = $derived(strategy ? versionsFor(artifacts, `${strategy}-config`) : []);
 	const hasBinary = $derived(binaryOptions.length > 0);
@@ -55,6 +73,26 @@
 			configVersion = latestVersion(artifacts, `${s}-config`) ?? '';
 		}
 	});
+
+	function selectStrategy(name: string) {
+		strategy = name;
+		versionTouched = false;
+		configTouched = false;
+		strategyOpen = false;
+	}
+
+	function onStrategyInput() {
+		versionTouched = false;
+		configTouched = false;
+		strategyOpen = true;
+	}
+
+	function onStrategyBlur() {
+		// Delay so mousedown on an option beats blur.
+		setTimeout(() => {
+			strategyOpen = false;
+		}, 150);
+	}
 
 	function parseArgs(text: string): string[] {
 		const trimmed = text.trim();
@@ -123,16 +161,49 @@
 					{/each}
 				</select>
 			</label>
-			<label>
+			<label class="strategy-field">
 				Strategy
-				<input
-					bind:value={strategy}
-					placeholder="mystrat"
-					oninput={() => {
-						versionTouched = false;
-						configTouched = false;
-					}}
-				/>
+				<div class="combo">
+					<input
+						bind:value={strategy}
+						placeholder="mystrat"
+						autocomplete="off"
+						role="combobox"
+						aria-expanded={strategyOpen}
+						aria-controls="strategy-list"
+						aria-autocomplete="list"
+						oninput={onStrategyInput}
+						onfocus={() => (strategyOpen = true)}
+						onblur={onStrategyBlur}
+					/>
+					{#if strategyOpen}
+						<ul id="strategy-list" class="combo-list" role="listbox">
+							{#each strategyFiltered as name}
+								<li role="option" aria-selected={strategy === name}>
+									<button
+										type="button"
+										class="combo-opt"
+										onmousedown={(e) => {
+											e.preventDefault();
+											selectStrategy(name);
+										}}
+									>
+										{name}
+									</button>
+								</li>
+							{:else}
+								<li class="combo-empty muted">
+									{#if strategy.trim() && !strategyExact}
+										<span class="mono">{strategy.trim()}</span> will be created as a new
+										strategy
+									{:else}
+										No known strategies yet — type a name to create one
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
 			</label>
 			<label>
 				Binary
@@ -236,6 +307,50 @@
 		border-radius: 6px;
 		background: var(--surface, #fff);
 		resize: vertical;
+	}
+	.strategy-field {
+		position: relative;
+		min-width: 12rem;
+	}
+	.combo {
+		position: relative;
+	}
+	.combo-list {
+		position: absolute;
+		z-index: 20;
+		left: 0;
+		right: 0;
+		top: calc(100% + 2px);
+		margin: 0;
+		padding: 0.25rem 0;
+		list-style: none;
+		max-height: 14rem;
+		overflow-y: auto;
+		background: var(--surface, #fff);
+		border: 1px solid var(--line, #ddd);
+		border-radius: 6px;
+		box-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.08));
+	}
+	.combo-opt {
+		display: block;
+		width: 100%;
+		text-align: left;
+		appearance: none;
+		border: 0;
+		background: transparent;
+		padding: 0.45rem 0.7rem;
+		font: inherit;
+		font-family: var(--mono, ui-monospace, monospace);
+		cursor: pointer;
+		color: inherit;
+	}
+	.combo-opt:hover {
+		background: rgba(13, 115, 119, 0.08);
+	}
+	.combo-empty {
+		padding: 0.55rem 0.7rem;
+		font-size: 0.85rem;
+		font-weight: 400;
 	}
 	.empty-hint {
 		display: inline-block;

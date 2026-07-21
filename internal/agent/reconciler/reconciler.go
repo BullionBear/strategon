@@ -244,6 +244,10 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 	if st.backoff.Blocked(r.now()) {
 		return // backoff not elapsed; tick will wake us
 	}
+	if spec.GetStopped() {
+		r.reconcileStopped(spec, st)
+		return
+	}
 	if st.inflight != nil {
 		// A deploy is in flight. During the download→verify→switch pipeline the
 		// main loop must not touch process state. But once the deploy has
@@ -257,7 +261,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		// above) paces the restarts.
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING &&
 			st.proc == nil && versionMatches(spec, st) {
-			r.startProcess(spec, st)
+			r.startProcess(spec, st, true)
 		}
 		return // otherwise wait for worker events
 	}
@@ -273,8 +277,14 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return // steady state
 
 	case versionMatches(spec, st) && st.proc == nil:
-		// Same version, process gone (crashed): restart, not redeploy.
-		r.startProcess(spec, st)
+		if st.phase == pb.DeployPhase_DEPLOY_PHASE_STOPPED {
+			// Resume in place: re-run the health window (STARTING → HEALTH_CHECKING).
+			r.startProcess(spec, st, true)
+		} else {
+			// Crash restart: keep HEALTHY (crash-loop budget already spent during
+			// the initial health window; no need to re-enter it).
+			r.startProcess(spec, st, false)
+		}
 
 	case !versionMatches(spec, st):
 		if spec.GetArtifact().GetVersion() == st.lastBadVersion {
@@ -291,6 +301,26 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		}
 		r.beginDeploy(spec, st)
 	}
+}
+
+// reconcileStopped drains the process when desired.stopped is set, but never
+// deletes the strategy from actual state (unlike retireStrategy). WorkDir,
+// release, and last-running artifact are retained for browse / fast resume.
+func (r *Reconciler) reconcileStopped(spec *pb.StrategyAssignmentSpec, st *strategyState) {
+	if st.inflight != nil {
+		st.inflight.cancel()
+		st.inflight = nil
+	}
+	if st.proc != nil {
+		if !st.stopping {
+			r.spawnDrain(st, spec, false)
+		}
+		return
+	}
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_STOPPED
+	st.stopping = false
+	st.lastError = ""
+	st.observedGen = r.generation
 }
 
 // retireStrategy drains and removes a strategy no longer in desired.
@@ -310,9 +340,16 @@ func (r *Reconciler) retireStrategy(st *strategyState) {
 }
 
 // startProcess forks/execs the strategy on the CURRENT symlinked binary and
-// begins supervising it. Called in the main loop for
-// crash-restart and rollback; deploy STARTING happens in the worker.
-func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState) {
+// begins supervising it. Called in the main loop for crash-restart, resume, and
+// rollback; deploy STARTING happens in the worker.
+//
+// When healthCheck is true the process enters STARTING → HEALTH_CHECKING (resume
+// / post-deploy crash during the window). When false (steady-state crash
+// restart) the phase stays HEALTHY.
+func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState, healthCheck bool) {
+	if healthCheck {
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
+	}
 	sp, err := r.buildStartSpec(spec)
 	if err != nil {
 		st.lastError = err.Error()
@@ -328,8 +365,13 @@ func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return
 	}
 	r.installProcess(spec, st, proc)
-	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
-	st.healthDeadline = r.now().Add(healthWindow(spec))
+	if healthCheck {
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
+		st.healthDeadline = r.now().Add(healthWindow(spec))
+	} else {
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+		st.observedGen = r.generation
+	}
 }
 
 // installProcess wires a freshly-started process into state and launches its
@@ -549,7 +591,19 @@ func (r *Reconciler) recomputeObservedGeneration() {
 	converged := true
 	for name, spec := range r.desired {
 		st := r.actual[name]
-		if st == nil || !versionMatches(spec, st) || st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		if st == nil {
+			converged = false
+			break
+		}
+		if spec.GetStopped() {
+			// Intentionally halted: settled once drained (no live process).
+			if st.phase != pb.DeployPhase_DEPLOY_PHASE_STOPPED || st.proc != nil {
+				converged = false
+				break
+			}
+			continue
+		}
+		if !versionMatches(spec, st) || st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
 			converged = false
 			break
 		}

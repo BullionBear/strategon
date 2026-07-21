@@ -48,6 +48,12 @@ const (
 	// ControlPlaneServiceRollbackProcedure is the fully-qualified name of the ControlPlaneService's
 	// Rollback RPC.
 	ControlPlaneServiceRollbackProcedure = "/strategyplatform.v1.ControlPlaneService/Rollback"
+	// ControlPlaneServiceStopProcedure is the fully-qualified name of the ControlPlaneService's Stop
+	// RPC.
+	ControlPlaneServiceStopProcedure = "/strategyplatform.v1.ControlPlaneService/Stop"
+	// ControlPlaneServiceStartProcedure is the fully-qualified name of the ControlPlaneService's Start
+	// RPC.
+	ControlPlaneServiceStartProcedure = "/strategyplatform.v1.ControlPlaneService/Start"
 	// ControlPlaneServiceUndeployProcedure is the fully-qualified name of the ControlPlaneService's
 	// Undeploy RPC.
 	ControlPlaneServiceUndeployProcedure = "/strategyplatform.v1.ControlPlaneService/Undeploy"
@@ -88,6 +94,8 @@ var (
 	controlPlaneServiceDeployMethodDescriptor                 = controlPlaneServiceServiceDescriptor.Methods().ByName("Deploy")
 	controlPlaneServiceSetDeploymentMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("SetDeployment")
 	controlPlaneServiceRollbackMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Rollback")
+	controlPlaneServiceStopMethodDescriptor                   = controlPlaneServiceServiceDescriptor.Methods().ByName("Stop")
+	controlPlaneServiceStartMethodDescriptor                  = controlPlaneServiceServiceDescriptor.Methods().ByName("Start")
 	controlPlaneServiceUndeployMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Undeploy")
 	controlPlaneServiceSetScheduleMethodDescriptor            = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSchedule")
 	controlPlaneServiceWatchMachineMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("WatchMachine")
@@ -107,6 +115,8 @@ type ControlPlaneServiceClient interface {
 	Deploy(context.Context, *connect.Request[v1.DeployRequest]) (*connect.Response[v1.DeployResponse], error)
 	SetDeployment(context.Context, *connect.Request[v1.SetDeploymentRequest]) (*connect.Response[v1.SetDeploymentResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
+	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
+	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
 	SetSchedule(context.Context, *connect.Request[v1.SetScheduleRequest]) (*connect.Response[v1.SetScheduleResponse], error)
 	// UI real-time panel: machine status and deploy progress push.
@@ -163,6 +173,18 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+ControlPlaneServiceRollbackProcedure,
 			connect.WithSchema(controlPlaneServiceRollbackMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		stop: connect.NewClient[v1.StopRequest, v1.StopResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceStopProcedure,
+			connect.WithSchema(controlPlaneServiceStopMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		start: connect.NewClient[v1.StartRequest, v1.StartResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceStartProcedure,
+			connect.WithSchema(controlPlaneServiceStartMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
 		undeploy: connect.NewClient[v1.UndeployRequest, v1.UndeployResponse](
@@ -235,6 +257,8 @@ type controlPlaneServiceClient struct {
 	deploy                 *connect.Client[v1.DeployRequest, v1.DeployResponse]
 	setDeployment          *connect.Client[v1.SetDeploymentRequest, v1.SetDeploymentResponse]
 	rollback               *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
+	stop                   *connect.Client[v1.StopRequest, v1.StopResponse]
+	start                  *connect.Client[v1.StartRequest, v1.StartResponse]
 	undeploy               *connect.Client[v1.UndeployRequest, v1.UndeployResponse]
 	setSchedule            *connect.Client[v1.SetScheduleRequest, v1.SetScheduleResponse]
 	watchMachine           *connect.Client[v1.GetMachineRequest, v1.MachineStatusEvent]
@@ -270,6 +294,16 @@ func (c *controlPlaneServiceClient) SetDeployment(ctx context.Context, req *conn
 // Rollback calls strategyplatform.v1.ControlPlaneService.Rollback.
 func (c *controlPlaneServiceClient) Rollback(ctx context.Context, req *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error) {
 	return c.rollback.CallUnary(ctx, req)
+}
+
+// Stop calls strategyplatform.v1.ControlPlaneService.Stop.
+func (c *controlPlaneServiceClient) Stop(ctx context.Context, req *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error) {
+	return c.stop.CallUnary(ctx, req)
+}
+
+// Start calls strategyplatform.v1.ControlPlaneService.Start.
+func (c *controlPlaneServiceClient) Start(ctx context.Context, req *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error) {
+	return c.start.CallUnary(ctx, req)
 }
 
 // Undeploy calls strategyplatform.v1.ControlPlaneService.Undeploy.
@@ -330,6 +364,8 @@ type ControlPlaneServiceHandler interface {
 	Deploy(context.Context, *connect.Request[v1.DeployRequest]) (*connect.Response[v1.DeployResponse], error)
 	SetDeployment(context.Context, *connect.Request[v1.SetDeploymentRequest]) (*connect.Response[v1.SetDeploymentResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
+	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
+	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
 	SetSchedule(context.Context, *connect.Request[v1.SetScheduleRequest]) (*connect.Response[v1.SetScheduleResponse], error)
 	// UI real-time panel: machine status and deploy progress push.
@@ -382,6 +418,18 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		ControlPlaneServiceRollbackProcedure,
 		svc.Rollback,
 		connect.WithSchema(controlPlaneServiceRollbackMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceStopHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceStopProcedure,
+		svc.Stop,
+		connect.WithSchema(controlPlaneServiceStopMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceStartHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceStartProcedure,
+		svc.Start,
+		connect.WithSchema(controlPlaneServiceStartMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	controlPlaneServiceUndeployHandler := connect.NewUnaryHandler(
@@ -456,6 +504,10 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceSetDeploymentHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceRollbackProcedure:
 			controlPlaneServiceRollbackHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceStopProcedure:
+			controlPlaneServiceStopHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceStartProcedure:
+			controlPlaneServiceStartHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceUndeployProcedure:
 			controlPlaneServiceUndeployHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceSetScheduleProcedure:
@@ -503,6 +555,14 @@ func (UnimplementedControlPlaneServiceHandler) SetDeployment(context.Context, *c
 
 func (UnimplementedControlPlaneServiceHandler) Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.Rollback is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.Stop is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.Start is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error) {

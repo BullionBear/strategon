@@ -78,10 +78,34 @@
 		};
 	});
 
+	async function stop(strategy: string) {
+		busy = strategy;
+		error = '';
+		try {
+			await client.stop({ machineId: id, strategy });
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = '';
+		}
+	}
+
+	async function start(strategy: string) {
+		busy = strategy;
+		error = '';
+		try {
+			await client.start({ machineId: id, strategy });
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = '';
+		}
+	}
+
 	async function undeploy(strategy: string) {
 		if (
 			!confirm(
-				`Undeploy ${strategy} from ${id}? The process will drain and the lease will be released.`
+				`Undeploy ${strategy} from ${id}? This deletes the deployment record and its logs/history from the UI. Use Stop to halt the process while keeping history.`
 			)
 		) {
 			return;
@@ -184,18 +208,23 @@
 		{:else}
 			<div class="grid" style="margin-top:1rem">
 				{#each machine.strategies as s (s.strategy)}
-					<div class="panel strat" class:diverging={!s.converged}>
+					<div class="panel strat" class:diverging={!s.converged && !s.stopped}>
 						<div class="row">
 							<a class="title" href="/machines/{id}/{s.strategy}">
 								<strong class="mono">{s.strategy}</strong>
 							</a>
-							{#if s.converged}
-								<span class="pill ok">converged</span>
-							{:else if isFailPhase(s.phase)}
-								<span class="pill bad">{phaseLabel(s.phase)}</span>
-							{:else}
-								<span class="pill lag">{phaseLabel(s.phase)}</span>
-							{/if}
+							<div class="badges">
+								{#if s.stopped}
+									<span class="pill off">stopped</span>
+								{/if}
+								{#if s.converged}
+									<span class="pill ok">converged</span>
+								{:else if isFailPhase(s.phase)}
+									<span class="pill bad">{phaseLabel(s.phase)}</span>
+								{:else}
+									<span class="pill lag">{phaseLabel(s.phase)}</span>
+								{/if}
+							</div>
 						</div>
 						<a class="body" href="/machines/{id}/{s.strategy}">
 							<div class="vs">
@@ -240,8 +269,25 @@
 							{/if}
 						</a>
 						<div class="actions">
+							{#if s.stopped}
+								<button
+									class="btn secondary"
+									disabled={busy === s.strategy}
+									onclick={() => start(s.strategy)}
+								>
+									Start
+								</button>
+							{:else}
+								<button
+									class="btn secondary"
+									disabled={busy === s.strategy}
+									onclick={() => stop(s.strategy)}
+								>
+									Stop
+								</button>
+							{/if}
 							<button
-								class="btn secondary"
+								class="btn danger"
 								disabled={busy === s.strategy}
 								onclick={() => undeploy(s.strategy)}
 							>
@@ -317,10 +363,18 @@
 		gap: 0.5rem;
 		flex-wrap: wrap;
 	}
+	.badges {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		flex-wrap: wrap;
+	}
 	.actions {
 		display: flex;
 		justify-content: flex-end;
+		gap: 0.5rem;
 		margin-top: 0.35rem;
+		flex-wrap: wrap;
 	}
 	.vs {
 		display: grid;

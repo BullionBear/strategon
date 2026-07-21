@@ -50,7 +50,7 @@ message StrategyView {
   int32 restart_count = 11;
   string last_error = 12;
   // Convergence judgment (control plane computed; frontend just renders)
-  bool converged = 13; // desired == running && phase == HEALTHY
+  bool converged = 13; // desired == running && phase == HEALTHY (or stopped && STOPPED)
   bool lease_held = 14; // agent may leave unset; UI shows unknown until lease state is reported
   google.protobuf.Timestamp lease_expires_at = 15;
   // Desired cron schedules (from StrategyAssignmentSpec); read-back for UI.
@@ -63,6 +63,8 @@ message StrategyView {
   int32 num_fds = 20;
   // Latest Deploy/SetDeployment/Rollback audit timestamp when available.
   google.protobuf.Timestamp deployed_at = 21;
+  // Desired run state from StrategyAssignmentSpec.stopped.
+  bool stopped = 22;
 }
 
 message ListMachinesRequest {
@@ -126,6 +128,26 @@ message UndeployResponse {
   int64 generation = 1;
 }
 
+// Stop halts the process but keeps the deployment (assignment + WorkDir/logs).
+message StopRequest {
+  string machine_id = 1;
+  string strategy = 2;
+}
+
+message StopResponse {
+  int64 generation = 1;
+}
+
+// Start resumes a previously Stopped deployment in place (same pinned version).
+message StartRequest {
+  string machine_id = 1;
+  string strategy = 2;
+}
+
+message StartResponse {
+  int64 generation = 1;
+}
+
 message SetScheduleRequest {
   string machine_id = 1;
   string strategy = 2;
@@ -139,7 +161,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Undeploy" | "DownloadFiles"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -242,6 +264,8 @@ service ControlPlaneService {
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc SetDeployment(SetDeploymentRequest) returns (SetDeploymentResponse);
   rpc Rollback(RollbackRequest) returns (RollbackResponse);
+  rpc Stop(StopRequest) returns (StopResponse);
+  rpc Start(StartRequest) returns (StartResponse);
   rpc Undeploy(UndeployRequest) returns (UndeployResponse);
   rpc SetSchedule(SetScheduleRequest) returns (SetScheduleResponse);
 

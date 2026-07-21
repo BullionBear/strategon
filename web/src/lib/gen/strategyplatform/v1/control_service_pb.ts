@@ -22,7 +22,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/control_service.proto.
  */
 export const file_strategyplatform_v1_control_service: GenFile = /*@__PURE__*/
-  fileDesc("CilzdHJhdGVneXBsYXRmb3JtL3YxL2NvbnRyb2xfc2VydmljZS5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSKaAwoHTWFjaGluZRIxCghtZXRhZGF0YRgBIAEoCzIfLnN0cmF0ZWd5cGxhdGZvcm0udjEuT2JqZWN0TWV0YRIuCgRzcGVjGAIgASgLMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5NYWNoaW5lU3BlYxI9Cg5sYXN0X3Jlc291cmNlcxgDIAEoCzIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVJlc291cmNlcxIRCglyZWFjaGFibGUYBCABKAgSFQoNYWdlbnRfdmVyc2lvbhgFIAEoBRIyCg5sYXN0X2hlYXJ0YmVhdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoKc3RyYXRlZ2llcxgHIAMoCzIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lWaWV3EhsKE2FnZW50X2J1aWxkX3ZlcnNpb24YCCABKAkSOwoObGFzdF9wcm9jZXNzZXMYCSADKAsyIy5zdHJhdGVneXBsYXRmb3JtLnYxLlByb2Nlc3NNZXRyaWNzIowGCgxTdHJhdGVneVZpZXcSEAoIc3RyYXRlZ3kYASABKAkSOgoQZGVzaXJlZF9hcnRpZmFjdBgCIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSOAoOZGVzaXJlZF9jb25maWcYAyABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEhcKD3NwZWNfZ2VuZXJhdGlvbhgEIAEoAxIvCgVwaGFzZRgFIAEoDjIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuRGVwbG95UGhhc2USOgoQcnVubmluZ19hcnRpZmFjdBgGIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSOAoOcnVubmluZ19jb25maWcYByABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEhsKE29ic2VydmVkX2dlbmVyYXRpb24YCCABKAMSMgoKY29uZGl0aW9ucxgJIAMoCzIeLnN0cmF0ZWd5cGxhdGZvcm0udjEuQ29uZGl0aW9uEgsKA3BpZBgKIAEoBRIVCg1yZXN0YXJ0X2NvdW50GAsgASgFEhIKCmxhc3RfZXJyb3IYDCABKAkSEQoJY29udmVyZ2VkGA0gASgIEhIKCmxlYXNlX2hlbGQYDiABKAgSNAoQbGVhc2VfZXhwaXJlc19hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoJc2NoZWR1bGVzGBAgAygLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Dcm9uU2NoZWR1bGUSLgoKc3RhcnRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLY3B1X3BlcmNlbnQYEiABKAESEQoJcnNzX2J5dGVzGBMgASgDEg8KB251bV9mZHMYFCABKAUSLwoLZGVwbG95ZWRfYXQYFSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIjwKE0xpc3RNYWNoaW5lc1JlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiXwoUTGlzdE1hY2hpbmVzUmVzcG9uc2USLgoIbWFjaGluZXMYASADKAsyHC5zdHJhdGVneXBsYXRmb3JtLnYxLk1hY2hpbmUSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIicKEUdldE1hY2hpbmVSZXF1ZXN0EhIKCm1hY2hpbmVfaWQYASABKAkiZwoNRGVwbG95UmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEhgKEGFydGlmYWN0X3ZlcnNpb24YAyABKAkSFgoOY29uZmlnX3ZlcnNpb24YBCABKAkiJAoORGVwbG95UmVzcG9uc2USEgoKZ2VuZXJhdGlvbhgBIAEoAyLpAQoUU2V0RGVwbG95bWVudFJlcXVlc3QSEgoKbWFjaGluZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCRIYChBhcnRpZmFjdF92ZXJzaW9uGAMgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAQgASgJEgwKBGFyZ3MYBSADKAkSPwoDZW52GAYgAygLMjIuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXREZXBsb3ltZW50UmVxdWVzdC5FbnZFbnRyeRoqCghFbnZFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIisKFVNldERlcGxveW1lbnRSZXNwb25zZRISCgpnZW5lcmF0aW9uGAEgASgDIk8KD1JvbGxiYWNrUmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEhYKDnRhcmdldF92ZXJzaW9uGAMgASgJIiYKEFJvbGxiYWNrUmVzcG9uc2USEgoKZ2VuZXJhdGlvbhgBIAEoAyI3Cg9VbmRlcGxveVJlcXVlc3QSEgoKbWFjaGluZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCSImChBVbmRlcGxveVJlc3BvbnNlEhIKCmdlbmVyYXRpb24YASABKAMicAoSU2V0U2NoZWR1bGVSZXF1ZXN0EhIKCm1hY2hpbmVfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSNAoJc2NoZWR1bGVzGAMgAygLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Dcm9uU2NoZWR1bGUiKQoTU2V0U2NoZWR1bGVSZXNwb25zZRISCgpnZW5lcmF0aW9uGAEgASgDIroBCgpBdWRpdEVudHJ5Ei0KCXRpbWVzdGFtcBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFYWN0b3IYAiABKAkSDgoGYWN0aW9uGAMgASgJEhIKCm1hY2hpbmVfaWQYBCABKAkSEAoIc3RyYXRlZ3kYBSABKAkSFAoMZnJvbV92ZXJzaW9uGAYgASgJEhIKCnRvX3ZlcnNpb24YByABKAkSDgoGZGV0YWlsGAggASgJIkYKEEJyb3dzZURpclJlcXVlc3QSEgoKbWFjaGluZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCRIMCgRwYXRoGAMgASgJIlEKEUJyb3dzZURpclJlc3BvbnNlEi4KB2VudHJpZXMYASADKAsyHS5zdHJhdGVneXBsYXRmb3JtLnYxLkRpckVudHJ5EgwKBHBhdGgYAiABKAkiSwoURG93bmxvYWRGaWxlc1JlcXVlc3QSEgoKbWFjaGluZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCRINCgVwYXRocxgDIAMoCSJ2Cg1Eb3dubG9hZENodW5rEgwKBGRhdGEYASABKAwSEAoIZmlsZW5hbWUYAiABKAkSOAoNdHJhbnNmZXJfa2luZBgDIAEoDjIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuVHJhbnNmZXJLaW5kEgsKA2VvZhgEIAEoCCJfChBMaXN0QXVkaXRSZXF1ZXN0EhIKCm1hY2hpbmVfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSEQoJcGFnZV9zaXplGAMgASgFEhIKCnBhZ2VfdG9rZW4YBCABKAkiXgoRTGlzdEF1ZGl0UmVzcG9uc2USMAoHZW50cmllcxgBIAMoCzIfLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXVkaXRFbnRyeRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkifwoSTWFjaGluZVN0YXR1c0V2ZW50EhIKCm1hY2hpbmVfaWQYASABKAkSLQoHbWFjaGluZRgCIAEoCzIcLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZRImCgJhdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiTQoXUmVnaXN0ZXJBcnRpZmFjdFJlcXVlc3QSMgoIYXJ0aWZhY3QYASABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmIhoKGFJlZ2lzdGVyQXJ0aWZhY3RSZXNwb25zZSIkChRMaXN0QXJ0aWZhY3RzUmVxdWVzdBIMCgRuYW1lGAEgASgJIkwKFUxpc3RBcnRpZmFjdHNSZXNwb25zZRIzCglhcnRpZmFjdHMYASADKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmIh8KHUdldENvbnRyb2xQbGFuZVZlcnNpb25SZXF1ZXN0Ik8KE0NvbnRyb2xQbGFuZVZlcnNpb24SDwoHdmVyc2lvbhgBIAEoCRITCgtjb21taXRfaGFzaBgCIAEoCRISCgpidWlsZF90aW1lGAMgASgJIm0KE1Jlc291cmNlU2FtcGxlUG9pbnQSLgoKc2FtcGxlZF9hdBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLY3B1X3BlcmNlbnQYAiABKAESEQoJbWVtX2J5dGVzGAMgASgDIlcKGEdldE1hY2hpbmVNZXRyaWNzUmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEhUKDXJhbmdlX3NlY29uZHMYAyABKAMiVgoZR2V0TWFjaGluZU1ldHJpY3NSZXNwb25zZRI5CgdzYW1wbGVzGAEgAygLMiguc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZVNhbXBsZVBvaW50Mt8LChNDb250cm9sUGxhbmVTZXJ2aWNlEmMKDExpc3RNYWNoaW5lcxIoLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdE1hY2hpbmVzUmVxdWVzdBopLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdE1hY2hpbmVzUmVzcG9uc2USUgoKR2V0TWFjaGluZRImLnN0cmF0ZWd5cGxhdGZvcm0udjEuR2V0TWFjaGluZVJlcXVlc3QaHC5zdHJhdGVneXBsYXRmb3JtLnYxLk1hY2hpbmUSUQoGRGVwbG95EiIuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lSZXF1ZXN0GiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lSZXNwb25zZRJmCg1TZXREZXBsb3ltZW50Eikuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXREZXBsb3ltZW50UmVxdWVzdBoqLnN0cmF0ZWd5cGxhdGZvcm0udjEuU2V0RGVwbG95bWVudFJlc3BvbnNlElcKCFJvbGxiYWNrEiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Sb2xsYmFja1JlcXVlc3QaJS5zdHJhdGVneXBsYXRmb3JtLnYxLlJvbGxiYWNrUmVzcG9uc2USVwoIVW5kZXBsb3kSJC5zdHJhdGVneXBsYXRmb3JtLnYxLlVuZGVwbG95UmVxdWVzdBolLnN0cmF0ZWd5cGxhdGZvcm0udjEuVW5kZXBsb3lSZXNwb25zZRJgCgtTZXRTY2hlZHVsZRInLnN0cmF0ZWd5cGxhdGZvcm0udjEuU2V0U2NoZWR1bGVSZXF1ZXN0Giguc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXRTY2hlZHVsZVJlc3BvbnNlEmEKDFdhdGNoTWFjaGluZRImLnN0cmF0ZWd5cGxhdGZvcm0udjEuR2V0TWFjaGluZVJlcXVlc3QaJy5zdHJhdGVneXBsYXRmb3JtLnYxLk1hY2hpbmVTdGF0dXNFdmVudDABEloKCUxpc3RBdWRpdBIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdEF1ZGl0UmVxdWVzdBomLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdEF1ZGl0UmVzcG9uc2USbwoQUmVnaXN0ZXJBcnRpZmFjdBIsLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVnaXN0ZXJBcnRpZmFjdFJlcXVlc3QaLS5zdHJhdGVneXBsYXRmb3JtLnYxLlJlZ2lzdGVyQXJ0aWZhY3RSZXNwb25zZRJmCg1MaXN0QXJ0aWZhY3RzEikuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MaXN0QXJ0aWZhY3RzUmVxdWVzdBoqLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdEFydGlmYWN0c1Jlc3BvbnNlEnYKFkdldENvbnRyb2xQbGFuZVZlcnNpb24SMi5zdHJhdGVneXBsYXRmb3JtLnYxLkdldENvbnRyb2xQbGFuZVZlcnNpb25SZXF1ZXN0Giguc3RyYXRlZ3lwbGF0Zm9ybS52MS5Db250cm9sUGxhbmVWZXJzaW9uEnIKEUdldE1hY2hpbmVNZXRyaWNzEi0uc3RyYXRlZ3lwbGF0Zm9ybS52MS5HZXRNYWNoaW5lTWV0cmljc1JlcXVlc3QaLi5zdHJhdGVneXBsYXRmb3JtLnYxLkdldE1hY2hpbmVNZXRyaWNzUmVzcG9uc2USWgoJQnJvd3NlRGlyEiUuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Ccm93c2VEaXJSZXF1ZXN0GiYuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Ccm93c2VEaXJSZXNwb25zZRJgCg1Eb3dubG9hZEZpbGVzEikuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Eb3dubG9hZEZpbGVzUmVxdWVzdBoiLnN0cmF0ZWd5cGxhdGZvcm0udjEuRG93bmxvYWRDaHVuazABQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_strategyplatform_v1_agent_service, file_strategyplatform_v1_common, file_strategyplatform_v1_enrollment, file_strategyplatform_v1_status, file_strategyplatform_v1_telemetry]);
+  fileDesc("CilzdHJhdGVneXBsYXRmb3JtL3YxL2NvbnRyb2xfc2VydmljZS5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSKaAwoHTWFjaGluZRIxCghtZXRhZGF0YRgBIAEoCzIfLnN0cmF0ZWd5cGxhdGZvcm0udjEuT2JqZWN0TWV0YRIuCgRzcGVjGAIgASgLMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5NYWNoaW5lU3BlYxI9Cg5sYXN0X3Jlc291cmNlcxgDIAEoCzIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVJlc291cmNlcxIRCglyZWFjaGFibGUYBCABKAgSFQoNYWdlbnRfdmVyc2lvbhgFIAEoBRIyCg5sYXN0X2hlYXJ0YmVhdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoKc3RyYXRlZ2llcxgHIAMoCzIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lWaWV3EhsKE2FnZW50X2J1aWxkX3ZlcnNpb24YCCABKAkSOwoObGFzdF9wcm9jZXNzZXMYCSADKAsyIy5zdHJhdGVneXBsYXRmb3JtLnYxLlByb2Nlc3NNZXRyaWNzIp0GCgxTdHJhdGVneVZpZXcSEAoIc3RyYXRlZ3kYASABKAkSOgoQZGVzaXJlZF9hcnRpZmFjdBgCIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSOAoOZGVzaXJlZF9jb25maWcYAyABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEhcKD3NwZWNfZ2VuZXJhdGlvbhgEIAEoAxIvCgVwaGFzZRgFIAEoDjIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuRGVwbG95UGhhc2USOgoQcnVubmluZ19hcnRpZmFjdBgGIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSOAoOcnVubmluZ19jb25maWcYByABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEhsKE29ic2VydmVkX2dlbmVyYXRpb24YCCABKAMSMgoKY29uZGl0aW9ucxgJIAMoCzIeLnN0cmF0ZWd5cGxhdGZvcm0udjEuQ29uZGl0aW9uEgsKA3BpZBgKIAEoBRIVCg1yZXN0YXJ0X2NvdW50GAsgASgFEhIKCmxhc3RfZXJyb3IYDCABKAkSEQoJY29udmVyZ2VkGA0gASgIEhIKCmxlYXNlX2hlbGQYDiABKAgSNAoQbGVhc2VfZXhwaXJlc19hdBgPIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNAoJc2NoZWR1bGVzGBAgAygLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Dcm9uU2NoZWR1bGUSLgoKc3RhcnRlZF9hdBgRIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLY3B1X3BlcmNlbnQYEiABKAESEQoJcnNzX2J5dGVzGBMgASgDEg8KB251bV9mZHMYFCABKAUSLwoLZGVwbG95ZWRfYXQYFSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB3N0b3BwZWQYFiABKAgiPAoTTGlzdE1hY2hpbmVzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCSJfChRMaXN0TWFjaGluZXNSZXNwb25zZRIuCghtYWNoaW5lcxgBIAMoCzIcLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiJwoRR2V0TWFjaGluZVJlcXVlc3QSEgoKbWFjaGluZV9pZBgBIAEoCSJnCg1EZXBsb3lSZXF1ZXN0EhIKCm1hY2hpbmVfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSGAoQYXJ0aWZhY3RfdmVyc2lvbhgDIAEoCRIWCg5jb25maWdfdmVyc2lvbhgEIAEoCSIkCg5EZXBsb3lSZXNwb25zZRISCgpnZW5lcmF0aW9uGAEgASgDIukBChRTZXREZXBsb3ltZW50UmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEhgKEGFydGlmYWN0X3ZlcnNpb24YAyABKAkSFgoOY29uZmlnX3ZlcnNpb24YBCABKAkSDAoEYXJncxgFIAMoCRI/CgNlbnYYBiADKAsyMi5zdHJhdGVneXBsYXRmb3JtLnYxLlNldERlcGxveW1lbnRSZXF1ZXN0LkVudkVudHJ5GioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiKwoVU2V0RGVwbG95bWVudFJlc3BvbnNlEhIKCmdlbmVyYXRpb24YASABKAMiTwoPUm9sbGJhY2tSZXF1ZXN0EhIKCm1hY2hpbmVfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSFgoOdGFyZ2V0X3ZlcnNpb24YAyABKAkiJgoQUm9sbGJhY2tSZXNwb25zZRISCgpnZW5lcmF0aW9uGAEgASgDIjcKD1VuZGVwbG95UmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJIiYKEFVuZGVwbG95UmVzcG9uc2USEgoKZ2VuZXJhdGlvbhgBIAEoAyIzCgtTdG9wUmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJIiIKDFN0b3BSZXNwb25zZRISCgpnZW5lcmF0aW9uGAEgASgDIjQKDFN0YXJ0UmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJIiMKDVN0YXJ0UmVzcG9uc2USEgoKZ2VuZXJhdGlvbhgBIAEoAyJwChJTZXRTY2hlZHVsZVJlcXVlc3QSEgoKbWFjaGluZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCRI0CglzY2hlZHVsZXMYAyADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkNyb25TY2hlZHVsZSIpChNTZXRTY2hlZHVsZVJlc3BvbnNlEhIKCmdlbmVyYXRpb24YASABKAMiugEKCkF1ZGl0RW50cnkSLQoJdGltZXN0YW1wGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVhY3RvchgCIAEoCRIOCgZhY3Rpb24YAyABKAkSEgoKbWFjaGluZV9pZBgEIAEoCRIQCghzdHJhdGVneRgFIAEoCRIUCgxmcm9tX3ZlcnNpb24YBiABKAkSEgoKdG9fdmVyc2lvbhgHIAEoCRIOCgZkZXRhaWwYCCABKAkiRgoQQnJvd3NlRGlyUmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEgwKBHBhdGgYAyABKAkiUQoRQnJvd3NlRGlyUmVzcG9uc2USLgoHZW50cmllcxgBIAMoCzIdLnN0cmF0ZWd5cGxhdGZvcm0udjEuRGlyRW50cnkSDAoEcGF0aBgCIAEoCSJLChREb3dubG9hZEZpbGVzUmVxdWVzdBISCgptYWNoaW5lX2lkGAEgASgJEhAKCHN0cmF0ZWd5GAIgASgJEg0KBXBhdGhzGAMgAygJInYKDURvd25sb2FkQ2h1bmsSDAoEZGF0YRgBIAEoDBIQCghmaWxlbmFtZRgCIAEoCRI4Cg10cmFuc2Zlcl9raW5kGAMgASgOMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5UcmFuc2ZlcktpbmQSCwoDZW9mGAQgASgIIl8KEExpc3RBdWRpdFJlcXVlc3QSEgoKbWFjaGluZV9pZBgBIAEoCRIQCghzdHJhdGVneRgCIAEoCRIRCglwYWdlX3NpemUYAyABKAUSEgoKcGFnZV90b2tlbhgEIAEoCSJeChFMaXN0QXVkaXRSZXNwb25zZRIwCgdlbnRyaWVzGAEgAygLMh8uc3RyYXRlZ3lwbGF0Zm9ybS52MS5BdWRpdEVudHJ5EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJ/ChJNYWNoaW5lU3RhdHVzRXZlbnQSEgoKbWFjaGluZV9pZBgBIAEoCRItCgdtYWNoaW5lGAIgASgLMhwuc3RyYXRlZ3lwbGF0Zm9ybS52MS5NYWNoaW5lEiYKAmF0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJNChdSZWdpc3RlckFydGlmYWN0UmVxdWVzdBIyCghhcnRpZmFjdBgBIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYiGgoYUmVnaXN0ZXJBcnRpZmFjdFJlc3BvbnNlIiQKFExpc3RBcnRpZmFjdHNSZXF1ZXN0EgwKBG5hbWUYASABKAkiTAoVTGlzdEFydGlmYWN0c1Jlc3BvbnNlEjMKCWFydGlmYWN0cxgBIAMoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYiHwodR2V0Q29udHJvbFBsYW5lVmVyc2lvblJlcXVlc3QiTwoTQ29udHJvbFBsYW5lVmVyc2lvbhIPCgd2ZXJzaW9uGAEgASgJEhMKC2NvbW1pdF9oYXNoGAIgASgJEhIKCmJ1aWxkX3RpbWUYAyABKAkibQoTUmVzb3VyY2VTYW1wbGVQb2ludBIuCgpzYW1wbGVkX2F0GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtjcHVfcGVyY2VudBgCIAEoARIRCgltZW1fYnl0ZXMYAyABKAMiVwoYR2V0TWFjaGluZU1ldHJpY3NSZXF1ZXN0EhIKCm1hY2hpbmVfaWQYASABKAkSEAoIc3RyYXRlZ3kYAiABKAkSFQoNcmFuZ2Vfc2Vjb25kcxgDIAEoAyJWChlHZXRNYWNoaW5lTWV0cmljc1Jlc3BvbnNlEjkKB3NhbXBsZXMYASADKAsyKC5zdHJhdGVneXBsYXRmb3JtLnYxLlJlc291cmNlU2FtcGxlUG9pbnQy/AwKE0NvbnRyb2xQbGFuZVNlcnZpY2USYwoMTGlzdE1hY2hpbmVzEiguc3RyYXRlZ3lwbGF0Zm9ybS52MS5MaXN0TWFjaGluZXNSZXF1ZXN0Gikuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MaXN0TWFjaGluZXNSZXNwb25zZRJSCgpHZXRNYWNoaW5lEiYuc3RyYXRlZ3lwbGF0Zm9ybS52MS5HZXRNYWNoaW5lUmVxdWVzdBocLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZRJRCgZEZXBsb3kSIi5zdHJhdGVneXBsYXRmb3JtLnYxLkRlcGxveVJlcXVlc3QaIy5zdHJhdGVneXBsYXRmb3JtLnYxLkRlcGxveVJlc3BvbnNlEmYKDVNldERlcGxveW1lbnQSKS5zdHJhdGVneXBsYXRmb3JtLnYxLlNldERlcGxveW1lbnRSZXF1ZXN0Giouc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXREZXBsb3ltZW50UmVzcG9uc2USVwoIUm9sbGJhY2sSJC5zdHJhdGVneXBsYXRmb3JtLnYxLlJvbGxiYWNrUmVxdWVzdBolLnN0cmF0ZWd5cGxhdGZvcm0udjEuUm9sbGJhY2tSZXNwb25zZRJLCgRTdG9wEiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TdG9wUmVxdWVzdBohLnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RvcFJlc3BvbnNlEk4KBVN0YXJ0EiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TdGFydFJlcXVlc3QaIi5zdHJhdGVneXBsYXRmb3JtLnYxLlN0YXJ0UmVzcG9uc2USVwoIVW5kZXBsb3kSJC5zdHJhdGVneXBsYXRmb3JtLnYxLlVuZGVwbG95UmVxdWVzdBolLnN0cmF0ZWd5cGxhdGZvcm0udjEuVW5kZXBsb3lSZXNwb25zZRJgCgtTZXRTY2hlZHVsZRInLnN0cmF0ZWd5cGxhdGZvcm0udjEuU2V0U2NoZWR1bGVSZXF1ZXN0Giguc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXRTY2hlZHVsZVJlc3BvbnNlEmEKDFdhdGNoTWFjaGluZRImLnN0cmF0ZWd5cGxhdGZvcm0udjEuR2V0TWFjaGluZVJlcXVlc3QaJy5zdHJhdGVneXBsYXRmb3JtLnYxLk1hY2hpbmVTdGF0dXNFdmVudDABEloKCUxpc3RBdWRpdBIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdEF1ZGl0UmVxdWVzdBomLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdEF1ZGl0UmVzcG9uc2USbwoQUmVnaXN0ZXJBcnRpZmFjdBIsLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVnaXN0ZXJBcnRpZmFjdFJlcXVlc3QaLS5zdHJhdGVneXBsYXRmb3JtLnYxLlJlZ2lzdGVyQXJ0aWZhY3RSZXNwb25zZRJmCg1MaXN0QXJ0aWZhY3RzEikuc3RyYXRlZ3lwbGF0Zm9ybS52MS5MaXN0QXJ0aWZhY3RzUmVxdWVzdBoqLnN0cmF0ZWd5cGxhdGZvcm0udjEuTGlzdEFydGlmYWN0c1Jlc3BvbnNlEnYKFkdldENvbnRyb2xQbGFuZVZlcnNpb24SMi5zdHJhdGVneXBsYXRmb3JtLnYxLkdldENvbnRyb2xQbGFuZVZlcnNpb25SZXF1ZXN0Giguc3RyYXRlZ3lwbGF0Zm9ybS52MS5Db250cm9sUGxhbmVWZXJzaW9uEnIKEUdldE1hY2hpbmVNZXRyaWNzEi0uc3RyYXRlZ3lwbGF0Zm9ybS52MS5HZXRNYWNoaW5lTWV0cmljc1JlcXVlc3QaLi5zdHJhdGVneXBsYXRmb3JtLnYxLkdldE1hY2hpbmVNZXRyaWNzUmVzcG9uc2USWgoJQnJvd3NlRGlyEiUuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Ccm93c2VEaXJSZXF1ZXN0GiYuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Ccm93c2VEaXJSZXNwb25zZRJgCg1Eb3dubG9hZEZpbGVzEikuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Eb3dubG9hZEZpbGVzUmVxdWVzdBoiLnN0cmF0ZWd5cGxhdGZvcm0udjEuRG93bmxvYWRDaHVuazABQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_strategyplatform_v1_agent_service, file_strategyplatform_v1_common, file_strategyplatform_v1_enrollment, file_strategyplatform_v1_status, file_strategyplatform_v1_telemetry]);
 
 /**
  * This is a different kind of connection from AgentService: low-frequency,
@@ -170,7 +170,7 @@ export type StrategyView = Message<"strategyplatform.v1.StrategyView"> & {
   /**
    * Convergence judgment (control plane computed; frontend just renders)
    *
-   * desired == running && phase == HEALTHY
+   * desired == running && phase == HEALTHY (or stopped && STOPPED)
    *
    * @generated from field: bool converged = 13;
    */
@@ -225,6 +225,13 @@ export type StrategyView = Message<"strategyplatform.v1.StrategyView"> & {
    * @generated from field: google.protobuf.Timestamp deployed_at = 21;
    */
   deployedAt?: Timestamp | undefined;
+
+  /**
+   * Desired run state from StrategyAssignmentSpec.stopped.
+   *
+   * @generated from field: bool stopped = 22;
+   */
+  stopped: boolean;
 };
 
 /**
@@ -510,6 +517,88 @@ export const UndeployResponseSchema: GenMessage<UndeployResponse> = /*@__PURE__*
   messageDesc(file_strategyplatform_v1_control_service, 12);
 
 /**
+ * Stop halts the process but keeps the deployment (assignment + WorkDir/logs).
+ *
+ * @generated from message strategyplatform.v1.StopRequest
+ */
+export type StopRequest = Message<"strategyplatform.v1.StopRequest"> & {
+  /**
+   * @generated from field: string machine_id = 1;
+   */
+  machineId: string;
+
+  /**
+   * @generated from field: string strategy = 2;
+   */
+  strategy: string;
+};
+
+/**
+ * Describes the message strategyplatform.v1.StopRequest.
+ * Use `create(StopRequestSchema)` to create a new message.
+ */
+export const StopRequestSchema: GenMessage<StopRequest> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_control_service, 13);
+
+/**
+ * @generated from message strategyplatform.v1.StopResponse
+ */
+export type StopResponse = Message<"strategyplatform.v1.StopResponse"> & {
+  /**
+   * @generated from field: int64 generation = 1;
+   */
+  generation: bigint;
+};
+
+/**
+ * Describes the message strategyplatform.v1.StopResponse.
+ * Use `create(StopResponseSchema)` to create a new message.
+ */
+export const StopResponseSchema: GenMessage<StopResponse> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_control_service, 14);
+
+/**
+ * Start resumes a previously Stopped deployment in place (same pinned version).
+ *
+ * @generated from message strategyplatform.v1.StartRequest
+ */
+export type StartRequest = Message<"strategyplatform.v1.StartRequest"> & {
+  /**
+   * @generated from field: string machine_id = 1;
+   */
+  machineId: string;
+
+  /**
+   * @generated from field: string strategy = 2;
+   */
+  strategy: string;
+};
+
+/**
+ * Describes the message strategyplatform.v1.StartRequest.
+ * Use `create(StartRequestSchema)` to create a new message.
+ */
+export const StartRequestSchema: GenMessage<StartRequest> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_control_service, 15);
+
+/**
+ * @generated from message strategyplatform.v1.StartResponse
+ */
+export type StartResponse = Message<"strategyplatform.v1.StartResponse"> & {
+  /**
+   * @generated from field: int64 generation = 1;
+   */
+  generation: bigint;
+};
+
+/**
+ * Describes the message strategyplatform.v1.StartResponse.
+ * Use `create(StartResponseSchema)` to create a new message.
+ */
+export const StartResponseSchema: GenMessage<StartResponse> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_control_service, 16);
+
+/**
  * @generated from message strategyplatform.v1.SetScheduleRequest
  */
 export type SetScheduleRequest = Message<"strategyplatform.v1.SetScheduleRequest"> & {
@@ -536,7 +625,7 @@ export type SetScheduleRequest = Message<"strategyplatform.v1.SetScheduleRequest
  * Use `create(SetScheduleRequestSchema)` to create a new message.
  */
 export const SetScheduleRequestSchema: GenMessage<SetScheduleRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 13);
+  messageDesc(file_strategyplatform_v1_control_service, 17);
 
 /**
  * @generated from message strategyplatform.v1.SetScheduleResponse
@@ -553,7 +642,7 @@ export type SetScheduleResponse = Message<"strategyplatform.v1.SetScheduleRespon
  * Use `create(SetScheduleResponseSchema)` to create a new message.
  */
 export const SetScheduleResponseSchema: GenMessage<SetScheduleResponse> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 14);
+  messageDesc(file_strategyplatform_v1_control_service, 18);
 
 /**
  * @generated from message strategyplatform.v1.AuditEntry
@@ -570,7 +659,7 @@ export type AuditEntry = Message<"strategyplatform.v1.AuditEntry"> & {
   actor: string;
 
   /**
-   * "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Undeploy" | "DownloadFiles"
+   * "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles"
    *
    * @generated from field: string action = 3;
    */
@@ -609,7 +698,7 @@ export type AuditEntry = Message<"strategyplatform.v1.AuditEntry"> & {
  * Use `create(AuditEntrySchema)` to create a new message.
  */
 export const AuditEntrySchema: GenMessage<AuditEntry> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 15);
+  messageDesc(file_strategyplatform_v1_control_service, 19);
 
 /**
  * @generated from message strategyplatform.v1.BrowseDirRequest
@@ -638,7 +727,7 @@ export type BrowseDirRequest = Message<"strategyplatform.v1.BrowseDirRequest"> &
  * Use `create(BrowseDirRequestSchema)` to create a new message.
  */
 export const BrowseDirRequestSchema: GenMessage<BrowseDirRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 16);
+  messageDesc(file_strategyplatform_v1_control_service, 20);
 
 /**
  * @generated from message strategyplatform.v1.BrowseDirResponse
@@ -662,7 +751,7 @@ export type BrowseDirResponse = Message<"strategyplatform.v1.BrowseDirResponse">
  * Use `create(BrowseDirResponseSchema)` to create a new message.
  */
 export const BrowseDirResponseSchema: GenMessage<BrowseDirResponse> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 17);
+  messageDesc(file_strategyplatform_v1_control_service, 21);
 
 /**
  * @generated from message strategyplatform.v1.DownloadFilesRequest
@@ -689,7 +778,7 @@ export type DownloadFilesRequest = Message<"strategyplatform.v1.DownloadFilesReq
  * Use `create(DownloadFilesRequestSchema)` to create a new message.
  */
 export const DownloadFilesRequestSchema: GenMessage<DownloadFilesRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 18);
+  messageDesc(file_strategyplatform_v1_control_service, 22);
 
 /**
  * @generated from message strategyplatform.v1.DownloadChunk
@@ -725,7 +814,7 @@ export type DownloadChunk = Message<"strategyplatform.v1.DownloadChunk"> & {
  * Use `create(DownloadChunkSchema)` to create a new message.
  */
 export const DownloadChunkSchema: GenMessage<DownloadChunk> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 19);
+  messageDesc(file_strategyplatform_v1_control_service, 23);
 
 /**
  * @generated from message strategyplatform.v1.ListAuditRequest
@@ -757,7 +846,7 @@ export type ListAuditRequest = Message<"strategyplatform.v1.ListAuditRequest"> &
  * Use `create(ListAuditRequestSchema)` to create a new message.
  */
 export const ListAuditRequestSchema: GenMessage<ListAuditRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 20);
+  messageDesc(file_strategyplatform_v1_control_service, 24);
 
 /**
  * @generated from message strategyplatform.v1.ListAuditResponse
@@ -779,7 +868,7 @@ export type ListAuditResponse = Message<"strategyplatform.v1.ListAuditResponse">
  * Use `create(ListAuditResponseSchema)` to create a new message.
  */
 export const ListAuditResponseSchema: GenMessage<ListAuditResponse> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 21);
+  messageDesc(file_strategyplatform_v1_control_service, 25);
 
 /**
  * @generated from message strategyplatform.v1.MachineStatusEvent
@@ -806,7 +895,7 @@ export type MachineStatusEvent = Message<"strategyplatform.v1.MachineStatusEvent
  * Use `create(MachineStatusEventSchema)` to create a new message.
  */
 export const MachineStatusEventSchema: GenMessage<MachineStatusEvent> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 22);
+  messageDesc(file_strategyplatform_v1_control_service, 26);
 
 /**
  * Artifact catalog: Deploy resolves artifact_version against registered
@@ -827,7 +916,7 @@ export type RegisterArtifactRequest = Message<"strategyplatform.v1.RegisterArtif
  * Use `create(RegisterArtifactRequestSchema)` to create a new message.
  */
 export const RegisterArtifactRequestSchema: GenMessage<RegisterArtifactRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 23);
+  messageDesc(file_strategyplatform_v1_control_service, 27);
 
 /**
  * @generated from message strategyplatform.v1.RegisterArtifactResponse
@@ -840,7 +929,7 @@ export type RegisterArtifactResponse = Message<"strategyplatform.v1.RegisterArti
  * Use `create(RegisterArtifactResponseSchema)` to create a new message.
  */
 export const RegisterArtifactResponseSchema: GenMessage<RegisterArtifactResponse> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 24);
+  messageDesc(file_strategyplatform_v1_control_service, 28);
 
 /**
  * @generated from message strategyplatform.v1.ListArtifactsRequest
@@ -859,7 +948,7 @@ export type ListArtifactsRequest = Message<"strategyplatform.v1.ListArtifactsReq
  * Use `create(ListArtifactsRequestSchema)` to create a new message.
  */
 export const ListArtifactsRequestSchema: GenMessage<ListArtifactsRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 25);
+  messageDesc(file_strategyplatform_v1_control_service, 29);
 
 /**
  * @generated from message strategyplatform.v1.ListArtifactsResponse
@@ -876,7 +965,7 @@ export type ListArtifactsResponse = Message<"strategyplatform.v1.ListArtifactsRe
  * Use `create(ListArtifactsResponseSchema)` to create a new message.
  */
 export const ListArtifactsResponseSchema: GenMessage<ListArtifactsResponse> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 26);
+  messageDesc(file_strategyplatform_v1_control_service, 30);
 
 /**
  * Control-plane binary build metadata (display only; not stored).
@@ -891,7 +980,7 @@ export type GetControlPlaneVersionRequest = Message<"strategyplatform.v1.GetCont
  * Use `create(GetControlPlaneVersionRequestSchema)` to create a new message.
  */
 export const GetControlPlaneVersionRequestSchema: GenMessage<GetControlPlaneVersionRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 27);
+  messageDesc(file_strategyplatform_v1_control_service, 31);
 
 /**
  * @generated from message strategyplatform.v1.ControlPlaneVersion
@@ -920,7 +1009,7 @@ export type ControlPlaneVersion = Message<"strategyplatform.v1.ControlPlaneVersi
  * Use `create(ControlPlaneVersionSchema)` to create a new message.
  */
 export const ControlPlaneVersionSchema: GenMessage<ControlPlaneVersion> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 28);
+  messageDesc(file_strategyplatform_v1_control_service, 32);
 
 /**
  * One point in the short-term PG sliding window (sparkline source).
@@ -949,7 +1038,7 @@ export type ResourceSamplePoint = Message<"strategyplatform.v1.ResourceSamplePoi
  * Use `create(ResourceSamplePointSchema)` to create a new message.
  */
 export const ResourceSamplePointSchema: GenMessage<ResourceSamplePoint> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 29);
+  messageDesc(file_strategyplatform_v1_control_service, 33);
 
 /**
  * @generated from message strategyplatform.v1.GetMachineMetricsRequest
@@ -980,7 +1069,7 @@ export type GetMachineMetricsRequest = Message<"strategyplatform.v1.GetMachineMe
  * Use `create(GetMachineMetricsRequestSchema)` to create a new message.
  */
 export const GetMachineMetricsRequestSchema: GenMessage<GetMachineMetricsRequest> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 30);
+  messageDesc(file_strategyplatform_v1_control_service, 34);
 
 /**
  * @generated from message strategyplatform.v1.GetMachineMetricsResponse
@@ -997,7 +1086,7 @@ export type GetMachineMetricsResponse = Message<"strategyplatform.v1.GetMachineM
  * Use `create(GetMachineMetricsResponseSchema)` to create a new message.
  */
 export const GetMachineMetricsResponseSchema: GenMessage<GetMachineMetricsResponse> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_control_service, 31);
+  messageDesc(file_strategyplatform_v1_control_service, 35);
 
 /**
  * @generated from service strategyplatform.v1.ControlPlaneService
@@ -1042,6 +1131,22 @@ export const ControlPlaneService: GenService<{
     methodKind: "unary";
     input: typeof RollbackRequestSchema;
     output: typeof RollbackResponseSchema;
+  },
+  /**
+   * @generated from rpc strategyplatform.v1.ControlPlaneService.Stop
+   */
+  stop: {
+    methodKind: "unary";
+    input: typeof StopRequestSchema;
+    output: typeof StopResponseSchema;
+  },
+  /**
+   * @generated from rpc strategyplatform.v1.ControlPlaneService.Start
+   */
+  start: {
+    methodKind: "unary";
+    input: typeof StartRequestSchema;
+    output: typeof StartResponseSchema;
   },
   /**
    * @generated from rpc strategyplatform.v1.ControlPlaneService.Undeploy
