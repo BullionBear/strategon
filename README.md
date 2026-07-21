@@ -1,5 +1,9 @@
 # Strategon
 
+<p align="center">
+  <img src="docs/logo.webp" alt="Strategon" width="128" />
+</p>
+
 Strategon is an experiment in applying Kubernetes ideas — desired state,
 level-triggered reconciliation, and agent-driven convergence — to a narrower
 problem: supervising **trading strategy processes** on real machines.

@@ -16,3 +16,15 @@ plugins:
     opt:
       - target=ts
       - import_extension=js
+  # Human ControlPlaneService OpenAPI for the standalone /reference page.
+  # AgentService/LeaseService are omitted (agent port, not the human UI).
+  - local: protoc-gen-connect-openapi
+    out: web/static
+    opt:
+      - path=openapi.json
+      - format=json
+      - features=connectrpc
+      - services=strategyplatform.v1.ControlPlaneService
+      - trim-unused-types
+      - short-service-tags
+      - base=proto/openapi.base.yaml

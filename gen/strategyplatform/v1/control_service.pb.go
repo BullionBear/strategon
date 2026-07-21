@@ -1314,7 +1314,7 @@ type AuditEntry struct {
 
 	Timestamp   *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	Actor       string                 `protobuf:"bytes,2,opt,name=actor,proto3" json:"actor,omitempty"`
-	Action      string                 `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"` // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles"
+	Action      string                 `protobuf:"bytes,3,opt,name=action,proto3" json:"action,omitempty"` // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact"
 	MachineId   string                 `protobuf:"bytes,4,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
 	Strategy    string                 `protobuf:"bytes,5,opt,name=strategy,proto3" json:"strategy,omitempty"`
 	FromVersion string                 `protobuf:"bytes,6,opt,name=from_version,json=fromVersion,proto3" json:"from_version,omitempty"`

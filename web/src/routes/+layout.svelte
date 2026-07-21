@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/favicon.png';
 	import { page } from '$app/state';
 	import { client } from '$lib/api';
 	import {
@@ -30,6 +30,8 @@
 		authReady && !auth.user && (auth.mode === 'mock' || auth.mode === 'discord' || auth.mode === 'unknown')
 	);
 	const showLoginButton = $derived(needsLogin);
+	/** Standalone OpenAPI viewer — no app chrome / auth gate. */
+	const barePage = $derived(page.url.pathname === '/reference');
 
 	function active(path: string): boolean {
 		const p = page.url.pathname;
@@ -142,10 +144,14 @@
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={favicon} type="image/png" />
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 	<title>Strategon</title>
 </svelte:head>
 
+{#if barePage}
+	{@render children()}
+{:else}
 <div class="shell" class:collapsed class:drawer-open={drawerOpen}>
 	<header class="mobile-bar">
 		<button
@@ -327,12 +333,28 @@
 			{/if}
 		</div>
 
-		{#if cpVersion}
-			<div class="sidebar-foot mono muted" title="Control plane build version (display only)">
-				<span class="foot-full">cp {cpVersion}</span>
-				<span class="foot-short">{cpVersion.slice(0, 6)}</span>
-			</div>
-		{/if}
+		<div class="sidebar-foot">
+			<a
+				class="github-link"
+				href="https://github.com/BullionBear/strategon"
+				target="_blank"
+				rel="noopener noreferrer"
+				title="GitHub repository"
+				aria-label="Strategon on GitHub"
+			>
+				<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+					<path
+						d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"
+					/>
+				</svg>
+			</a>
+			{#if cpVersion}
+				<span class="foot-version mono muted" title="Control plane build version (display only)">
+					<span class="foot-full">cp {cpVersion}</span>
+					<span class="foot-short">{cpVersion.slice(0, 6)}</span>
+				</span>
+			{/if}
+		</div>
 	</aside>
 
 	<main class="shell-main">
@@ -366,6 +388,7 @@
 		{/if}
 	</main>
 </div>
+{/if}
 
 <style>
 	.mobile-bar {
@@ -571,18 +594,38 @@
 	}
 
 	.sidebar-foot {
-		margin-top: auto;
-		padding: 0.75rem 0.55rem 0.25rem;
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		padding: 0.75rem 0.55rem 0.35rem;
 		border-top: 1px solid var(--line);
 		font-size: 0.72rem;
+	}
+	.github-link {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		color: var(--ink-muted);
+		line-height: 0;
+		border-radius: 0.3rem;
+		transition: color 0.15s ease;
+	}
+	.github-link:hover {
+		color: var(--ink);
+		text-decoration: none;
+	}
+	.foot-version {
+		min-width: 0;
 		word-break: break-all;
 	}
 	.foot-short {
 		display: none;
 	}
 	:global(.shell.collapsed) .sidebar-foot {
-		padding: 0.75rem 0.15rem 0.25rem;
-		text-align: center;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding: 0.75rem 0.15rem 0.35rem;
 	}
 	:global(.shell.collapsed) .foot-full {
 		display: none;
@@ -591,6 +634,7 @@
 		display: block;
 		overflow: hidden;
 		text-overflow: ellipsis;
+		text-align: center;
 	}
 
 	/* Mobile: morph sidebar into drawer; top bar + hamburger */
@@ -641,6 +685,10 @@
 		:global(.shell.collapsed) .nav-item {
 			justify-content: flex-start;
 			padding: 0.45rem 0.55rem;
+		}
+		:global(.shell.collapsed) .sidebar-foot {
+			flex-direction: row;
+			padding: 0.75rem 0.55rem 0.35rem;
 		}
 		:global(.shell.collapsed) .foot-short {
 			display: none;

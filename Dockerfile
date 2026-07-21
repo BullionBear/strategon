@@ -3,6 +3,8 @@
 # JSON API, and the UI.
 
 # --- stage 1: frontend ---
+# Expects web/static/openapi.json from `make generate` (committed in-repo).
+# The SPA /api page loads that file at runtime as /openapi.json.
 FROM node:22-alpine AS fe
 WORKDIR /web
 ENV CI=true
@@ -13,6 +15,8 @@ RUN corepack enable
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
+RUN test -f static/openapi.json \
+  || (echo "missing static/openapi.json — run 'make generate' before docker build" && exit 1)
 RUN pnpm build
 
 # --- stage 2: go build (embeds the SPA) ---

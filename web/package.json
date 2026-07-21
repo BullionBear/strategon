@@ -28,6 +28,7 @@
 	"dependencies": {
 		"@bufbuild/protobuf": "^2.12.1",
 		"@connectrpc/connect": "^2.1.2",
-		"@connectrpc/connect-web": "^2.1.2"
+		"@connectrpc/connect-web": "^2.1.2",
+		"@scalar/api-reference": "^1.62.9"
 	}
 }
