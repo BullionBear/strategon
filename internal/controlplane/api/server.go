@@ -175,8 +175,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 		return nil, nil, "", connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
 	}
 
+	existing := rec.Assignments[strategy]
 	artName := strategy
-	if existing := rec.Assignments[strategy]; existing != nil && existing.GetArtifact().GetName() != "" {
+	if existing != nil && existing.GetArtifact().GetName() != "" {
 		artName = existing.GetArtifact().GetName()
 	}
 	art, err := s.resolveArtifact(artName, strategy, artifactVersion)
@@ -184,7 +185,7 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 		return nil, nil, "", err
 	}
 
-	spec := defaultOrCloneSpec(rec.Assignments[strategy], strategy)
+	spec := defaultOrCloneSpec(existing, strategy)
 	fromVersion := spec.GetArtifact().GetVersion()
 	spec.Artifact = art
 
@@ -208,8 +209,11 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 		}
 	}
 
-	// Deploy / SetDeployment are create-and-run: clear any prior halt.
-	spec.Stopped = false
+	// Create-then-start: a brand-new assignment lands halted; updates preserve
+	// the existing run state (redeploy while stopped stays stopped).
+	if existing == nil {
+		spec.Stopped = true
+	}
 
 	if blocked, reason := store.DeploymentBlockedByLease(s.store, machineID, strategy); blocked {
 		return nil, nil, "", connect.NewError(connect.CodeFailedPrecondition,

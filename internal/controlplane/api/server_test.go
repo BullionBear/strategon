@@ -100,13 +100,27 @@ func TestDeployJoinAndWatch(t *testing.T) {
 	if agents.n != 1 {
 		t.Fatalf("agent notify count = %d, want 1", agents.n)
 	}
+	// Create-then-start: brand-new Deploy lands halted.
+	rec, _ := st.GetMachine("m1")
+	if !rec.Assignments["s"].GetStopped() {
+		t.Fatal("expected new Deploy to set stopped=true")
+	}
+	startResp, err := client.Start(ctx, connect.NewRequest(&pb.StartRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if startResp.Msg.GetGeneration() != 2 {
+		t.Fatalf("Start generation = %d, want 2", startResp.Msg.GetGeneration())
+	}
 
 	// Simulate agent status: still converging (running nothing yet).
 	_ = st.ApplyStatus("m1", &pb.StatusReport{
 		ObservedGeneration: 0,
 		Assignments: []*pb.StrategyAssignmentStatus{{
 			Strategy: "s", Phase: pb.DeployPhase_DEPLOY_PHASE_DOWNLOADING,
-			ObservedGeneration: 1,
+			ObservedGeneration: 2,
 		}},
 	})
 
@@ -127,10 +141,10 @@ func TestDeployJoinAndWatch(t *testing.T) {
 
 	// Converge: same digest + HEALTHY.
 	_ = st.ApplyStatus("m1", &pb.StatusReport{
-		ObservedGeneration: 1,
+		ObservedGeneration: 2,
 		Assignments: []*pb.StrategyAssignmentStatus{{
 			Strategy: "s", Phase: pb.DeployPhase_DEPLOY_PHASE_HEALTHY,
-			ObservedGeneration: 1,
+			ObservedGeneration: 2,
 			RunningArtifact:    &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa"},
 			Pid:                42,
 		}},
@@ -271,59 +285,30 @@ func TestStopStartRunState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	notifyAfterDeploy := agents.n
-
-	stopResp, err := client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
-		MachineId: "m1", Strategy: "s",
-	}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stopResp.Msg.GetGeneration() <= deployResp.Msg.GetGeneration() {
-		t.Fatalf("generation = %d, want > %d", stopResp.Msg.GetGeneration(), deployResp.Msg.GetGeneration())
-	}
-	if agents.n != notifyAfterDeploy+1 {
-		t.Fatalf("agent notify count = %d, want %d", agents.n, notifyAfterDeploy+1)
-	}
+	// Create-then-start: Deploy alone leaves the assignment halted.
 	rec, _ := st.GetMachine("m1")
 	if !rec.Assignments["s"].GetStopped() {
-		t.Fatal("expected stopped=true after Stop")
+		t.Fatal("expected new Deploy to set stopped=true")
 	}
-	audits := st.ListAudit("m1", "s")
-	foundStop := false
-	for _, a := range audits {
-		if a.GetAction() == "Stop" {
-			foundStop = true
-			break
-		}
-	}
-	if !foundStop {
-		t.Fatalf("expected Stop audit entry, got %+v", audits)
-	}
+	notifyAfterDeploy := agents.n
 
-	// Idempotent: already stopped → no write, generation unchanged.
-	genBefore := stopResp.Msg.GetGeneration()
-	notifyBefore := agents.n
-	again, err := client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
+	// Idempotent Stop on a freshly created (already stopped) deployment.
+	stopNoop, err := client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
 		MachineId: "m1", Strategy: "s",
 	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Msg.GetGeneration() != genBefore {
-		t.Fatalf("idempotent Stop generation = %d, want %d", again.Msg.GetGeneration(), genBefore)
-	}
-	if agents.n != notifyBefore {
-		t.Fatalf("idempotent Stop should not notify agent")
+	if stopNoop.Msg.GetGeneration() != deployResp.Msg.GetGeneration() || agents.n != notifyAfterDeploy {
+		t.Fatal("Stop on already-stopped create should be a no-op")
 	}
 
-	// Agent settles at STOPPED → converged.
+	// Agent settles at STOPPED → converged (no Start yet).
 	_ = st.ApplyStatus("m1", &pb.StatusReport{
-		ObservedGeneration: genBefore,
+		ObservedGeneration: deployResp.Msg.GetGeneration(),
 		Assignments: []*pb.StrategyAssignmentStatus{{
 			Strategy: "s", Phase: pb.DeployPhase_DEPLOY_PHASE_STOPPED,
-			ObservedGeneration: genBefore,
-			RunningArtifact:    &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa"},
+			ObservedGeneration: deployResp.Msg.GetGeneration(),
 		}},
 	})
 	got, err := client.GetMachine(ctx, connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
@@ -341,12 +326,23 @@ func TestStopStartRunState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if startResp.Msg.GetGeneration() <= genBefore {
-		t.Fatalf("Start generation = %d, want > %d", startResp.Msg.GetGeneration(), genBefore)
+	if startResp.Msg.GetGeneration() <= deployResp.Msg.GetGeneration() {
+		t.Fatalf("Start generation = %d, want > %d", startResp.Msg.GetGeneration(), deployResp.Msg.GetGeneration())
 	}
 	rec, _ = st.GetMachine("m1")
 	if rec.Assignments["s"].GetStopped() {
 		t.Fatal("expected stopped=false after Start")
+	}
+	audits := st.ListAudit("m1", "s")
+	foundStart := false
+	for _, a := range audits {
+		if a.GetAction() == "Start" {
+			foundStart = true
+			break
+		}
+	}
+	if !foundStart {
+		t.Fatalf("expected Start audit entry, got %+v", audits)
 	}
 
 	// Idempotent Start.
@@ -362,6 +358,30 @@ func TestStopStartRunState(t *testing.T) {
 		t.Fatal("idempotent Start should be a no-op")
 	}
 
+	// Stop a running deployment → bump generation + audit.
+	stopResp, err := client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopResp.Msg.GetGeneration() <= genAfterStart {
+		t.Fatalf("Stop generation = %d, want > %d", stopResp.Msg.GetGeneration(), genAfterStart)
+	}
+	if agents.n != notifyAfterStart+1 {
+		t.Fatalf("agent notify count = %d, want %d", agents.n, notifyAfterStart+1)
+	}
+	foundStop := false
+	for _, a := range st.ListAudit("m1", "s") {
+		if a.GetAction() == "Stop" {
+			foundStop = true
+			break
+		}
+	}
+	if !foundStop {
+		t.Fatal("expected Stop audit entry")
+	}
+
 	// Unassigned strategy → FailedPrecondition.
 	_, err = client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
 		MachineId: "m1", Strategy: "missing",
@@ -370,8 +390,7 @@ func TestStopStartRunState(t *testing.T) {
 		t.Fatalf("Stop unassigned: err=%v", err)
 	}
 
-	// SetDeployment on a stopped strategy clears stopped (implicit start).
-	_, _ = client.Stop(ctx, connect.NewRequest(&pb.StopRequest{MachineId: "m1", Strategy: "s"}))
+	// SetDeployment on a stopped strategy preserves stopped (no implicit start).
 	_, err = client.SetDeployment(ctx, connect.NewRequest(&pb.SetDeploymentRequest{
 		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
 	}))
@@ -379,8 +398,8 @@ func TestStopStartRunState(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec, _ = st.GetMachine("m1")
-	if rec.Assignments["s"].GetStopped() {
-		t.Fatal("SetDeployment should clear stopped")
+	if !rec.Assignments["s"].GetStopped() {
+		t.Fatal("SetDeployment should preserve stopped")
 	}
 }
 
@@ -420,6 +439,9 @@ func TestSetDeploymentSetsArgsEnvAndConfig(t *testing.T) {
 	spec := rec.Assignments["s"]
 	if spec == nil {
 		t.Fatal("assignment missing")
+	}
+	if !spec.GetStopped() {
+		t.Fatal("new SetDeployment should land stopped (create-then-start)")
 	}
 	if spec.GetArtifact().GetVersion() != "v1" {
 		t.Fatalf("artifact = %q", spec.GetArtifact().GetVersion())

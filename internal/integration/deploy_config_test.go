@@ -136,6 +136,7 @@ func TestDeployWithConfigArgsEnvAndScheduleEndToEnd(t *testing.T) {
 	}
 
 	// --- SetDeployment: binary + config + placeholder args + env, in one call. ---
+	// Create-then-start: lands halted until an explicit Start.
 	setResp, err := humanClient.SetDeployment(reqCtx, connect.NewRequest(&pb.SetDeploymentRequest{
 		MachineId:       "m1",
 		Strategy:        "s",
@@ -149,6 +150,15 @@ func TestDeployWithConfigArgsEnvAndScheduleEndToEnd(t *testing.T) {
 	}
 	if setResp.Msg.GetGeneration() != 1 {
 		t.Fatalf("generation = %d, want 1", setResp.Msg.GetGeneration())
+	}
+	startResp, err := humanClient.Start(reqCtx, connect.NewRequest(&pb.StartRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if startResp.Msg.GetGeneration() != 2 {
+		t.Fatalf("Start generation = %d, want 2", startResp.Msg.GetGeneration())
 	}
 
 	// --- Attach a cron schedule to the same deployment. ---
