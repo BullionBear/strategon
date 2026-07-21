@@ -1,0 +1,4 @@
+# pnpm v11: lifecycle scripts are denied by default. Approve packages that
+# must run postinstall (esbuild downloads its native binary here).
+allowBuilds:
+  esbuild: true

@@ -131,7 +131,7 @@
 				args: parseArgs(argsText),
 				env: parseEnv(envText)
 			});
-			info = `Deployment created (stopped) — generation ${res.generation}. Start it to run.`;
+			info = `Assignment created (stopped) — generation ${res.generation}. Start it to run.`;
 			await goto(`/machines/${machineId}/${strategy}`);
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
@@ -144,9 +144,9 @@
 <section class="fade-in">
 	<h1>Deploy</h1>
 	<p class="muted">
-		Create a deployment (binary + config + args + env). New deployments land
+		Create an assignment (binary + config + args + env). New assignments land
 		<strong>stopped</strong> — use Start on the strategy page to run them. Versions
-		default to the newest registered artifact; the deployment pins that concrete version.
+		default to the newest registered artifact; the assignment pins that concrete version.
 		<a href="/artifacts">Manage catalog →</a>
 	</p>
 

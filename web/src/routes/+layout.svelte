@@ -118,7 +118,10 @@
 	const navGroups = [
 		{
 			label: 'Fleet',
-			items: [{ href: '/', label: 'Machines', icon: 'machines' as const }]
+			items: [
+				{ href: '/', label: 'Machines', icon: 'machines' as const },
+				{ href: '/assignments', label: 'Assignments', icon: 'assignments' as const }
+			]
 		},
 		{
 			label: 'Deploy',
@@ -250,6 +253,15 @@
 											stroke-width="1.5"
 										/>
 										<path d="M7 17h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+									</svg>
+								{:else if item.icon === 'assignments'}
+									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+										<path
+											d="M4 5.5h12M4 10h12M4 14.5h8"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+										/>
 									</svg>
 								{:else if item.icon === 'deploy'}
 									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">

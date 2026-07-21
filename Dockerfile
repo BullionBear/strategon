@@ -5,9 +5,12 @@
 # --- stage 1: frontend ---
 FROM node:22-alpine AS fe
 WORKDIR /web
+ENV CI=true
 RUN corepack enable
 # Lockfile first so dependency installs stay cached across source-only changes.
-COPY web/package.json web/pnpm-lock.yaml ./
+# pnpm-workspace.yaml carries allowBuilds (esbuild) — required by pnpm v11 or
+# install exits with ERR_PNPM_IGNORED_BUILDS.
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web/ ./
 RUN pnpm build

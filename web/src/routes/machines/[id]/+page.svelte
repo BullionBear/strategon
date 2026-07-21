@@ -105,7 +105,7 @@
 	async function undeploy(strategy: string) {
 		if (
 			!confirm(
-				`Undeploy ${strategy} from ${id}? This deletes the deployment record and its logs/history from the UI. Use Stop to halt the process while keeping history.`
+				`Undeploy ${strategy} from ${id}? This deletes the assignment and its logs/history from the UI. Use Stop to halt the process while keeping history.`
 			)
 		) {
 			return;
