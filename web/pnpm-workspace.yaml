@@ -2,3 +2,4 @@
 # must run postinstall (esbuild downloads its native binary here).
 allowBuilds:
   esbuild: true
+  vue-demi: true

@@ -62,6 +62,12 @@
 		mutating call is audited as you. Tokens are stored hashed in the control-plane process and
 		are lost on restart unless durable auth storage is added later.
 	</p>
+	<p class="muted" style="margin-top:0.65rem">
+		Connect JSON reference (standalone):
+		<a href="/reference" target="_blank" rel="noopener noreferrer">Open API docs</a>
+		·
+		<a href="/openapi.json" target="_blank" rel="noopener noreferrer"><code class="mono">openapi.json</code></a>
+	</p>
 
 	{#if mode !== 'none' && !signedIn}
 		<p class="pill bad" style="margin-top:1rem">Sign in first to mint tokens.</p>

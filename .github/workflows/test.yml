@@ -37,6 +37,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -47,6 +51,14 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
         working-directory: web
+      # OpenAPI (web/static/openapi.json) is produced by buf + protoc-gen-connect-openapi.
+      - name: Install proto tools
+        run: make tools
+      - name: Generate OpenAPI (and check drift)
+        run: |
+          make generate
+          git diff --exit-code -- web/static/openapi.json \
+            || (echo "web/static/openapi.json is stale — run 'make generate' and commit" && exit 1)
       - run: pnpm run check
         working-directory: web
       - run: pnpm build

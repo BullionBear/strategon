@@ -25,6 +25,8 @@ tools:
 	go install github.com/bufbuild/buf/cmd/buf@v1.47.2
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.16.2
+	# v0.25+ needs Go ≥1.25; pin to v0.24 for go.mod's Go 1.24 + GOTOOLCHAIN=local.
+	go install github.com/sudorandom/protoc-gen-connect-openapi@v0.24.0
 
 ## lint: enforce proto style
 lint:
@@ -34,8 +36,11 @@ lint:
 breaking:
 	buf breaking --against '.git#branch=main'
 
-## generate: regenerate Go + connect-go + Connect-ES TS from proto
+## generate: regenerate Go + connect-go + Connect-ES TS + OpenAPI from proto.
+## Needs web/node_modules (protoc-gen-es). OpenAPI lands in web/static/openapi.json
+## for the SPA docs page and Docker FE build.
 generate proto:
+	@test -x web/node_modules/.bin/protoc-gen-es || (cd web && pnpm install --frozen-lockfile)
 	buf generate
 
 ## build: compile all packages with buildinfo ldflags; also emit bin/ binaries
@@ -51,9 +56,12 @@ test:
 
 ## web-build: build the SPA and stage it where //go:embed picks it up.
 ## Order matters: this must run before any go build that ships a
-## UI, or an empty dist/ gets embedded.
+## UI, or an empty dist/ gets embedded. Requires web/static/openapi.json
+## from `make generate`.
 web-build:
-	cd web && pnpm install --frozen-lockfile && pnpm build
+	cd web && pnpm install --frozen-lockfile
+	@test -f web/static/openapi.json || (echo "missing web/static/openapi.json — run 'make generate' first" && exit 1)
+	cd web && pnpm build
 	rm -rf internal/webassets/dist
 	cp -r web/build internal/webassets/dist
 	touch internal/webassets/dist/.gitkeep

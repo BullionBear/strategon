@@ -659,7 +659,7 @@ export type AuditEntry = Message<"strategyplatform.v1.AuditEntry"> & {
   actor: string;
 
   /**
-   * "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles"
+   * "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact"
    *
    * @generated from field: string action = 3;
    */

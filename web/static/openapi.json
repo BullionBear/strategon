@@ -1,0 +1,2239 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Strategon Control Plane",
+    "version": "1.0.0",
+    "description": "Human API for the Strategon control plane (Connect JSON over HTTP).\n\nAuthenticate with a session cookie (UI login) or a Bearer API token\n(`Authorization: Bearer str_live_…`) minted from the UI **API tokens** page.\n\nAgent gRPC/Connect endpoints are served on a separate port and are not\nincluded in this document.\n"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Human API (same origin when using the embedded UI)"
+    }
+  ],
+  "paths": {
+    "/strategyplatform.v1.ControlPlaneService/BrowseDir": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "BrowseDir",
+        "description": "Browse a strategy WorkDir on a connected agent (one directory level).",
+        "operationId": "strategyplatform.v1.ControlPlaneService.BrowseDir",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.BrowseDirRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.BrowseDirResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/Deploy": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "Deploy",
+        "operationId": "strategyplatform.v1.ControlPlaneService.Deploy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.DeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.DeployResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/DownloadFiles": {},
+    "/strategyplatform.v1.ControlPlaneService/GetControlPlaneVersion": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "GetControlPlaneVersion",
+        "description": "Ops display: control-plane build version (header/footer).",
+        "operationId": "strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.GetControlPlaneVersionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ControlPlaneVersion"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/GetMachine": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "GetMachine",
+        "operationId": "strategyplatform.v1.ControlPlaneService.GetMachine",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.GetMachineRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.Machine"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/GetMachineMetrics": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "GetMachineMetrics",
+        "description": "Short-term resource trend from the PG sliding window (not a TSDB).",
+        "operationId": "strategyplatform.v1.ControlPlaneService.GetMachineMetrics",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.GetMachineMetricsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.GetMachineMetricsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ListArtifacts": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ListArtifacts",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ListArtifacts",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ListArtifactsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ListArtifactsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ListAudit": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ListAudit",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ListAudit",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ListAuditRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ListAuditResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ListMachines": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ListMachines",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ListMachines",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ListMachinesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ListMachinesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/RegisterArtifact": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "RegisterArtifact",
+        "operationId": "strategyplatform.v1.ControlPlaneService.RegisterArtifact",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.RegisterArtifactRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.RegisterArtifactResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/Rollback": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "Rollback",
+        "operationId": "strategyplatform.v1.ControlPlaneService.Rollback",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.RollbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.RollbackResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/SetDeployment": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "SetDeployment",
+        "operationId": "strategyplatform.v1.ControlPlaneService.SetDeployment",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.SetDeploymentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.SetDeploymentResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/SetSchedule": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "SetSchedule",
+        "operationId": "strategyplatform.v1.ControlPlaneService.SetSchedule",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.SetScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.SetScheduleResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/Start": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "Start",
+        "operationId": "strategyplatform.v1.ControlPlaneService.Start",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.StartRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.StartResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/Stop": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "Stop",
+        "operationId": "strategyplatform.v1.ControlPlaneService.Stop",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.StopRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.StopResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/Undeploy": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "Undeploy",
+        "operationId": "strategyplatform.v1.ControlPlaneService.Undeploy",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.UndeployRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.UndeployResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/WatchMachine": {}
+  },
+  "components": {
+    "schemas": {
+      "connect-protocol-version": {
+        "type": "number",
+        "title": "Connect-Protocol-Version",
+        "enum": [
+          1
+        ],
+        "description": "Define the version of the Connect protocol",
+        "const": 1
+      },
+      "connect-timeout-header": {
+        "type": "number",
+        "title": "Connect-Timeout-Ms",
+        "description": "Define the timeout, in ms"
+      },
+      "connect.error": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "examples": [
+              "not_found"
+            ],
+            "enum": [
+              "canceled",
+              "unknown",
+              "invalid_argument",
+              "deadline_exceeded",
+              "not_found",
+              "already_exists",
+              "permission_denied",
+              "resource_exhausted",
+              "failed_precondition",
+              "aborted",
+              "out_of_range",
+              "unimplemented",
+              "internal",
+              "unavailable",
+              "data_loss",
+              "unauthenticated"
+            ],
+            "description": "The status code, which should be an enum value of [google.rpc.Code][google.rpc.Code]."
+          },
+          "message": {
+            "type": "string",
+            "description": "A developer-facing error message, which should be in English. Any user-facing error message should be localized and sent in the [google.rpc.Status.details][google.rpc.Status.details] field, or localized by the client."
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/connect.error_details.Any"
+            },
+            "description": "A list of messages that carry the error details. There is no limit on the number of messages."
+          }
+        },
+        "title": "Connect Error",
+        "additionalProperties": true,
+        "description": "Error type returned by Connect: https://connectrpc.com/docs/go/errors/#http-representation"
+      },
+      "connect.error_details.Any": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "A URL that acts as a globally unique identifier for the type of the serialized message. For example: `type.googleapis.com/google.rpc.ErrorInfo`. This is used to determine the schema of the data in the `value` field and is the discriminator for the `debug` field."
+          },
+          "value": {
+            "type": "string",
+            "format": "binary",
+            "description": "The Protobuf message, serialized as bytes and base64-encoded. The specific message type is identified by the `type` field."
+          },
+          "debug": {
+            "oneOf": [
+              {
+                "type": "object",
+                "title": "Any",
+                "additionalProperties": true,
+                "description": "Detailed error information."
+              }
+            ],
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "title": "Debug",
+            "description": "Deserialized error detail payload. The 'type' field indicates the schema. This field is for easier debugging and should not be relied upon for application logic."
+          }
+        },
+        "additionalProperties": true,
+        "description": "Contains an arbitrary serialized message along with a @type that describes the type of the serialized message, with an additional debug field for ConnectRPC error details."
+      },
+      "google.protobuf.Timestamp": {
+        "type": "string",
+        "examples": [
+          "2023-01-15T01:30:15.01Z",
+          "2024-12-25T12:00:00Z"
+        ],
+        "format": "date-time",
+        "description": "A Timestamp represents a point in time independent of any time zone or local\n calendar, encoded as a count of seconds and fractions of seconds at\n nanosecond resolution. The count is relative to an epoch at UTC midnight on\n January 1, 1970, in the proleptic Gregorian calendar which extends the\n Gregorian calendar backwards to year one.\n\n All minutes are 60 seconds long. Leap seconds are \"smeared\" so that no leap\n second table is needed for interpretation, using a [24-hour linear\n smear](https://developers.google.com/time/smear).\n\n The range is from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z. By\n restricting to that range, we ensure that we can convert to and from [RFC\n 3339](https://www.ietf.org/rfc/rfc3339.txt) date strings.\n\n # Examples\n\n Example 1: Compute Timestamp from POSIX `time()`.\n\n     Timestamp timestamp;\n     timestamp.set_seconds(time(NULL));\n     timestamp.set_nanos(0);\n\n Example 2: Compute Timestamp from POSIX `gettimeofday()`.\n\n     struct timeval tv;\n     gettimeofday(\u0026tv, NULL);\n\n     Timestamp timestamp;\n     timestamp.set_seconds(tv.tv_sec);\n     timestamp.set_nanos(tv.tv_usec * 1000);\n\n Example 3: Compute Timestamp from Win32 `GetSystemTimeAsFileTime()`.\n\n     FILETIME ft;\n     GetSystemTimeAsFileTime(\u0026ft);\n     UINT64 ticks = (((UINT64)ft.dwHighDateTime) \u003c\u003c 32) | ft.dwLowDateTime;\n\n     // A Windows tick is 100 nanoseconds. Windows epoch 1601-01-01T00:00:00Z\n     // is 11644473600 seconds before Unix epoch 1970-01-01T00:00:00Z.\n     Timestamp timestamp;\n     timestamp.set_seconds((INT64) ((ticks / 10000000) - 11644473600LL));\n     timestamp.set_nanos((INT32) ((ticks % 10000000) * 100));\n\n Example 4: Compute Timestamp from Java `System.currentTimeMillis()`.\n\n     long millis = System.currentTimeMillis();\n\n     Timestamp timestamp = Timestamp.newBuilder().setSeconds(millis / 1000)\n         .setNanos((int) ((millis % 1000) * 1000000)).build();\n\n Example 5: Compute Timestamp from Java `Instant.now()`.\n\n     Instant now = Instant.now();\n\n     Timestamp timestamp =\n         Timestamp.newBuilder().setSeconds(now.getEpochSecond())\n             .setNanos(now.getNano()).build();\n\n Example 6: Compute Timestamp from current time in Python.\n\n     timestamp = Timestamp()\n     timestamp.GetCurrentTime()\n\n # JSON Mapping\n\n In JSON format, the Timestamp type is encoded as a string in the\n [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) format. That is, the\n format is \"{year}-{month}-{day}T{hour}:{min}:{sec}[.{frac_sec}]Z\"\n where {year} is always expressed using four digits while {month}, {day},\n {hour}, {min}, and {sec} are zero-padded to two digits each. The fractional\n seconds, which can go up to 9 digits (i.e. up to 1 nanosecond resolution),\n are optional. The \"Z\" suffix indicates the timezone (\"UTC\"); the timezone\n is required. A proto3 JSON serializer should always use UTC (as indicated by\n \"Z\") when printing the Timestamp type and a proto3 JSON parser should be\n able to accept both UTC and other timezones (as indicated by an offset).\n\n For example, \"2017-01-15T01:30:15.01Z\" encodes 15.01 seconds past\n 01:30 UTC on January 15, 2017.\n\n In JavaScript, one can convert a Date object to this format using the\n standard\n [toISOString()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toISOString)\n method. In Python, a standard `datetime.datetime` object can be converted\n to this format using\n [`strftime`](https://docs.python.org/2/library/time.html#time.strftime) with\n the time format spec '%Y-%m-%dT%H:%M:%S.%fZ'. Likewise, in Java, one can use\n the Joda Time's [`ISODateTimeFormat.dateTime()`](\n http://joda-time.sourceforge.net/apidocs/org/joda/time/format/ISODateTimeFormat.html#dateTime()\n ) to obtain a formatter capable of generating timestamps in this format."
+      },
+      "strategyplatform.v1.ArtifactRef": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "title": "type",
+            "$ref": "#/components/schemas/strategyplatform.v1.ArtifactType"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "version": {
+            "type": "string",
+            "title": "version",
+            "description": "human-readable, e.g. \"v42\""
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "description": "\"sha256:...\"; content-addressed, verification is free"
+          },
+          "uri": {
+            "type": "string",
+            "title": "uri",
+            "description": "\"s3://bucket/key\" or registry ref"
+          },
+          "createdAt": {
+            "title": "created_at",
+            "description": "Set by the control plane on RegisterArtifact (registration time). Defines\n \"latest\" for catalog UI / deploy convenience — not version-string order.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ArtifactRef",
+        "additionalProperties": false,
+        "description": "ArtifactRef is content-addressed: config is also an ArtifactRef, so a config\n change is just a new digest that travels the exact same deploy path."
+      },
+      "strategyplatform.v1.ArtifactType": {
+        "type": "string",
+        "title": "ArtifactType",
+        "enum": [
+          "ARTIFACT_TYPE_UNSPECIFIED",
+          "ARTIFACT_TYPE_BINARY",
+          "ARTIFACT_TYPE_OCI_IMAGE"
+        ]
+      },
+      "strategyplatform.v1.AuditEntry": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "title": "timestamp",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "actor": {
+            "type": "string",
+            "title": "actor"
+          },
+          "action": {
+            "type": "string",
+            "title": "action",
+            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\""
+          },
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "fromVersion": {
+            "type": "string",
+            "title": "from_version"
+          },
+          "toVersion": {
+            "type": "string",
+            "title": "to_version"
+          },
+          "detail": {
+            "type": "string",
+            "title": "detail",
+            "description": "Free-form context (e.g. downloaded paths for DownloadFiles)."
+          }
+        },
+        "title": "AuditEntry",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.BrowseDirRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "path": {
+            "type": "string",
+            "title": "path",
+            "description": "relative to strategy WorkDir; \"\" or \".\" = root"
+          }
+        },
+        "title": "BrowseDirRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.BrowseDirResponse": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.DirEntry"
+            },
+            "title": "entries"
+          },
+          "path": {
+            "type": "string",
+            "title": "path",
+            "description": "echoed, normalized"
+          }
+        },
+        "title": "BrowseDirResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.Condition": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "type"
+          },
+          "status": {
+            "title": "status",
+            "$ref": "#/components/schemas/strategyplatform.v1.ConditionStatus"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason",
+            "description": "machine-readable short code, e.g. \"MarketDataStale\""
+          },
+          "message": {
+            "type": "string",
+            "title": "message",
+            "description": "human-readable explanation"
+          },
+          "lastTransition": {
+            "title": "last_transition",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "Condition",
+        "additionalProperties": false,
+        "description": "Condition expresses health as a k8s-style condition list rather than a single\n bool. type is one of \"Live\" | \"Ready\" | \"BusinessHealthy\"."
+      },
+      "strategyplatform.v1.ConditionStatus": {
+        "type": "string",
+        "title": "ConditionStatus",
+        "enum": [
+          "CONDITION_STATUS_UNSPECIFIED",
+          "CONDITION_STATUS_TRUE",
+          "CONDITION_STATUS_FALSE",
+          "CONDITION_STATUS_UNKNOWN"
+        ]
+      },
+      "strategyplatform.v1.ControlPlaneVersion": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "title": "version",
+            "description": "buildinfo.Version"
+          },
+          "commitHash": {
+            "type": "string",
+            "title": "commit_hash"
+          },
+          "buildTime": {
+            "type": "string",
+            "title": "build_time"
+          }
+        },
+        "title": "ControlPlaneVersion",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.CronAction": {
+        "type": "string",
+        "title": "CronAction",
+        "enum": [
+          "CRON_ACTION_UNSPECIFIED",
+          "CRON_ACTION_RESTART",
+          "CRON_ACTION_RELOAD_CONFIG",
+          "CRON_ACTION_RUN_SCRIPT"
+        ]
+      },
+      "strategyplatform.v1.CronSchedule": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "cronExpr": {
+            "type": "string",
+            "title": "cron_expr",
+            "description": "standard crontab syntax"
+          },
+          "timezone": {
+            "type": "string",
+            "title": "timezone",
+            "description": "IANA tz, required and explicit"
+          },
+          "action": {
+            "title": "action",
+            "$ref": "#/components/schemas/strategyplatform.v1.CronAction"
+          },
+          "jitterSeconds": {
+            "type": "integer",
+            "title": "jitter_seconds",
+            "format": "int32",
+            "description": "random jitter to avoid all machines at once"
+          },
+          "scriptRef": {
+            "type": "string",
+            "title": "script_ref",
+            "description": "artifact ref when action == RUN_SCRIPT"
+          }
+        },
+        "title": "CronSchedule",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DeployPhase": {
+        "type": "string",
+        "title": "DeployPhase",
+        "enum": [
+          "DEPLOY_PHASE_UNSPECIFIED",
+          "DEPLOY_PHASE_PENDING",
+          "DEPLOY_PHASE_DOWNLOADING",
+          "DEPLOY_PHASE_VERIFYING",
+          "DEPLOY_PHASE_DRAINING",
+          "DEPLOY_PHASE_SWITCHING",
+          "DEPLOY_PHASE_STARTING",
+          "DEPLOY_PHASE_HEALTH_CHECKING",
+          "DEPLOY_PHASE_HEALTHY",
+          "DEPLOY_PHASE_ROLLED_BACK",
+          "DEPLOY_PHASE_FAILED",
+          "DEPLOY_PHASE_ROLLING_BACK",
+          "DEPLOY_PHASE_STOPPED"
+        ]
+      },
+      "strategyplatform.v1.DeployRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "artifactVersion": {
+            "type": "string",
+            "title": "artifact_version",
+            "description": "version to deploy"
+          },
+          "configVersion": {
+            "type": "string",
+            "title": "config_version",
+            "description": "optional; empty = keep current config"
+          }
+        },
+        "title": "DeployRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DeployResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64",
+            "description": "new spec generation, for the frontend to track convergence"
+          }
+        },
+        "title": "DeployResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DirEntry": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "isDir": {
+            "type": "boolean",
+            "title": "is_dir"
+          },
+          "size": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "size",
+            "format": "int64"
+          },
+          "modTime": {
+            "title": "mod_time",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "isSymlink": {
+            "type": "boolean",
+            "title": "is_symlink"
+          }
+        },
+        "title": "DirEntry",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DownloadChunk": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "string",
+            "title": "data",
+            "format": "byte"
+          },
+          "filename": {
+            "type": "string",
+            "title": "filename",
+            "description": "set on first chunk"
+          },
+          "transferKind": {
+            "title": "transfer_kind",
+            "description": "set on first chunk",
+            "$ref": "#/components/schemas/strategyplatform.v1.TransferKind"
+          },
+          "eof": {
+            "type": "boolean",
+            "title": "eof"
+          }
+        },
+        "title": "DownloadChunk",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DownloadFilesRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "paths"
+          }
+        },
+        "title": "DownloadFilesRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ExecutionDriver": {
+        "type": "string",
+        "title": "ExecutionDriver",
+        "enum": [
+          "EXECUTION_DRIVER_UNSPECIFIED",
+          "EXECUTION_DRIVER_EXEC",
+          "EXECUTION_DRIVER_OCI"
+        ]
+      },
+      "strategyplatform.v1.GetControlPlaneVersionRequest": {
+        "type": "object",
+        "title": "GetControlPlaneVersionRequest",
+        "additionalProperties": false,
+        "description": "Control-plane binary build metadata (display only; not stored)."
+      },
+      "strategyplatform.v1.GetMachineMetricsRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy",
+            "description": "Empty = machine-level samples; non-empty = that strategy's process samples."
+          },
+          "rangeSeconds": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "range_seconds",
+            "format": "int64",
+            "description": "Lookback window in seconds; 0 defaults to 3600 (1 hour)."
+          }
+        },
+        "title": "GetMachineMetricsRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.GetMachineMetricsResponse": {
+        "type": "object",
+        "properties": {
+          "samples": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.ResourceSamplePoint"
+            },
+            "title": "samples"
+          }
+        },
+        "title": "GetMachineMetricsResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.GetMachineRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          }
+        },
+        "title": "GetMachineRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListArtifactsRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "optional filter; empty = all"
+          }
+        },
+        "title": "ListArtifactsRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListArtifactsResponse": {
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.ArtifactRef"
+            },
+            "title": "artifacts"
+          }
+        },
+        "title": "ListArtifactsResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListAuditRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "pageSize": {
+            "type": "integer",
+            "title": "page_size",
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": "string",
+            "title": "page_token"
+          }
+        },
+        "title": "ListAuditRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListAuditResponse": {
+        "type": "object",
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.AuditEntry"
+            },
+            "title": "entries"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListAuditResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListMachinesRequest": {
+        "type": "object",
+        "properties": {
+          "pageSize": {
+            "type": "integer",
+            "title": "page_size",
+            "format": "int32"
+          },
+          "pageToken": {
+            "type": "string",
+            "title": "page_token"
+          }
+        },
+        "title": "ListMachinesRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListMachinesResponse": {
+        "type": "object",
+        "properties": {
+          "machines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.Machine"
+            },
+            "title": "machines"
+          },
+          "nextPageToken": {
+            "type": "string",
+            "title": "next_page_token"
+          }
+        },
+        "title": "ListMachinesResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.Machine": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "title": "metadata",
+            "$ref": "#/components/schemas/strategyplatform.v1.ObjectMeta"
+          },
+          "spec": {
+            "title": "spec",
+            "$ref": "#/components/schemas/strategyplatform.v1.MachineSpec"
+          },
+          "lastResources": {
+            "title": "last_resources",
+            "$ref": "#/components/schemas/strategyplatform.v1.MachineResources"
+          },
+          "reachable": {
+            "type": "boolean",
+            "title": "reachable"
+          },
+          "agentVersion": {
+            "type": "integer",
+            "title": "agent_version",
+            "format": "int32",
+            "description": "capability version (monotonic)"
+          },
+          "lastHeartbeat": {
+            "title": "last_heartbeat",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "strategies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.StrategyView"
+            },
+            "title": "strategies",
+            "description": "Per-strategy desired+actual merged view. Assembled by the control plane so\n the frontend never joins spec/status itself."
+          },
+          "agentBuildVersion": {
+            "type": "string",
+            "title": "agent_build_version",
+            "description": "buildinfo.Version from the agent — display only; not for compatibility"
+          },
+          "lastProcesses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.ProcessMetrics"
+            },
+            "title": "last_processes",
+            "description": "Latest per-process metrics from Heartbeat (instantaneous snapshot)."
+          }
+        },
+        "title": "Machine",
+        "additionalProperties": false,
+        "description": "This is a different kind of connection from AgentService: low-frequency,\n browser/CLI, must be curl-able. Served over HTTP/JSON via Connect. All write\n paths go through the control plane, which validates, updates spec, increments\n generation, and pushes the new DesiredState over the stream."
+      },
+      "strategyplatform.v1.MachineResources": {
+        "type": "object",
+        "properties": {
+          "cpuPercent": {
+            "type": "number",
+            "title": "cpu_percent",
+            "format": "double"
+          },
+          "memoryUsedBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "memory_used_bytes",
+            "format": "int64"
+          },
+          "memoryTotalBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "memory_total_bytes",
+            "format": "int64"
+          },
+          "diskUsedBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "disk_used_bytes",
+            "format": "int64"
+          },
+          "diskTotalBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "disk_total_bytes",
+            "format": "int64"
+          },
+          "load1": {
+            "type": "number",
+            "title": "load1",
+            "format": "double"
+          },
+          "netRxBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "net_rx_bytes",
+            "format": "int64"
+          },
+          "netTxBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "net_tx_bytes",
+            "format": "int64"
+          },
+          "collectedAt": {
+            "title": "collected_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "MachineResources",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.MachineSpec": {
+        "type": "object",
+        "properties": {
+          "numCpus": {
+            "type": "integer",
+            "title": "num_cpus",
+            "format": "int32"
+          },
+          "memoryTotalBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "memory_total_bytes",
+            "format": "int64"
+          },
+          "os": {
+            "type": "string",
+            "title": "os"
+          },
+          "arch": {
+            "type": "string",
+            "title": "arch"
+          },
+          "kernelVersion": {
+            "type": "string",
+            "title": "kernel_version"
+          },
+          "region": {
+            "type": "string",
+            "title": "region"
+          },
+          "zone": {
+            "type": "string",
+            "title": "zone"
+          },
+          "supportedDrivers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.ExecutionDriver"
+            },
+            "title": "supported_drivers",
+            "description": "drivers this machine supports"
+          }
+        },
+        "title": "MachineSpec",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.MachineStatusEvent": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "machine": {
+            "title": "machine",
+            "$ref": "#/components/schemas/strategyplatform.v1.Machine"
+          },
+          "at": {
+            "title": "at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "MachineStatusEvent",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ObjectMeta": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "uid": {
+            "type": "string",
+            "title": "uid"
+          },
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64",
+            "description": "control plane increments on spec change"
+          },
+          "labels": {
+            "type": "object",
+            "title": "labels",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            }
+          },
+          "createdAt": {
+            "title": "created_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "ObjectMeta",
+        "additionalProperties": false,
+        "description": "ObjectMeta borrows the k8s design vocabulary (metadata/spec/status) without\n importing k8s. generation is incremented by the control plane on every spec\n change and is the sole coupling between desired (spec) and actual (status)."
+      },
+      "strategyplatform.v1.ObjectMeta.LabelsEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "LabelsEntry",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ProcessMetrics": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "pid": {
+            "type": "integer",
+            "title": "pid",
+            "format": "int32"
+          },
+          "alive": {
+            "type": "boolean",
+            "title": "alive"
+          },
+          "rssBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "rss_bytes",
+            "format": "int64"
+          },
+          "numFds": {
+            "type": "integer",
+            "title": "num_fds",
+            "format": "int32"
+          },
+          "cpuPercent": {
+            "type": "number",
+            "title": "cpu_percent",
+            "format": "double"
+          },
+          "restartCount": {
+            "type": "integer",
+            "title": "restart_count",
+            "format": "int32"
+          }
+        },
+        "title": "ProcessMetrics",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.RegisterArtifactRequest": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "title": "artifact",
+            "$ref": "#/components/schemas/strategyplatform.v1.ArtifactRef"
+          }
+        },
+        "title": "RegisterArtifactRequest",
+        "additionalProperties": false,
+        "description": "Artifact catalog: Deploy resolves artifact_version against registered\n artifacts (digest + uri). Additive follow-on so the\n human API can replace /admin/assign without requiring digest in every Deploy."
+      },
+      "strategyplatform.v1.RegisterArtifactResponse": {
+        "type": "object",
+        "title": "RegisterArtifactResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ResourceSamplePoint": {
+        "type": "object",
+        "properties": {
+          "sampledAt": {
+            "title": "sampled_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "cpuPercent": {
+            "type": "number",
+            "title": "cpu_percent",
+            "format": "double"
+          },
+          "memBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "mem_bytes",
+            "format": "int64"
+          }
+        },
+        "title": "ResourceSamplePoint",
+        "additionalProperties": false,
+        "description": "One point in the short-term PG sliding window (sparkline source)."
+      },
+      "strategyplatform.v1.RollbackRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "targetVersion": {
+            "type": "string",
+            "title": "target_version",
+            "description": "empty = previous version"
+          }
+        },
+        "title": "RollbackRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.RollbackResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "RollbackResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.SetDeploymentRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "artifactVersion": {
+            "type": "string",
+            "title": "artifact_version",
+            "description": "required; references a registered binary artifact"
+          },
+          "configVersion": {
+            "type": "string",
+            "title": "config_version",
+            "description": "optional; empty = keep current config"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "args",
+            "description": "launch args; may include ${CONFIG}/${RELEASE_DIR}/${BINARY}"
+          },
+          "env": {
+            "type": "object",
+            "title": "env",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "environment variables (full replace)"
+          }
+        },
+        "title": "SetDeploymentRequest",
+        "additionalProperties": false,
+        "description": "SetDeployment sets a full deployment combination (artifact + config + args +\n env). Any change bumps generation — the deployment version, independent of\n artifact versions. Deploy remains the convenience path for version-only rolls\n that preserve args/env."
+      },
+      "strategyplatform.v1.SetDeploymentRequest.EnvEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "EnvEntry",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.SetDeploymentResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64",
+            "description": "new deployment generation, for convergence tracking"
+          }
+        },
+        "title": "SetDeploymentResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.SetScheduleRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.CronSchedule"
+            },
+            "title": "schedules",
+            "description": "full overwrite of the strategy's cron"
+          }
+        },
+        "title": "SetScheduleRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.SetScheduleResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "SetScheduleResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.StartRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          }
+        },
+        "title": "StartRequest",
+        "additionalProperties": false,
+        "description": "Start resumes a previously Stopped deployment in place (same pinned version)."
+      },
+      "strategyplatform.v1.StartResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "StartResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.StopRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          }
+        },
+        "title": "StopRequest",
+        "additionalProperties": false,
+        "description": "Stop halts the process but keeps the deployment (assignment + WorkDir/logs)."
+      },
+      "strategyplatform.v1.StopResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "StopResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.StrategyView": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "desiredArtifact": {
+            "title": "desired_artifact",
+            "description": "Desired (from spec)",
+            "$ref": "#/components/schemas/strategyplatform.v1.ArtifactRef"
+          },
+          "desiredConfig": {
+            "title": "desired_config",
+            "$ref": "#/components/schemas/strategyplatform.v1.ArtifactRef"
+          },
+          "specGeneration": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "spec_generation",
+            "format": "int64"
+          },
+          "phase": {
+            "title": "phase",
+            "description": "Actual (from agent-reported status)",
+            "$ref": "#/components/schemas/strategyplatform.v1.DeployPhase"
+          },
+          "runningArtifact": {
+            "title": "running_artifact",
+            "$ref": "#/components/schemas/strategyplatform.v1.ArtifactRef"
+          },
+          "runningConfig": {
+            "title": "running_config",
+            "$ref": "#/components/schemas/strategyplatform.v1.ArtifactRef"
+          },
+          "observedGeneration": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "observed_generation",
+            "format": "int64"
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.Condition"
+            },
+            "title": "conditions"
+          },
+          "pid": {
+            "type": "integer",
+            "title": "pid",
+            "format": "int32"
+          },
+          "restartCount": {
+            "type": "integer",
+            "title": "restart_count",
+            "format": "int32"
+          },
+          "lastError": {
+            "type": "string",
+            "title": "last_error"
+          },
+          "converged": {
+            "type": "boolean",
+            "title": "converged",
+            "description": "Convergence judgment (control plane computed; frontend just renders) desired == running \u0026\u0026 phase == HEALTHY (or stopped \u0026\u0026 STOPPED)"
+          },
+          "leaseHeld": {
+            "type": "boolean",
+            "title": "lease_held",
+            "description": "agent may leave unset; UI shows unknown until lease state is reported"
+          },
+          "leaseExpiresAt": {
+            "title": "lease_expires_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.CronSchedule"
+            },
+            "title": "schedules",
+            "description": "Desired cron schedules (from StrategyAssignmentSpec); read-back for UI."
+          },
+          "startedAt": {
+            "title": "started_at",
+            "description": "Process start time from agent StatusReport; UI computes uptime as now - started_at.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "cpuPercent": {
+            "type": "number",
+            "title": "cpu_percent",
+            "format": "double",
+            "description": "Latest process metrics from Heartbeat (instantaneous; trends via GetMachineMetrics)."
+          },
+          "rssBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "rss_bytes",
+            "format": "int64"
+          },
+          "numFds": {
+            "type": "integer",
+            "title": "num_fds",
+            "format": "int32"
+          },
+          "deployedAt": {
+            "title": "deployed_at",
+            "description": "Latest Deploy/SetDeployment/Rollback audit timestamp when available.",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "stopped": {
+            "type": "boolean",
+            "title": "stopped",
+            "description": "Desired run state from StrategyAssignmentSpec.stopped."
+          }
+        },
+        "title": "StrategyView",
+        "additionalProperties": false,
+        "description": "StrategyView is a frontend-friendly join of desired (spec) and actual\n (status). converged is computed by the control plane using the same digest\n equality as the agent reconciler."
+      },
+      "strategyplatform.v1.TransferKind": {
+        "type": "string",
+        "title": "TransferKind",
+        "enum": [
+          "TRANSFER_KIND_UNSPECIFIED",
+          "TRANSFER_KIND_RAW_FILE",
+          "TRANSFER_KIND_TARBALL"
+        ]
+      },
+      "strategyplatform.v1.UndeployRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          }
+        },
+        "title": "UndeployRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.UndeployResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "UndeployResponse",
+        "additionalProperties": false
+      }
+    }
+  },
+  "security": [],
+  "tags": [
+    {
+      "name": "ControlPlaneService"
+    }
+  ]
+}

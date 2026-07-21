@@ -1,0 +1,15 @@
+openapi: 3.1.0
+info:
+  title: Strategon Control Plane
+  version: '1.0.0'
+  description: |
+    Human API for the Strategon control plane (Connect JSON over HTTP).
+
+    Authenticate with a session cookie (UI login) or a Bearer API token
+    (`Authorization: Bearer str_live_…`) minted from the UI **API tokens** page.
+
+    Agent gRPC/Connect endpoints are served on a separate port and are not
+    included in this document.
+servers:
+  - url: /
+    description: Human API (same origin when using the embedded UI)
