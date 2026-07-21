@@ -17,8 +17,7 @@ services:
   controlplane:
     image: ghcr.io/bullionbear/strategon:${STRATEGON_VERSION:-latest}
     restart: unless-stopped
-    # Allow the control plane to drain in-flight requests and flush token
-    # last_used before SIGKILL (matches cmd/controlplane shutdownTimeout).
+    # ≥ cmd/controlplane shutdownTimeout (10s) so drain + flush finish before SIGKILL.
     stop_grace_period: 15s
     command:
       # Container-local bind: the default is loopback, which Traefik cannot reach.

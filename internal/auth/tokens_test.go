@@ -2,10 +2,12 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
+	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 )
 
@@ -14,7 +16,7 @@ func TestTokenCreateLookupRevoke(t *testing.T) {
 	svc, err := New(Config{
 		Mode:          ModeNone,
 		SessionSecret: "test-secret-at-least-32-bytes-long!!",
-		Store:         mem,
+		Tokens:        mem,
 		MockUser:      "alice",
 		MockID:        "u1",
 	})
@@ -37,8 +39,10 @@ func TestTokenCreateLookupRevoke(t *testing.T) {
 	if plaintext == "" || meta.ID == "" {
 		t.Fatal("empty token")
 	}
+	if meta.LastUsed != nil {
+		t.Fatalf("new token should omit last_used, got %v", meta.LastUsed)
+	}
 
-	// Persist store holds hash only.
 	rows, err := mem.LoadAPITokens(ctx)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows=%v err=%v", rows, err)
@@ -55,7 +59,6 @@ func TestTokenCreateLookupRevoke(t *testing.T) {
 		t.Fatalf("lookup user %#v", u)
 	}
 
-	// Cross-user revoke must fail.
 	ok, err := svc.tokens.revoke(ctx, &User{ID: "other", Username: "bob", Source: SourceDiscord}, meta.ID)
 	if err != nil || ok {
 		t.Fatalf("cross-user revoke ok=%v err=%v", ok, err)
@@ -87,7 +90,7 @@ func TestTokenPersistsAcrossServiceRestart(t *testing.T) {
 	cfg := Config{
 		Mode:          ModeNone,
 		SessionSecret: "test-secret-at-least-32-bytes-long!!",
-		Store:         mem,
+		Tokens:        mem,
 		MockUser:      "alice",
 		MockID:        "u1",
 	}
@@ -123,11 +126,11 @@ func TestTokenPersistsAcrossServiceRestart(t *testing.T) {
 }
 
 func TestLookupDoesNotTouchStore(t *testing.T) {
-	counting := &countingStore{Memory: store.NewMemory(nil)}
+	counting := newCountingPersist()
 	svc, err := New(Config{
 		Mode:          ModeNone,
 		SessionSecret: "test-secret-at-least-32-bytes-long!!",
-		Store:         counting,
+		Tokens:        counting,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -138,12 +141,11 @@ func TestLookupDoesNotTouchStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before := counting.loadCalls + counting.insertCalls + counting.revokeCalls + counting.touchCalls
+	before := counting.calls()
 	if _, err := svc.tokens.lookup(plaintext); err != nil {
 		t.Fatal(err)
 	}
-	after := counting.loadCalls + counting.insertCalls + counting.revokeCalls + counting.touchCalls
-	if after != before {
+	if after := counting.calls(); after != before {
 		t.Fatalf("lookup hit store: before=%d after=%d", before, after)
 	}
 }
@@ -153,7 +155,7 @@ func TestLastUsedFlush(t *testing.T) {
 	svc, err := New(Config{
 		Mode:          ModeNone,
 		SessionSecret: "test-secret-at-least-32-bytes-long!!",
-		Store:         mem,
+		Tokens:        mem,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -177,9 +179,86 @@ func TestLastUsedFlush(t *testing.T) {
 	if rows[0].ID != meta.ID || rows[0].LastUsed.IsZero() {
 		t.Fatalf("expected last_used flushed, got %#v", rows[0])
 	}
-	// Second flush with empty dirty set is a no-op.
 	if err := svc.FlushTokens(ctx); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestFlushIndependentOfExpiredContext(t *testing.T) {
+	// Guards shutdown fix: final flush must use its own budget, not a drained ctx.
+	persist := newCountingPersist()
+	svc, err := New(Config{
+		Mode:          ModeNone,
+		SessionSecret: "test-secret-at-least-32-bytes-long!!",
+		Tokens:        persist,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	owner := &User{ID: "u1", Username: "alice", Source: SourceDiscord}
+	plaintext, meta, err := svc.tokens.create(ctx, owner, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.tokens.lookup(plaintext); err != nil {
+		t.Fatal(err)
+	}
+
+	expired, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := svc.FlushTokens(expired); err == nil {
+		t.Fatal("expected flush failure on expired context")
+	}
+	// Dirty should have been re-queued; a fresh context must still persist it.
+	if err := svc.FlushTokens(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := persist.LoadAPITokens(ctx)
+	if err != nil || len(rows) != 1 || rows[0].ID != meta.ID || rows[0].LastUsed.IsZero() {
+		t.Fatalf("lookup during drain must land in final flush: %+v err=%v", rows, err)
+	}
+}
+
+func TestRevokeClearsDirty(t *testing.T) {
+	counting := newCountingPersist()
+	svc, err := New(Config{
+		Mode:          ModeNone,
+		SessionSecret: "test-secret-at-least-32-bytes-long!!",
+		Tokens:        counting,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	owner := &User{ID: "u1", Username: "alice", Source: SourceDiscord}
+	plaintext, meta, err := svc.tokens.create(ctx, owner, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.tokens.lookup(plaintext); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := svc.tokens.revoke(ctx, owner, meta.ID)
+	if err != nil || !ok {
+		t.Fatalf("revoke ok=%v err=%v", ok, err)
+	}
+	if err := svc.FlushTokens(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if counting.touchCalls != 0 {
+		t.Fatalf("revoked token should not be flushed; touchCalls=%d", counting.touchCalls)
+	}
+}
+
+func TestLastUsedJSONOmittedWhenUnset(t *testing.T) {
+	meta := TokenMeta{ID: "x", Name: "n", UserID: "u", Username: "a", CreatedAt: time.Unix(1, 0).UTC()}
+	b, err := json.Marshal(meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != `{"id":"x","name":"n","user_id":"u","username":"a","created_at":"1970-01-01T00:00:01Z"}` {
+		t.Fatalf("unexpected json %s", b)
 	}
 }
 
@@ -188,7 +267,7 @@ func TestFlusherRace(t *testing.T) {
 	svc, err := New(Config{
 		Mode:          ModeNone,
 		SessionSecret: "test-secret-at-least-32-bytes-long!!",
-		Store:         mem,
+		Tokens:        mem,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -225,41 +304,87 @@ func TestFlusherRace(t *testing.T) {
 	_ = svc.FlushTokens(context.Background())
 }
 
-type countingStore struct {
-	*store.Memory
-	mu           sync.Mutex
-	loadCalls    int
-	insertCalls  int
-	revokeCalls  int
-	touchCalls   int
+// countingPersist implements TokenPersistence only (no full Store embed).
+type countingPersist struct {
+	mu          sync.Mutex
+	byID        map[string]store.TokenRow
+	loadCalls   int
+	insertCalls int
+	revokeCalls int
+	touchCalls  int
+	audit       []*pb.AuditEntry
 }
 
-func (c *countingStore) LoadAPITokens(ctx context.Context) ([]store.TokenRow, error) {
+func newCountingPersist() *countingPersist {
+	return &countingPersist{byID: map[string]store.TokenRow{}}
+}
+
+func (c *countingPersist) calls() int {
 	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.loadCalls + c.insertCalls + c.revokeCalls + c.touchCalls
+}
+
+func (c *countingPersist) LoadAPITokens(ctx context.Context) ([]store.TokenRow, error) {
+	_ = ctx
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.loadCalls++
-	c.mu.Unlock()
-	return c.Memory.LoadAPITokens(ctx)
+	out := make([]store.TokenRow, 0, len(c.byID))
+	for _, row := range c.byID {
+		if row.RevokedAt.IsZero() {
+			out = append(out, row)
+		}
+	}
+	return out, nil
 }
 
-func (c *countingStore) InsertAPIToken(ctx context.Context, t store.TokenRow) error {
+func (c *countingPersist) InsertAPIToken(ctx context.Context, t store.TokenRow) error {
+	_ = ctx
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.insertCalls++
-	c.mu.Unlock()
-	return c.Memory.InsertAPIToken(ctx, t)
+	c.byID[t.ID] = t
+	return nil
 }
 
-func (c *countingStore) RevokeAPIToken(ctx context.Context, userID, id string) (bool, error) {
+func (c *countingPersist) RevokeAPIToken(ctx context.Context, userID, id string) (bool, error) {
+	_ = ctx
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.revokeCalls++
-	c.mu.Unlock()
-	return c.Memory.RevokeAPIToken(ctx, userID, id)
+	row, ok := c.byID[id]
+	if !ok || row.UserID != userID || !row.RevokedAt.IsZero() {
+		return false, nil
+	}
+	row.RevokedAt = time.Now().UTC()
+	c.byID[id] = row
+	return true, nil
 }
 
-func (c *countingStore) TouchAPITokens(ctx context.Context, lastUsed map[string]time.Time) error {
+func (c *countingPersist) TouchAPITokens(ctx context.Context, lastUsed map[string]time.Time) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.touchCalls++
-	c.mu.Unlock()
-	return c.Memory.TouchAPITokens(ctx, lastUsed)
+	for id, ts := range lastUsed {
+		row, ok := c.byID[id]
+		if !ok || !row.RevokedAt.IsZero() {
+			continue
+		}
+		row.LastUsed = ts
+		c.byID[id] = row
+	}
+	return nil
+}
+
+func (c *countingPersist) AppendAudit(entry *pb.AuditEntry) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.audit = append(c.audit, entry)
+	return nil
 }
 
 func contains(ss []string, want string) bool {

@@ -25,12 +25,12 @@ const DefaultTokenFlushInterval = 30 * time.Second
 
 // TokenMeta is safe to return to clients (never includes the secret).
 type TokenMeta struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	UserID    string    `json:"user_id"`
-	Username  string    `json:"username"`
-	CreatedAt time.Time `json:"created_at"`
-	LastUsed  time.Time `json:"last_used,omitempty"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	UserID    string     `json:"user_id"`
+	Username  string     `json:"username"`
+	CreatedAt time.Time  `json:"created_at"`
+	LastUsed  *time.Time `json:"last_used,omitempty"`
 }
 
 type tokenRecord struct {
@@ -44,10 +44,10 @@ type tokenStore struct {
 	byID    map[string]*tokenRecord
 	byHash  map[string]*tokenRecord // O(1) lookup by token hash
 	dirty   map[string]time.Time    // id -> last_used pending flush
-	persist store.Store             // nil = ephemeral cache only (tests)
+	persist TokenPersistence        // nil = ephemeral cache only (tests)
 }
 
-func newTokenStore(persist store.Store) *tokenStore {
+func newTokenStore(persist TokenPersistence) *tokenStore {
 	return &tokenStore{
 		byID:    make(map[string]*tokenRecord),
 		byHash:  make(map[string]*tokenRecord),
@@ -131,7 +131,10 @@ func recordFromRow(row store.TokenRow) *tokenRecord {
 		UserID:    row.UserID,
 		Username:  row.Username,
 		CreatedAt: row.CreatedAt.UTC(),
-		LastUsed:  row.LastUsed.UTC(),
+	}
+	if !row.LastUsed.IsZero() {
+		lu := row.LastUsed.UTC()
+		meta.LastUsed = &lu
 	}
 	return &tokenRecord{
 		meta:    meta,
@@ -209,7 +212,7 @@ func (t *tokenStore) lookup(raw string) (*User, error) {
 		return nil, errors.New("unknown api token")
 	}
 	now := time.Now().UTC()
-	rec.meta.LastUsed = now
+	rec.meta.LastUsed = &now
 	t.dirty[rec.meta.ID] = now
 	return &User{
 		ID:       rec.meta.UserID,
@@ -241,6 +244,10 @@ func (t *tokenStore) revoke(ctx context.Context, actor *User, tokenID string) (b
 	t.mu.RLock()
 	rec, ok := t.byID[tokenID]
 	owned := ok && rec.meta.UserID == actor.ID
+	var tokenName string
+	if owned {
+		tokenName = rec.meta.Name // Name is immutable after create
+	}
 	t.mu.RUnlock()
 	if !owned {
 		return false, nil
@@ -258,7 +265,7 @@ func (t *tokenStore) revoke(ctx context.Context, actor *User, tokenID string) (b
 			Timestamp: timestamppb.Now(),
 			Actor:     actor.Actor(),
 			Action:    "RevokeToken",
-			Detail:    fmt.Sprintf("token_id=%s name=%s", tokenID, rec.meta.Name),
+			Detail:    fmt.Sprintf("token_id=%s name=%s", tokenID, tokenName),
 		})
 	}
 

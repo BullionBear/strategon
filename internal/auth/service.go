@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bullionbear/strategon/internal/controlplane/store"
 )
 
 // Config configures the human-API auth service.
@@ -36,10 +35,10 @@ type Config struct {
 	// FrontendURL is where browsers return after login/logout.
 	FrontendURL string
 
-	// Store persists API tokens (create/revoke write-through; LastUsed batched).
+	// Tokens persists API tokens (create/revoke write-through; LastUsed batched).
 	// Nil keeps tokens in-process only (unit tests). Production should pass the
 	// control-plane Store (Postgres for durability; Memory for --db="").
-	Store store.Store
+	Tokens TokenPersistence
 
 	Logger *slog.Logger
 }
@@ -100,7 +99,7 @@ func New(cfg Config) (*Service, error) {
 		discordRedirectURL:  strings.TrimSpace(cfg.DiscordRedirectURL),
 		discordGuildID:      strings.TrimSpace(cfg.DiscordGuildID),
 		frontendURL:         strings.TrimRight(strings.TrimSpace(cfg.FrontendURL), "/"),
-		tokens:              newTokenStore(cfg.Store),
+		tokens:              newTokenStore(cfg.Tokens),
 		exchanges:           newExchangeStore(),
 		logger:              logger,
 	}

@@ -109,7 +109,7 @@ func run(logger *slog.Logger) error {
 		DiscordRedirectURL:  *discordRedirect,
 		DiscordGuildID:      *discordGuildID,
 		FrontendURL:         *frontendURL,
-		Store:               st,
+		Tokens:              st,
 		Logger:              logger,
 	})
 	if err != nil {
@@ -172,21 +172,36 @@ func run(logger *slog.Logger) error {
 		logger.Info("shutdown signal received")
 	case err := <-errCh:
 		stop()
+		// Tear both servers down before returning so deferred pg.Close() does
+		// not race with a sibling that is still serving.
+		drainServers(logger, humanHTTP, agentHTTP)
 		return err
 	}
 
+	// Flush last_used on its own budget before drains — streaming connections
+	// (agent bidi, WatchMachine) can consume the full shutdownTimeout.
+	flushCtx, flushCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	if err := authSvc.FlushTokens(flushCtx); err != nil {
+		logger.Warn("api token flush", "err", err)
+	}
+	flushCancel()
+
+	drainServers(logger, humanHTTP, agentHTTP)
+	return nil
+}
+
+// drainServers stops the human API first (short requests + WatchMachine), then
+// the agent port. Agent streams rarely idle, so Shutdown is followed by Close.
+func drainServers(logger *slog.Logger, humanHTTP, agentHTTP *http.Server) {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 	if err := humanHTTP.Shutdown(shutdownCtx); err != nil {
 		logger.Warn("human server shutdown", "err", err)
 	}
 	if err := agentHTTP.Shutdown(shutdownCtx); err != nil {
-		logger.Warn("agent server shutdown", "err", err)
+		logger.Warn("agent server shutdown; forcing close", "err", err)
+		_ = agentHTTP.Close()
 	}
-	if err := authSvc.FlushTokens(shutdownCtx); err != nil {
-		logger.Warn("api token flush", "err", err)
-	}
-	return nil
 }
 
 func newAgentServer(addr string, handler http.Handler, h2s *http2.Server, certFile, keyFile, clientCAFile string) (*http.Server, error) {
