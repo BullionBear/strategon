@@ -18,15 +18,6 @@
 
 <section class="fade-in">
 	<h1>Audit</h1>
-	<p class="muted">
-		In-memory audit trail from this control-plane process. History does not survive restarts —
-		Postgres persistence is a follow-up.
-	</p>
-
-	<div class="panel notice" style="margin-top:1rem">
-		<strong>Limited history:</strong> entries live only in the in-memory store. Durable audit
-		requires the Postgres store.
-	</div>
 
 	{#if error}
 		<p class="pill bad" style="margin-top:1rem">{error}</p>
@@ -65,11 +56,6 @@
 </section>
 
 <style>
-	.notice {
-		border-color: #e6c98a;
-		background: #fff8e8;
-		font-size: 0.92rem;
-	}
 	table {
 		width: 100%;
 		border-collapse: collapse;
