@@ -857,6 +857,74 @@ func (p *Postgres) loadLease(ctx context.Context, q querier, strategy string, fo
 	}, nil
 }
 
+// --- API tokens ---
+
+func (p *Postgres) LoadAPITokens(ctx context.Context) ([]TokenRow, error) {
+	rows, err := p.pool.Query(ctx, `SELECT id, token_hash, name, user_id, username, created_at, last_used
+		FROM api_tokens WHERE revoked_at IS NULL`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TokenRow
+	for rows.Next() {
+		var t TokenRow
+		var lastUsed *time.Time
+		if err := rows.Scan(&t.ID, &t.TokenHash, &t.Name, &t.UserID, &t.Username, &t.CreatedAt, &lastUsed); err != nil {
+			return nil, err
+		}
+		if lastUsed != nil {
+			t.LastUsed = lastUsed.UTC()
+		}
+		t.CreatedAt = t.CreatedAt.UTC()
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+func (p *Postgres) InsertAPIToken(ctx context.Context, t TokenRow) error {
+	if t.ID == "" || t.TokenHash == "" || t.UserID == "" {
+		return fmt.Errorf("insert api token: id, token_hash, and user_id are required")
+	}
+	var lastUsed any
+	if !t.LastUsed.IsZero() {
+		lastUsed = t.LastUsed.UTC()
+	}
+	_, err := p.pool.Exec(ctx, `INSERT INTO api_tokens
+		(id, token_hash, name, user_id, username, created_at, last_used)
+		VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+		t.ID, t.TokenHash, t.Name, t.UserID, t.Username, t.CreatedAt.UTC(), lastUsed)
+	return err
+}
+
+func (p *Postgres) RevokeAPIToken(ctx context.Context, userID, id string) (bool, error) {
+	tag, err := p.pool.Exec(ctx, `UPDATE api_tokens SET revoked_at = now()
+		WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL`, id, userID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
+func (p *Postgres) TouchAPITokens(ctx context.Context, lastUsed map[string]time.Time) error {
+	if len(lastUsed) == 0 {
+		return nil
+	}
+	ids := make([]string, 0, len(lastUsed))
+	times := make([]time.Time, 0, len(lastUsed))
+	for id, ts := range lastUsed {
+		ids = append(ids, id)
+		times = append(times, ts.UTC())
+	}
+	_, err := p.pool.Exec(ctx, `UPDATE api_tokens AS t
+		SET last_used = v.last_used
+		FROM (
+			SELECT UNNEST($1::text[]) AS id, UNNEST($2::timestamptz[]) AS last_used
+		) AS v
+		WHERE t.id = v.id AND t.revoked_at IS NULL`, ids, times)
+	return err
+}
+
 // Compile-time assertions that both stores satisfy the interface.
 var (
 	_ Store = (*Postgres)(nil)

@@ -23,7 +23,7 @@ func newTestPostgres(t *testing.T, hub *Hub) *Postgres {
 	if err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
-	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases, api_tokens, resource_samples RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	t.Cleanup(p.Close)
@@ -205,6 +205,46 @@ func TestPostgresDurabilityAcrossReconnect(t *testing.T) {
 	ds, ok := p2.DesiredState("m1")
 	if !ok || ds.GetGeneration() != 1 || len(ds.GetAssignments()) != 1 {
 		t.Fatalf("state did not survive reconnect: %+v ok=%v", ds, ok)
+	}
+}
+
+func TestPostgresAPITokens(t *testing.T) {
+	p := newTestPostgres(t, nil)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	row := TokenRow{
+		ID:        "abcd1234abcd1234",
+		TokenHash: "deadbeef",
+		Name:      "ci",
+		UserID:    "u1",
+		Username:  "alice",
+		CreatedAt: now,
+	}
+	if err := p.InsertAPIToken(ctx, row); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := p.LoadAPITokens(ctx)
+	if err != nil || len(loaded) != 1 || loaded[0].ID != row.ID || loaded[0].TokenHash != row.TokenHash {
+		t.Fatalf("load: %+v err=%v", loaded, err)
+	}
+	if err := p.TouchAPITokens(ctx, map[string]time.Time{row.ID: now.Add(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = p.LoadAPITokens(ctx)
+	if err != nil || len(loaded) != 1 || loaded[0].LastUsed.IsZero() {
+		t.Fatalf("touch: %+v err=%v", loaded, err)
+	}
+	ok, err := p.RevokeAPIToken(ctx, "other", row.ID)
+	if err != nil || ok {
+		t.Fatalf("cross-user revoke ok=%v err=%v", ok, err)
+	}
+	ok, err = p.RevokeAPIToken(ctx, "u1", row.ID)
+	if err != nil || !ok {
+		t.Fatalf("revoke ok=%v err=%v", ok, err)
+	}
+	loaded, err = p.LoadAPITokens(ctx)
+	if err != nil || len(loaded) != 0 {
+		t.Fatalf("active after revoke: %+v err=%v", loaded, err)
 	}
 }
 

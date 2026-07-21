@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -14,12 +15,16 @@ import (
 
 // Memory is an in-memory Store. It is safe for concurrent use; the control
 // plane serves many agent streams and human API calls concurrently.
+//
+// API tokens stored here are not durable across process restart (same as the
+// rest of the memory store). Prefer --db=Postgres for production token durability.
 type Memory struct {
 	mu          sync.RWMutex
 	machines    map[string]*MachineRecord
 	artifacts   map[string]*pb.ArtifactRef // key = name + "\x00" + version
 	audit       []*pb.AuditEntry
 	leases      map[string]*LeaseInfo // strategy -> lease
+	apiTokens   map[string]*TokenRow  // id -> row
 	leaseMargin time.Duration
 	now         func() time.Time // injectable for tests
 	hub         *Hub
@@ -36,6 +41,7 @@ func NewMemory(hub *Hub) *Memory {
 		machines:     map[string]*MachineRecord{},
 		artifacts:    map[string]*pb.ArtifactRef{},
 		leases:       map[string]*LeaseInfo{},
+		apiTokens:    map[string]*TokenRow{},
 		leaseMargin:  DefaultLeaseMarginCP,
 		now:          time.Now,
 		hub:          hub,
@@ -503,4 +509,69 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 		cp.PreviousArtifacts[k] = proto.Clone(v).(*pb.ArtifactRef)
 	}
 	return cp
+}
+
+// --- API tokens ---
+
+func (m *Memory) LoadAPITokens(ctx context.Context) ([]TokenRow, error) {
+	_ = ctx
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]TokenRow, 0, len(m.apiTokens))
+	for _, row := range m.apiTokens {
+		if !row.RevokedAt.IsZero() {
+			continue
+		}
+		out = append(out, *row)
+	}
+	return out, nil
+}
+
+func (m *Memory) InsertAPIToken(ctx context.Context, t TokenRow) error {
+	_ = ctx
+	if t.ID == "" || t.TokenHash == "" || t.UserID == "" {
+		return fmt.Errorf("insert api token: id, token_hash, and user_id are required")
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.apiTokens[t.ID]; ok {
+		return fmt.Errorf("insert api token: id %q already exists", t.ID)
+	}
+	for _, row := range m.apiTokens {
+		if row.TokenHash == t.TokenHash {
+			return fmt.Errorf("insert api token: token_hash already exists")
+		}
+	}
+	cp := t
+	m.apiTokens[t.ID] = &cp
+	return nil
+}
+
+func (m *Memory) RevokeAPIToken(ctx context.Context, userID, id string) (bool, error) {
+	_ = ctx
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	row, ok := m.apiTokens[id]
+	if !ok || row.UserID != userID || !row.RevokedAt.IsZero() {
+		return false, nil
+	}
+	row.RevokedAt = m.now().UTC()
+	return true, nil
+}
+
+func (m *Memory) TouchAPITokens(ctx context.Context, lastUsed map[string]time.Time) error {
+	_ = ctx
+	if len(lastUsed) == 0 {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, ts := range lastUsed {
+		row, ok := m.apiTokens[id]
+		if !ok || !row.RevokedAt.IsZero() {
+			continue
+		}
+		row.LastUsed = ts.UTC()
+	}
+	return nil
 }
