@@ -25,7 +25,8 @@ tools:
 	go install github.com/bufbuild/buf/cmd/buf@v1.47.2
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.34.2
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.16.2
-	go install github.com/sudorandom/protoc-gen-connect-openapi@v0.25.7
+	# v0.25+ needs Go ≥1.25; pin to v0.24 for go.mod's Go 1.24 + GOTOOLCHAIN=local.
+	go install github.com/sudorandom/protoc-gen-connect-openapi@v0.24.0
 
 ## lint: enforce proto style
 lint:
