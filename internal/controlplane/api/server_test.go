@@ -258,6 +258,132 @@ func TestUndeployRemovesAssignment(t *testing.T) {
 	}
 }
 
+func TestStopStartRunState(t *testing.T) {
+	client, st, _, agents := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	deployResp, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	notifyAfterDeploy := agents.n
+
+	stopResp, err := client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stopResp.Msg.GetGeneration() <= deployResp.Msg.GetGeneration() {
+		t.Fatalf("generation = %d, want > %d", stopResp.Msg.GetGeneration(), deployResp.Msg.GetGeneration())
+	}
+	if agents.n != notifyAfterDeploy+1 {
+		t.Fatalf("agent notify count = %d, want %d", agents.n, notifyAfterDeploy+1)
+	}
+	rec, _ := st.GetMachine("m1")
+	if !rec.Assignments["s"].GetStopped() {
+		t.Fatal("expected stopped=true after Stop")
+	}
+	audits := st.ListAudit("m1", "s")
+	foundStop := false
+	for _, a := range audits {
+		if a.GetAction() == "Stop" {
+			foundStop = true
+			break
+		}
+	}
+	if !foundStop {
+		t.Fatalf("expected Stop audit entry, got %+v", audits)
+	}
+
+	// Idempotent: already stopped → no write, generation unchanged.
+	genBefore := stopResp.Msg.GetGeneration()
+	notifyBefore := agents.n
+	again, err := client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Msg.GetGeneration() != genBefore {
+		t.Fatalf("idempotent Stop generation = %d, want %d", again.Msg.GetGeneration(), genBefore)
+	}
+	if agents.n != notifyBefore {
+		t.Fatalf("idempotent Stop should not notify agent")
+	}
+
+	// Agent settles at STOPPED → converged.
+	_ = st.ApplyStatus("m1", &pb.StatusReport{
+		ObservedGeneration: genBefore,
+		Assignments: []*pb.StrategyAssignmentStatus{{
+			Strategy: "s", Phase: pb.DeployPhase_DEPLOY_PHASE_STOPPED,
+			ObservedGeneration: genBefore,
+			RunningArtifact:    &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa"},
+		}},
+	})
+	got, err := client.GetMachine(ctx, connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sv := got.Msg.GetStrategies()[0]
+	if !sv.GetStopped() || !sv.GetConverged() || sv.GetPhase() != pb.DeployPhase_DEPLOY_PHASE_STOPPED {
+		t.Fatalf("expected stopped+converged STOPPED view, got %+v", sv)
+	}
+
+	startResp, err := client.Start(ctx, connect.NewRequest(&pb.StartRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if startResp.Msg.GetGeneration() <= genBefore {
+		t.Fatalf("Start generation = %d, want > %d", startResp.Msg.GetGeneration(), genBefore)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["s"].GetStopped() {
+		t.Fatal("expected stopped=false after Start")
+	}
+
+	// Idempotent Start.
+	genAfterStart := startResp.Msg.GetGeneration()
+	notifyAfterStart := agents.n
+	startAgain, err := client.Start(ctx, connect.NewRequest(&pb.StartRequest{
+		MachineId: "m1", Strategy: "s",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if startAgain.Msg.GetGeneration() != genAfterStart || agents.n != notifyAfterStart {
+		t.Fatal("idempotent Start should be a no-op")
+	}
+
+	// Unassigned strategy → FailedPrecondition.
+	_, err = client.Stop(ctx, connect.NewRequest(&pb.StopRequest{
+		MachineId: "m1", Strategy: "missing",
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("Stop unassigned: err=%v", err)
+	}
+
+	// SetDeployment on a stopped strategy clears stopped (implicit start).
+	_, _ = client.Stop(ctx, connect.NewRequest(&pb.StopRequest{MachineId: "m1", Strategy: "s"}))
+	_, err = client.SetDeployment(ctx, connect.NewRequest(&pb.SetDeploymentRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["s"].GetStopped() {
+		t.Fatal("SetDeployment should clear stopped")
+	}
+}
+
 func TestSetDeploymentSetsArgsEnvAndConfig(t *testing.T) {
 	client, st, _, agents := startHumanAPI(t)
 	ctx := context.Background()

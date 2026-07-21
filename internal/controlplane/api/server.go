@@ -208,6 +208,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 		}
 	}
 
+	// Deploy / SetDeployment are create-and-run: clear any prior halt.
+	spec.Stopped = false
+
 	if blocked, reason := store.DeploymentBlockedByLease(s.store, machineID, strategy); blocked {
 		return nil, nil, "", connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("migration interlocking: lease for %q %s", strategy, reason))
@@ -323,6 +326,62 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackR
 		s.agents.Notify(msg.GetMachineId())
 	}
 	return connect.NewResponse(&pb.RollbackResponse{Generation: gen}), nil
+}
+
+func (s *Server) Stop(ctx context.Context, req *connect.Request[pb.StopRequest]) (*connect.Response[pb.StopResponse], error) {
+	gen, err := s.setRunState(ctx, req.Msg.GetMachineId(), req.Msg.GetStrategy(), true, "Stop")
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.StopResponse{Generation: gen}), nil
+}
+
+func (s *Server) Start(ctx context.Context, req *connect.Request[pb.StartRequest]) (*connect.Response[pb.StartResponse], error) {
+	gen, err := s.setRunState(ctx, req.Msg.GetMachineId(), req.Msg.GetStrategy(), false, "Start")
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&pb.StartResponse{Generation: gen}), nil
+}
+
+// setRunState flips StrategyAssignmentSpec.stopped without touching
+// artifact/config/args/env. Idempotent when already in the target state.
+func (s *Server) setRunState(ctx context.Context, machineID, strategy string, stopped bool, action string) (int64, error) {
+	if machineID == "" || strategy == "" {
+		return 0, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
+	}
+	rec, ok := s.store.GetMachine(machineID)
+	if !ok {
+		return 0, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
+	}
+	spec := rec.Assignments[strategy]
+	if spec == nil {
+		return 0, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("strategy %q not assigned", strategy))
+	}
+	if spec.GetStopped() == stopped {
+		return rec.Generation, nil
+	}
+	next := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
+	next.Stopped = stopped
+	gen, err := s.store.SetAssignment(machineID, strategy, next)
+	if err != nil {
+		return 0, connect.NewError(connect.CodeInternal, err)
+	}
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp:   timestamppb.Now(),
+		Actor:       auth.ActorFromContext(ctx),
+		Action:      action,
+		MachineId:   machineID,
+		Strategy:    strategy,
+		FromVersion: spec.GetArtifact().GetVersion(),
+		ToVersion:   spec.GetArtifact().GetVersion(),
+	})
+	if s.agents != nil {
+		s.agents.Notify(machineID)
+	}
+	s.logger.Info(strings.ToLower(action), "machine_id", machineID, "strategy", strategy,
+		"stopped", stopped, "generation", gen, "actor", auth.ActorFromContext(ctx))
+	return gen, nil
 }
 
 func (s *Server) Undeploy(ctx context.Context, req *connect.Request[pb.UndeployRequest]) (*connect.Response[pb.UndeployResponse], error) {

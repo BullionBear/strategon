@@ -68,7 +68,7 @@
 			pendingGen != null &&
 			view &&
 			Number(view.observedGeneration) >= Number(pendingGen) &&
-			view.phase === DeployPhase.HEALTHY
+			(view.phase === DeployPhase.HEALTHY || view.phase === DeployPhase.STOPPED)
 		) {
 			pendingGen = null;
 		}
@@ -87,8 +87,38 @@
 		}
 	}
 
+	async function stop() {
+		busy = true;
+		actionError = '';
+		try {
+			const res = await client.stop({ machineId: id, strategy: strat });
+			pendingGen = res.generation;
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
+	async function start() {
+		busy = true;
+		actionError = '';
+		try {
+			const res = await client.start({ machineId: id, strategy: strat });
+			pendingGen = res.generation;
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
 	async function undeploy() {
-		if (!confirm(`Undeploy ${strat} from ${id}? The process will receive SIGTERM, then SIGKILL if it does not exit.`)) {
+		if (
+			!confirm(
+				`Undeploy ${strat} from ${id}? This deletes the deployment and its logs/history from the UI. Use Stop to halt the process while keeping history.`
+			)
+		) {
 			return;
 		}
 		busy = true;
@@ -135,15 +165,20 @@
 				</div>
 				<div>
 					<span class="lbl">Status</span>
-					{#if view.converged}
-						<span class="pill ok">converged</span>
-					{:else if tracking}
-						<span class="pill lag">deploying → gen {pendingGen}</span>
-					{:else if failing}
-						<span class="pill bad">{phaseLabel(view.phase)}</span>
-					{:else}
-						<span class="pill lag">diverging</span>
-					{/if}
+					<div class="status-row">
+						{#if view.stopped}
+							<span class="pill off">stopped</span>
+						{/if}
+						{#if view.converged}
+							<span class="pill ok">converged</span>
+						{:else if tracking}
+							<span class="pill lag">deploying → gen {pendingGen}</span>
+						{:else if failing}
+							<span class="pill bad">{phaseLabel(view.phase)}</span>
+						{:else}
+							<span class="pill lag">diverging</span>
+						{/if}
+					</div>
 				</div>
 			</div>
 			{#if view.lastError}
@@ -190,7 +225,12 @@
 			<div class="actions">
 				<a class="btn secondary" href="/deploy?machine={id}&strategy={strat}">Deploy…</a>
 				<button class="btn secondary" disabled={busy} onclick={rollback}>Rollback</button>
-				<button class="btn secondary" disabled={busy} onclick={undeploy}>Undeploy</button>
+				{#if view.stopped}
+					<button class="btn secondary" disabled={busy} onclick={start}>Start</button>
+				{:else}
+					<button class="btn secondary" disabled={busy} onclick={stop}>Stop</button>
+				{/if}
+				<button class="btn danger" disabled={busy} onclick={undeploy}>Undeploy</button>
 			</div>
 			{#if actionError}
 				<p class="err mono">{actionError}</p>
@@ -210,42 +250,50 @@
 			{/if}
 		</div>
 
-		<!-- Phase state machine visualization -->
-		<ol class="pipeline" aria-label="Deploy phases">
-			{#each HAPPY_PATH as phase, i}
-				{@const done = !failing && idx > i}
-				{@const current = !failing && idx === i}
-				<li class:done class:current class:future={!done && !current}>
-					<span class="node">{done ? '✓' : i + 1}</span>
-					<span class="name">{phaseLabel(phase)}</span>
-				</li>
-				{#if i < HAPPY_PATH.length - 1}
-					<li class="edge" class:lit={idx > i && !failing} aria-hidden="true"></li>
-				{/if}
-			{/each}
-		</ol>
-
-		{#if failing}
-			<ol class="pipeline fail" aria-label="Failure branch">
-				{#each FAIL_PATH as phase}
-					{@const current = view.phase === phase}
-					{@const done =
-						view.phase === DeployPhase.ROLLED_BACK && phase === DeployPhase.ROLLING_BACK}
-					<li class="bad" class:done class:current>
-						<span class="node">{done || current ? '!' : '·'}</span>
+		{#if view.stopped}
+			<p class="stopped-note muted" style="margin-top:2rem">
+				Process halted. Deployment, WorkDir, and logs are retained — use
+				<strong>Start</strong> to resume the pinned version, or
+				<strong>Undeploy</strong> to delete everything.
+			</p>
+		{:else}
+			<!-- Phase state machine visualization -->
+			<ol class="pipeline" aria-label="Deploy phases">
+				{#each HAPPY_PATH as phase, i}
+					{@const done = !failing && idx > i}
+					{@const current = !failing && idx === i}
+					<li class:done class:current class:future={!done && !current}>
+						<span class="node">{done ? '✓' : i + 1}</span>
 						<span class="name">{phaseLabel(phase)}</span>
 					</li>
-					{#if phase === DeployPhase.ROLLING_BACK}
-						<li class="edge lit bad" aria-hidden="true"></li>
+					{#if i < HAPPY_PATH.length - 1}
+						<li class="edge" class:lit={idx > i && !failing} aria-hidden="true"></li>
 					{/if}
 				{/each}
-				{#if view.phase === DeployPhase.FAILED}
-					<li class="current bad">
-						<span class="node">✗</span>
-						<span class="name">Failed</span>
-					</li>
-				{/if}
 			</ol>
+
+			{#if failing}
+				<ol class="pipeline fail" aria-label="Failure branch">
+					{#each FAIL_PATH as phase}
+						{@const current = view.phase === phase}
+						{@const done =
+							view.phase === DeployPhase.ROLLED_BACK && phase === DeployPhase.ROLLING_BACK}
+						<li class="bad" class:done class:current>
+							<span class="node">{done || current ? '!' : '·'}</span>
+							<span class="name">{phaseLabel(phase)}</span>
+						</li>
+						{#if phase === DeployPhase.ROLLING_BACK}
+							<li class="edge lit bad" aria-hidden="true"></li>
+						{/if}
+					{/each}
+					{#if view.phase === DeployPhase.FAILED}
+						<li class="current bad">
+							<span class="node">✗</span>
+							<span class="name">Failed</span>
+						</li>
+					{/if}
+				</ol>
+			{/if}
 		{/if}
 
 		{#if machine}
@@ -327,10 +375,24 @@
 		color: var(--danger);
 		font-size: 0.85rem;
 	}
+	.status-row {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		flex-wrap: wrap;
+	}
 	.actions {
 		display: flex;
 		gap: 0.5rem;
 		margin-top: 1rem;
+		flex-wrap: wrap;
+	}
+	.stopped-note {
+		padding: 1rem 1.15rem;
+		border: 1px dashed var(--line, #ddd);
+		border-radius: var(--radius, 8px);
+		background: var(--surface, #fff);
+		line-height: 1.45;
 	}
 
 	.pipeline {

@@ -7,8 +7,9 @@ option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;st
 import "google/protobuf/timestamp.proto";
 import "strategyplatform/v1/common.proto";
 
-// StrategyAssignmentSpec is a single strategy the control plane wants running on
-// a machine. Only the control plane writes spec.
+// StrategyAssignmentSpec is a single strategy the control plane wants on a
+// machine. Presence means the deployment is durable; stopped controls whether
+// the process should be running. Only the control plane writes spec.
 message StrategyAssignmentSpec {
   string strategy = 1; // logical strategy id
   ArtifactRef artifact = 2; // desired binary/image version
@@ -20,6 +21,9 @@ message StrategyAssignmentSpec {
   repeated CronSchedule schedules = 8;
   repeated string args = 9;
   map<string, string> env = 10;
+  // When true the agent drains the process but retains WorkDir, release, and
+  // status so logs/history remain browsable. Default false = should be running.
+  bool stopped = 11;
 }
 
 // DesiredState is the machine-level full snapshot pushed southbound. assignments

@@ -20,6 +20,9 @@ enum DeployPhase {
   DEPLOY_PHASE_ROLLED_BACK = 9;
   DEPLOY_PHASE_FAILED = 10;
   DEPLOY_PHASE_ROLLING_BACK = 11;
+  // Intentionally halted via Stop. Settled desired state — still counts as
+  // converged (not a failure / divergence).
+  DEPLOY_PHASE_STOPPED = 12;
 }
 
 // StrategyAssignmentStatus is written only by the agent. The control plane

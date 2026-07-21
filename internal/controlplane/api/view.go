@@ -82,6 +82,7 @@ func buildStrategyView(rec *store.MachineRecord, name string, st store.Store, pr
 		v.DesiredArtifact = spec.GetArtifact()
 		v.DesiredConfig = spec.GetConfig()
 		v.Schedules = spec.GetSchedules()
+		v.Stopped = spec.GetStopped()
 	}
 	if status := rec.Status[name]; status != nil {
 		v.Phase = status.GetPhase()
@@ -144,8 +145,12 @@ func latestDeployTimes(st store.Store, machineID string) map[string]*timestamppb
 	return out
 }
 
-// isConverged mirrors reconciler versionMatches + HEALTHY.
+// isConverged mirrors reconciler convergence: HEALTHY + digest match, or an
+// intentionally halted deployment settled at STOPPED.
 func isConverged(v *pb.StrategyView) bool {
+	if v.GetStopped() {
+		return v.GetPhase() == pb.DeployPhase_DEPLOY_PHASE_STOPPED
+	}
 	if v.GetPhase() != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
 		return false
 	}
