@@ -42,3 +42,16 @@ message StrategyAssignmentStatus {
   bool lease_held = 11;
   google.protobuf.Timestamp lease_expires_at = 12;
 }
+
+// SharedFileStatus is written only by the agent: the actually-materialized
+// digest for a shared file. running_digest == spec digest means converged.
+message SharedFileStatus {
+  string name = 1;
+  string running_digest = 2; // sha256 of the file the "current" symlink points at ("" = absent)
+  string last_error = 3;     // non-empty => fetch/verify failed
+}
+
+message MachineSharedStatus {
+  int64 observed_generation = 1; // MachineSharedSpec.generation this reflects
+  repeated SharedFileStatus files = 2;
+}

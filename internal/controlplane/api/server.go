@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"github.com/bullionbear/strategon/internal/sharedfile"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -456,6 +458,111 @@ func (s *Server) SetSchedule(ctx context.Context, req *connect.Request[pb.SetSch
 		s.agents.Notify(msg.GetMachineId())
 	}
 	return connect.NewResponse(&pb.SetScheduleResponse{Generation: gen}), nil
+}
+
+func (s *Server) SetSharedFiles(ctx context.Context, req *connect.Request[pb.SetSharedFilesRequest]) (*connect.Response[pb.SetSharedFilesResponse], error) {
+	msg := req.Msg
+	if msg.GetMachineId() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id is required"))
+	}
+	if _, ok := s.store.GetMachine(msg.GetMachineId()); !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", msg.GetMachineId()))
+	}
+	seen := make(map[string]struct{}, len(msg.GetFiles()))
+	specs := make([]*pb.SharedFileSpec, 0, len(msg.GetFiles()))
+	for _, f := range msg.GetFiles() {
+		if f == nil {
+			continue
+		}
+		if err := sharedfile.ValidateName(f.GetName()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		if f.GetArtifactVersion() == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("shared file %q: artifact_version is required", f.GetName()))
+		}
+		if _, dup := seen[f.GetName()]; dup {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("duplicate shared file name %q", f.GetName()))
+		}
+		seen[f.GetName()] = struct{}{}
+		art, ok := s.store.GetArtifact(f.GetName(), f.GetArtifactVersion())
+		if !ok {
+			return nil, connect.NewError(connect.CodeNotFound,
+				fmt.Errorf("artifact %q version %q not registered", f.GetName(), f.GetArtifactVersion()))
+		}
+		specs = append(specs, &pb.SharedFileSpec{
+			Name:     f.GetName(),
+			Artifact: art,
+		})
+	}
+	sharedGen, _, err := s.store.SetSharedFiles(msg.GetMachineId(), specs)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	names := make([]string, 0, len(specs))
+	for _, sp := range specs {
+		names = append(names, sp.GetName())
+	}
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp: timestamppb.Now(),
+		Actor:     auth.ActorFromContext(ctx),
+		Action:    "SetSharedFiles",
+		MachineId: msg.GetMachineId(),
+		Detail:    strings.Join(names, ","),
+	})
+	if s.agents != nil {
+		s.agents.Notify(msg.GetMachineId())
+	}
+	return connect.NewResponse(&pb.SetSharedFilesResponse{Generation: sharedGen}), nil
+}
+
+func (s *Server) ListSharedFiles(_ context.Context, req *connect.Request[pb.ListSharedFilesRequest]) (*connect.Response[pb.ListSharedFilesResponse], error) {
+	machineID := req.Msg.GetMachineId()
+	if machineID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id is required"))
+	}
+	rec, ok := s.store.GetMachine(machineID)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
+	}
+	running := map[string]*pb.SharedFileStatus{}
+	if rec.SharedStatus != nil {
+		for _, f := range rec.SharedStatus.GetFiles() {
+			running[f.GetName()] = f
+		}
+	}
+	names := make([]string, 0, len(rec.SharedFiles))
+	for n := range rec.SharedFiles {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	views := make([]*pb.SharedFileView, 0, len(names))
+	for _, n := range names {
+		spec := rec.SharedFiles[n]
+		st := running[n]
+		desiredDigest := ""
+		desiredVersion := ""
+		if spec != nil && spec.GetArtifact() != nil {
+			desiredDigest = spec.GetArtifact().GetDigest()
+			desiredVersion = spec.GetArtifact().GetVersion()
+		}
+		runningDigest := ""
+		lastErr := ""
+		if st != nil {
+			runningDigest = st.GetRunningDigest()
+			lastErr = st.GetLastError()
+		}
+		views = append(views, &pb.SharedFileView{
+			Name:           n,
+			DesiredVersion: desiredVersion,
+			DesiredDigest:  desiredDigest,
+			RunningDigest:  runningDigest,
+			Converged:      desiredDigest != "" && desiredDigest == runningDigest && lastErr == "",
+			LastError:      lastErr,
+		})
+	}
+	return connect.NewResponse(&pb.ListSharedFilesResponse{Files: views}), nil
 }
 
 func (s *Server) WatchMachine(ctx context.Context, req *connect.Request[pb.GetMachineRequest], stream *connect.ServerStream[pb.MachineStatusEvent]) error {

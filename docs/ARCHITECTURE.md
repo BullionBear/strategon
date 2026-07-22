@@ -133,31 +133,67 @@ agent-initiated `Connect` bidi stream.
 
 ## Core concepts
 
-### Machine and assignment
+### Three layers: artifact, deployment, machine-shared
+
+| Layer | Scope | What it versions |
+|-------|--------|------------------|
+| **Artifact** | catalog | Content-addressed binary / config / shared-file blob |
+| **Deployment** | machine × strategy | Immutable combination (binary + config + args/env) |
+| **MachineShared** | machine | Mutable reference data shared by all strategies |
 
 A **machine** is one agent identity. Its **spec** holds strategy assignments
 (`StrategyAssignmentSpec` in `proto/.../spec.proto`): artifact + optional
 config, driver, args/env, deploy policy, lease/cron hints.
 
-**Status** (`status.proto`) is what the agent reports: `DeployPhase`, running
-artifacts, conditions, pid, `observed_generation`.
+**Machine-shared files** (`MachineSharedSpec` on `DesiredState.shared`) are
+independent of assignment generations. Operators set them via
+`SetSharedFiles` (full replace). The agent materializes:
+
+```
+<base>/shared/store/<digest>/<name>   # content-addressed
+<base>/shared/<name> -> store/...     # atomic symlink switch
+<base>/<strategy>/releases/<v>/shared -> ../../../shared
+```
+
+Configs can reference `./shared/instruments.json` relative to the config
+file. For seq, set:
+
+```yaml
+catalog:
+  instruments: ./shared/instruments.json
+```
+
+**Update semantics are next-start:** re-pointing the shared symlink does not
+reload running processes; the new content is seen on the next deploy,
+restart, or crash-recovery start. The reconciler converges shared files
+before assignments so a fresh machine can fetch the catalog before starting
+strategies that need it.
+
+**Status** (`status.proto` / `StatusReport`) is what the agent reports:
+`DeployPhase`, running artifacts, conditions, pid, `observed_generation`,
+plus `MachineSharedStatus` (per-file running digest / last_error).
 
 ### ArtifactRef
 
-Content-addressed binary (and optional config): `name`, `version`,
-`digest` (`sha256:…`), `uri`, `type`. Humans call `RegisterArtifact`; `Deploy`
-resolves a version (including `"latest"`) to a concrete ref. The agent fetches
-the URI and verifies the digest. Supported URIs today: `http(s)`, `file://`,
-absolute path.
+Content-addressed binary (and optional config / shared file): `name`,
+`version`, `digest` (`sha256:…`), `uri`, `type`. Humans call
+`RegisterArtifact`; `Deploy` / `SetSharedFiles` resolve a version to a
+concrete ref. The agent fetches the URI and verifies the digest. Supported
+URIs today: `http(s)`, `file://`, absolute path. For shared files the
+catalog **name** equals the on-disk basename (e.g. `instruments.json`).
 
 ### Generation and convergence
 
 - Every mutating assignment write bumps a monotonic **machine generation**.
-- `DesiredState.generation` is that snapshot version.
+- `SetSharedFiles` bumps `shared_generation` and also `machines.generation`
+  so the southbound snapshot advances; `MachineSharedSpec.generation` is
+  reported independently in status.
+- `DesiredState.generation` is the whole southbound snapshot version.
 - Per-strategy `observed_generation` advances when that strategy matches
   desired digests and is `HEALTHY`.
 - UI `converged` means: phase is `HEALTHY` and desired/running digests match
-  (artifact + config).
+  (artifact + config). Shared-file converged means running digest equals
+  desired digest with no error.
 
 Level-triggered: late or reconnecting agents always get a full snapshot; they
 do not replay an event log.

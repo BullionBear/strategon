@@ -65,6 +65,10 @@ type Deps struct {
 	// AgentVersion is stamped into the supervision file header.
 	AgentVersion int
 
+	// SharedRetention is how many store entries to keep per shared-file name
+	// (including the live symlink target). Default 3 when <= 0.
+	SharedRetention int
+
 	// Logger for adopt/persist diagnostics (optional).
 	Logger *slog.Logger
 }
@@ -74,6 +78,10 @@ type Reconciler struct {
 	desired    map[string]*pb.StrategyAssignmentSpec
 	actual     map[string]*strategyState
 	generation int64
+
+	desiredShared    map[string]*pb.SharedFileSpec
+	sharedGeneration int64
+	sharedActual     map[string]*sharedFileState
 
 	desiredCh chan *pb.DesiredState
 	exitCh    chan processExit
@@ -113,11 +121,13 @@ func New(deps Deps) *Reconciler {
 		tick = time.Second
 	}
 	return &Reconciler{
-		desired:      map[string]*pb.StrategyAssignmentSpec{},
-		actual:       map[string]*strategyState{},
-		desiredCh:    make(chan *pb.DesiredState, 8),
-		exitCh:       make(chan processExit, 16),
-		workerCh:     make(chan workerEvent, 32),
+		desired:       map[string]*pb.StrategyAssignmentSpec{},
+		actual:        map[string]*strategyState{},
+		desiredShared: map[string]*pb.SharedFileSpec{},
+		sharedActual:  map[string]*sharedFileState{},
+		desiredCh:     make(chan *pb.DesiredState, 8),
+		exitCh:        make(chan processExit, 16),
+		workerCh:      make(chan workerEvent, 32),
 		healthCh:     make(chan healthResult, 32),
 		deps:         deps,
 		tickInterval: tick,
@@ -203,6 +213,7 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 		return
 	}
 	r.generation = ds.GetGeneration()
+	r.applyDesiredShared(ds)
 	next := map[string]*pb.StrategyAssignmentSpec{}
 	for _, a := range ds.GetAssignments() {
 		next[a.GetStrategy()] = a
@@ -223,6 +234,8 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 
 // reconcile is the sole convergence entry point.
 func (r *Reconciler) reconcile() {
+	// Machine-shared files first so assignment starts can resolve ./shared/*.
+	r.reconcileShared()
 	for name, spec := range r.desired {
 		st := r.actual[name]
 		if st == nil {

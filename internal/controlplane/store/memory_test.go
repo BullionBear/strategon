@@ -46,6 +46,61 @@ func TestGenerationMonotonicAndDesiredSnapshot(t *testing.T) {
 	}
 }
 
+func TestSetSharedFilesGenerationAndDesired(t *testing.T) {
+	s := NewMemory(nil)
+	if _, err := s.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "instruments.json", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/i1.json",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	art, _ := s.GetArtifact("instruments.json", "v1")
+	sg1, dg1, err := s.SetSharedFiles("m1", []*pb.SharedFileSpec{
+		{Name: "instruments.json", Artifact: art},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sg1 != 1 || dg1 != 1 {
+		t.Fatalf("sharedGen=%d desiredGen=%d, want 1,1", sg1, dg1)
+	}
+	ds, _ := s.DesiredState("m1")
+	if ds.GetShared() == nil || ds.GetShared().GetGeneration() != 1 {
+		t.Fatalf("desired shared = %+v", ds.GetShared())
+	}
+	if len(ds.GetShared().GetFiles()) != 1 || ds.GetShared().GetFiles()[0].GetArtifact().GetDigest() != "sha256:aaa" {
+		t.Fatalf("files = %+v", ds.GetShared().GetFiles())
+	}
+	// Full replace to empty bumps generations again.
+	sg2, dg2, err := s.SetSharedFiles("m1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sg2 != 2 || dg2 != 2 {
+		t.Fatalf("after clear sharedGen=%d desiredGen=%d", sg2, dg2)
+	}
+	ds, _ = s.DesiredState("m1")
+	if len(ds.GetShared().GetFiles()) != 0 {
+		t.Fatalf("expected empty shared files")
+	}
+	// Status carries shared.
+	if err := s.ApplyStatus("m1", &pb.StatusReport{
+		ObservedGeneration: 2,
+		Shared: &pb.MachineSharedStatus{
+			ObservedGeneration: 2,
+			Files:              []*pb.SharedFileStatus{{Name: "instruments.json", RunningDigest: "sha256:aaa"}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := s.GetMachine("m1")
+	if rec.SharedStatus == nil || len(rec.SharedStatus.GetFiles()) != 1 {
+		t.Fatalf("shared status not persisted: %+v", rec.SharedStatus)
+	}
+}
+
 func TestRegisterArtifactRejectsRelativeFileURI(t *testing.T) {
 	s := NewMemory(nil)
 	err := s.RegisterArtifact(&pb.ArtifactRef{

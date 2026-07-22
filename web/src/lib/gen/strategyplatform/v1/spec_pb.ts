@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/spec.proto.
  */
 export const file_strategyplatform_v1_spec: GenFile = /*@__PURE__*/
-  fileDesc("Ch5zdHJhdGVneXBsYXRmb3JtL3YxL3NwZWMucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEiqAQKFlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSEAoIc3RyYXRlZ3kYASABKAkSMgoIYXJ0aWZhY3QYAiABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjAKBmNvbmZpZxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSNAoGZHJpdmVyGAQgASgOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXISMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxI4Cg1kZXBsb3lfcG9saWN5GAYgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQb2xpY3kSLQoFbGVhc2UYByABKAsyHi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlU3BlYxI0CglzY2hlZHVsZXMYCCADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkNyb25TY2hlZHVsZRIMCgRhcmdzGAkgAygJEkEKA2VudhgKIAMoCzI0LnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lBc3NpZ25tZW50U3BlYy5FbnZFbnRyeRIPCgdzdG9wcGVkGAsgASgIGioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEisgEKDERlc2lyZWRTdGF0ZRISCgpnZW5lcmF0aW9uGAEgASgDEkAKC2Fzc2lnbm1lbnRzGAIgAygLMisuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TdHJhdGVneUFzc2lnbm1lbnRTcGVjEh0KFWRlc2lyZWRfYWdlbnRfdmVyc2lvbhgDIAEoBRItCglpc3N1ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
+  fileDesc("Ch5zdHJhdGVneXBsYXRmb3JtL3YxL3NwZWMucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEiqAQKFlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSEAoIc3RyYXRlZ3kYASABKAkSMgoIYXJ0aWZhY3QYAiABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjAKBmNvbmZpZxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSNAoGZHJpdmVyGAQgASgOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXISMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxI4Cg1kZXBsb3lfcG9saWN5GAYgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQb2xpY3kSLQoFbGVhc2UYByABKAsyHi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlU3BlYxI0CglzY2hlZHVsZXMYCCADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkNyb25TY2hlZHVsZRIMCgRhcmdzGAkgAygJEkEKA2VudhgKIAMoCzI0LnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lBc3NpZ25tZW50U3BlYy5FbnZFbnRyeRIPCgdzdG9wcGVkGAsgASgIGioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiUgoOU2hhcmVkRmlsZVNwZWMSDAoEbmFtZRgBIAEoCRIyCghhcnRpZmFjdBgCIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYiWwoRTWFjaGluZVNoYXJlZFNwZWMSMgoFZmlsZXMYASADKAsyIy5zdHJhdGVneXBsYXRmb3JtLnYxLlNoYXJlZEZpbGVTcGVjEhIKCmdlbmVyYXRpb24YAiABKAMi6gEKDERlc2lyZWRTdGF0ZRISCgpnZW5lcmF0aW9uGAEgASgDEkAKC2Fzc2lnbm1lbnRzGAIgAygLMisuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TdHJhdGVneUFzc2lnbm1lbnRTcGVjEh0KFWRlc2lyZWRfYWdlbnRfdmVyc2lvbhgDIAEoBRItCglpc3N1ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjYKBnNoYXJlZBgFIAEoCzImLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVNoYXJlZFNwZWNCTVpLZ2l0aHViLmNvbS9idWxsaW9uYmVhci9zdHJhdGVnb24vZ2VuL3N0cmF0ZWd5cGxhdGZvcm0vdjE7c3RyYXRlZ3lwbGF0Zm9ybXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
 
 /**
  * StrategyAssignmentSpec is a single strategy the control plane wants on a
@@ -97,6 +97,65 @@ export const StrategyAssignmentSpecSchema: GenMessage<StrategyAssignmentSpec> = 
   messageDesc(file_strategyplatform_v1_spec, 0);
 
 /**
+ * SharedFileSpec is one machine-level shared file. name is the on-disk basename
+ * under <base>/shared; artifact is content-addressed (same trust chain as
+ * binary/config). Shared files are machine-scoped: they are NOT part of any
+ * deployment's generation and are updated independently.
+ *
+ * @generated from message strategyplatform.v1.SharedFileSpec
+ */
+export type SharedFileSpec = Message<"strategyplatform.v1.SharedFileSpec"> & {
+  /**
+   * clean basename, e.g. "instruments.json"
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * content-addressed; agent re-verifies digest
+   *
+   * @generated from field: strategyplatform.v1.ArtifactRef artifact = 2;
+   */
+  artifact?: ArtifactRef | undefined;
+};
+
+/**
+ * Describes the message strategyplatform.v1.SharedFileSpec.
+ * Use `create(SharedFileSpecSchema)` to create a new message.
+ */
+export const SharedFileSpecSchema: GenMessage<SharedFileSpec> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_spec, 1);
+
+/**
+ * MachineSharedSpec is the full set of shared files desired on a machine. Like
+ * assignments, it is a FULL list, not incremental: the agent diffs it against
+ * local actual state and converges (adds missing, updates changed, GCs removed).
+ *
+ * @generated from message strategyplatform.v1.MachineSharedSpec
+ */
+export type MachineSharedSpec = Message<"strategyplatform.v1.MachineSharedSpec"> & {
+  /**
+   * @generated from field: repeated strategyplatform.v1.SharedFileSpec files = 1;
+   */
+  files: SharedFileSpec[];
+
+  /**
+   * bumps when any file's ref changes; independent of assignment generations
+   *
+   * @generated from field: int64 generation = 2;
+   */
+  generation: bigint;
+};
+
+/**
+ * Describes the message strategyplatform.v1.MachineSharedSpec.
+ * Use `create(MachineSharedSpecSchema)` to create a new message.
+ */
+export const MachineSharedSpecSchema: GenMessage<MachineSharedSpec> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_spec, 2);
+
+/**
  * DesiredState is the machine-level full snapshot pushed southbound. assignments
  * is a FULL list (not incremental): the agent diffs it against local actual
  * state. This full semantics makes reconnect/restart/loss degenerate into "take
@@ -130,6 +189,13 @@ export type DesiredState = Message<"strategyplatform.v1.DesiredState"> & {
    * @generated from field: google.protobuf.Timestamp issued_at = 4;
    */
   issuedAt?: Timestamp | undefined;
+
+  /**
+   * machine-level shared files (full snapshot)
+   *
+   * @generated from field: strategyplatform.v1.MachineSharedSpec shared = 5;
+   */
+  shared?: MachineSharedSpec | undefined;
 };
 
 /**
@@ -137,5 +203,5 @@ export type DesiredState = Message<"strategyplatform.v1.DesiredState"> & {
  * Use `create(DesiredStateSchema)` to create a new message.
  */
 export const DesiredStateSchema: GenMessage<DesiredState> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 1);
+  messageDesc(file_strategyplatform_v1_spec, 3);
 

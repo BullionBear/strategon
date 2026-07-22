@@ -39,6 +39,7 @@ func main() {
 	base := flag.String("base", "/opt/strategies", "strategy release base directory")
 	cgroupRoot := flag.String("cgroup-root", "", "delegated cgroup v2 root (empty disables confinement)")
 	agentVersion := flag.Int("agent-version", 2, "agent capability version (monotonic)")
+	sharedRetention := flag.Int("shared-retention", 3, "shared-file store entries to retain per name (including live)")
 	metricsListen := flag.String("metrics-listen", "", "optional Prometheus text /metrics listen address (e.g. 127.0.0.1:9101); empty disables")
 	region := flag.String("region", "", "operator-assigned region label for fleet grouping (e.g. tw); empty groups as Unassigned")
 	zone := flag.String("zone", "", "operator-assigned zone label within a region")
@@ -82,14 +83,15 @@ func main() {
 	out := make(chan *pb.AgentMessage, 128)
 	artifacts := artifact.NewManager(*base, artifact.NewDefaultFetcher())
 	rec := reconciler.New(reconciler.Deps{
-		Driver:       driver.NewExecDriver(*cgroupRoot),
-		Artifacts:    artifacts,
-		Health:       health.AlwaysReady{},
-		Clock:        clock.Real{},
-		Out:          out,
-		BaseDir:      *base,
-		AgentVersion: *agentVersion,
-		Logger:       logger,
+		Driver:          driver.NewExecDriver(*cgroupRoot),
+		Artifacts:       artifacts,
+		Health:          health.AlwaysReady{},
+		Clock:           clock.Real{},
+		Out:             out,
+		BaseDir:         *base,
+		AgentVersion:    *agentVersion,
+		SharedRetention: *sharedRetention,
+		Logger:          logger,
 	})
 
 	collector := telemetry.New(func() []telemetry.ProcessTarget {

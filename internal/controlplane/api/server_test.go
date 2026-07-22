@@ -580,6 +580,67 @@ func TestDeployBlockedWhileOtherMachineHoldsLease(t *testing.T) {
 	}
 }
 
+func TestSetAndListSharedFiles(t *testing.T) {
+	client, st, _, agents := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "instruments.json", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/i.json",
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n0 := agents.n
+	resp, err := client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "instruments.json", ArtifactVersion: "v1"}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.GetGeneration() != 1 {
+		t.Fatalf("shared generation = %d", resp.Msg.GetGeneration())
+	}
+	if agents.n != n0+1 {
+		t.Fatalf("expected Notify, agents.n=%d", agents.n)
+	}
+	list, err := client.ListSharedFiles(ctx, connect.NewRequest(&pb.ListSharedFilesRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Msg.GetFiles()) != 1 || list.Msg.GetFiles()[0].GetDesiredDigest() != "sha256:aaa" {
+		t.Fatalf("list = %+v", list.Msg.GetFiles())
+	}
+	if list.Msg.GetFiles()[0].GetConverged() {
+		t.Fatal("should not be converged without status")
+	}
+	_ = st.ApplyStatus("m1", &pb.StatusReport{
+		Shared: &pb.MachineSharedStatus{
+			ObservedGeneration: 1,
+			Files:              []*pb.SharedFileStatus{{Name: "instruments.json", RunningDigest: "sha256:aaa"}},
+		},
+	})
+	list, err = client.ListSharedFiles(ctx, connect.NewRequest(&pb.ListSharedFilesRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !list.Msg.GetFiles()[0].GetConverged() {
+		t.Fatal("expected converged after matching status")
+	}
+	// Reject path separators.
+	_, err = client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "../x", ArtifactVersion: "v1"}},
+	}))
+	if err == nil {
+		t.Fatal("expected invalid name")
+	}
+}
+
 func TestGetMachineMetrics(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
