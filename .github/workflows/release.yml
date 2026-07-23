@@ -84,7 +84,7 @@ jobs:
           cache-dependency-path: web/pnpm-lock.yaml
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: true
       # `make release` runs web-build first, so the CP binaries embed the UI.
       - run: make release
