@@ -240,7 +240,8 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 
 // reconcile is the sole convergence entry point.
 func (r *Reconciler) reconcile() {
-	// Machine-shared files first so assignment starts can resolve ./shared/*.
+	// Initiate shared convergence first; assignment start/deploy is gated on
+	// sharedConverged so a fresh machine does not start before the catalog lands.
 	r.reconcileShared()
 	for name, spec := range r.desired {
 		st := r.actual[name]
@@ -280,6 +281,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		// above) paces the restarts.
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING &&
 			st.proc == nil && versionMatches(spec, st) {
+			if !r.awaitSharedReady(st) {
+				return
+			}
 			r.startProcess(spec, st, true)
 		}
 		return // otherwise wait for worker events
@@ -296,6 +300,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return // steady state
 
 	case versionMatches(spec, st) && st.proc == nil:
+		if !r.awaitSharedReady(st) {
+			return
+		}
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_STOPPED {
 			// Resume in place: re-run the health window (STARTING → HEALTH_CHECKING).
 			r.startProcess(spec, st, true)
@@ -316,6 +323,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 				r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_WARNING, "SkipBadVersion",
 					fmt.Sprintf("skipping known-bad version %s", st.lastBadVersion))
 			}
+			return
+		}
+		if !r.awaitSharedReady(st) {
 			return
 		}
 		r.beginDeploy(spec, st)

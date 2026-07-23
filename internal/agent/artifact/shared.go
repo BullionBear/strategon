@@ -6,12 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/sharedfile"
 )
+
+// fetchedAtSuffix is a sidecar written next to each store entry with the unix
+// nanos when the blob was installed. GC prefers this over mtime so rsync/
+// restore cannot reorder retention (§3.5).
+const fetchedAtSuffix = ".fetched_at"
 
 // SharedRoot is <base>/shared — the machine-level shared-file root.
 func (m *Manager) SharedRoot() string { return filepath.Join(m.Base, "shared") }
@@ -37,6 +43,10 @@ func (m *Manager) SharedLink(name string) string {
 
 // EnsureSharedFile fetches ref into the content-addressed store and verifies
 // the digest. Does not switch the live symlink.
+//
+// Bytes land via a sibling .partial file then rename, so a cancelled fetch
+// cannot leave a truncated object at the final store path. The fast-path
+// re-hash also refuses a corrupt leftover if rename was interrupted.
 func (m *Manager) EnsureSharedFile(ctx context.Context, name string, ref *pb.ArtifactRef) error {
 	if err := sharedfile.ValidateName(name); err != nil {
 		return err
@@ -55,19 +65,50 @@ func (m *Manager) EnsureSharedFile(ctx context.Context, name string, ref *pb.Art
 			return nil
 		}
 	}
-	if err := m.Fetcher.Fetch(ctx, ref, dest); err != nil {
+	partial := dest + ".partial"
+	_ = os.Remove(partial)
+	if err := m.Fetcher.Fetch(ctx, ref, partial); err != nil {
+		_ = os.Remove(partial)
 		return fmt.Errorf("fetch shared %s: %w", name, err)
 	}
-	sum, err := fileSHA256(dest)
+	if err := ctx.Err(); err != nil {
+		_ = os.Remove(partial)
+		return err
+	}
+	sum, err := fileSHA256(partial)
 	if err != nil {
+		_ = os.Remove(partial)
 		return err
 	}
 	got := "sha256:" + sum
 	if !strings.EqualFold(got, ref.GetDigest()) {
-		_ = os.Remove(dest)
+		_ = os.Remove(partial)
 		return fmt.Errorf("verify shared %s: digest mismatch got %s want %s", name, got, ref.GetDigest())
 	}
+	if err := os.Rename(partial, dest); err != nil {
+		_ = os.Remove(partial)
+		return fmt.Errorf("install shared %s: %w", name, err)
+	}
+	_ = writeFetchedAt(dest)
 	return nil
+}
+
+func writeFetchedAt(dest string) error {
+	return os.WriteFile(dest+fetchedAtSuffix, []byte(strconv.FormatInt(time.Now().UnixNano(), 10)), 0o644)
+}
+
+// readFetchedAt returns the recorded install time for a store entry, or the
+// zero time when the sidecar is missing/unreadable (GC falls back to mtime).
+func readFetchedAt(dest string) time.Time {
+	b, err := os.ReadFile(dest + fetchedAtSuffix)
+	if err != nil {
+		return time.Time{}
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+	if err != nil || n <= 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, n)
 }
 
 // SwitchSharedTo atomically re-points <base>/shared/<name> at the store entry
@@ -127,6 +168,11 @@ func (m *Manager) RemoveSharedLink(name string) error {
 
 // LinkReleaseShared creates releases/<v>/shared → ../../../shared (relative)
 // so configs can resolve ./shared/<name> relative to the config directory.
+//
+// Always run on Download, even when no shared files are desired yet: a later
+// SetSharedFiles must work without re-fetching the release, and a dangling
+// symlink is inert. Conditional linking would race "shared arrives after
+// first deploy" (§3.6 — intentional, not a bug).
 func (m *Manager) LinkReleaseShared(strategy, version string) error {
 	dir := m.ReleaseDir(strategy, version)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -154,6 +200,10 @@ func (m *Manager) LinkReleaseShared(strategy, version string) error {
 // desired removal). Never deletes the live symlink target of a kept name.
 // retention <= 0 means keep everything for desired names (orphans still swept).
 // keepNames may be nil (treated as empty — sweep all store names).
+//
+// Retention order prefers the recorded install time (.fetched_at sidecar),
+// then mtime, then digestDir for stability — so rsync/restore mtime churn
+// cannot evict the wrong previous version (§3.5).
 func (m *Manager) GCShared(retention int, keepNames map[string]struct{}) error {
 	storeDir := m.SharedStoreDir()
 	entries, err := os.ReadDir(storeDir)
@@ -163,9 +213,9 @@ func (m *Manager) GCShared(retention int, keepNames map[string]struct{}) error {
 		}
 		return err
 	}
-	// Map name -> list of (digestDir, mtime) present in the store.
 	type entry struct {
 		digestDir string
+		fetchedAt time.Time // recorded install time; zero → fall back to modTime
 		modTime   time.Time
 	}
 	byName := map[string][]entry{}
@@ -189,20 +239,27 @@ func (m *Manager) GCShared(retention int, keepNames map[string]struct{}) error {
 				continue
 			}
 			name := f.Name()
+			if strings.HasSuffix(name, fetchedAtSuffix) || strings.HasSuffix(name, ".partial") {
+				continue
+			}
+			path := filepath.Join(sub, name)
 			fi, err := f.Info()
 			mt := mod
 			if err == nil {
 				mt = fi.ModTime()
 			}
-			byName[name] = append(byName[name], entry{digestDir: digestDir, modTime: mt})
+			byName[name] = append(byName[name], entry{
+				digestDir: digestDir,
+				fetchedAt: readFetchedAt(path),
+				modTime:   mt,
+			})
 		}
 	}
 	for name, list := range byName {
 		if _, desired := keepNames[name]; !desired {
 			// Name no longer desired: reclaim all store bytes (§3.2).
 			for _, e := range list {
-				_ = os.Remove(filepath.Join(storeDir, e.digestDir, name))
-				_ = os.Remove(filepath.Join(storeDir, e.digestDir))
+				removeSharedStoreEntry(storeDir, e.digestDir, name)
 			}
 			continue
 		}
@@ -211,7 +268,19 @@ func (m *Manager) GCShared(retention int, keepNames map[string]struct{}) error {
 		}
 		live := digestDirName(m.RunningSharedDigest(name))
 		sort.Slice(list, func(i, j int) bool {
-			return list[i].modTime.After(list[j].modTime)
+			ai, aj := list[i], list[j]
+			ti, tj := ai.fetchedAt, aj.fetchedAt
+			if ti.IsZero() {
+				ti = ai.modTime
+			}
+			if tj.IsZero() {
+				tj = aj.modTime
+			}
+			if !ti.Equal(tj) {
+				return ti.After(tj)
+			}
+			// Stable tie-break: lexicographic digest dir.
+			return ai.digestDir > aj.digestDir
 		})
 		keep := map[string]struct{}{}
 		if live != "" {
@@ -227,11 +296,16 @@ func (m *Manager) GCShared(retention int, keepNames map[string]struct{}) error {
 			if _, ok := keep[e.digestDir]; ok {
 				continue
 			}
-			path := filepath.Join(storeDir, e.digestDir, name)
-			_ = os.Remove(path)
-			// Remove digest dir if empty.
-			_ = os.Remove(filepath.Join(storeDir, e.digestDir))
+			removeSharedStoreEntry(storeDir, e.digestDir, name)
 		}
 	}
 	return nil
+}
+
+func removeSharedStoreEntry(storeDir, digestDir, name string) {
+	base := filepath.Join(storeDir, digestDir, name)
+	_ = os.Remove(base)
+	_ = os.Remove(base + fetchedAtSuffix)
+	_ = os.Remove(base + ".partial")
+	_ = os.Remove(filepath.Join(storeDir, digestDir)) // only if empty
 }

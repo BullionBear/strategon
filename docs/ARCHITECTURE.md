@@ -151,9 +151,14 @@ independent of assignment generations. Operators set them via
 
 ```
 <base>/shared/store/<digest>/<name>   # content-addressed
+<base>/shared/store/<digest>/<name>.fetched_at  # install time (GC order)
 <base>/shared/<name> -> store/...     # atomic symlink switch
 <base>/<strategy>/releases/<v>/shared -> ../../../shared
 ```
+
+Every release gets `releases/<v>/shared` on Download even when no shared
+files are desired yet — so a later `SetSharedFiles` works without
+re-fetching the binary. A dangling symlink is inert.
 
 Process `WorkDir` is `StrategyDir` = `<base>/<strategy>`, while the shared
 tree is reached via `releases/<v>/shared`. So a path like
@@ -174,15 +179,23 @@ catalog:
 
 `SharedFileRef.artifact_name` selects the catalog artifact; when empty it
 defaults to the on-disk `name`. Digests must use the `sha256:` prefix.
-Identical re-pushes of the same name→digest set are no-ops (no generation
-bump, no audit). Shared-file fetch runs off the reconciler loop (worker
-goroutine) so a slow URI cannot stall heartbeats or deploys.
+Shared files are **single-file only** today: `SetSharedFiles` rejects names
+or URIs that look like archives (`.tar.gz`, `.zip`, …). Directory/tarball
+extraction is deferred. Identical re-pushes of the same name→digest set are
+no-ops (no generation bump, no audit). Shared-file fetch runs off the
+reconciler loop (worker goroutine) so a slow URI cannot stall heartbeats or
+deploys. Concurrent fetches are capped; GC waits until in-flight work
+finishes and orders retention by recorded install time (not mtime).
 
 **Update semantics are next-start:** re-pointing the shared symlink does not
 reload running processes; the new content is seen on the next deploy,
-restart, or crash-recovery start. The reconciler converges shared files
-before assignments so a fresh machine can fetch the catalog before starting
-strategies that need it.
+restart, or crash-recovery start. The reconciler *initiates* shared
+convergence before walking assignments, and **gates** `beginDeploy` /
+`startProcess` until every desired shared file is live at its desired
+digest (`WaitingForShared`). That restores first-boot ordering after the
+async-fetch change: a fresh machine will not start a strategy whose config
+points at a not-yet-fetched catalog. Crash-loop remains a backstop for
+runtime open failures, not the primary first-boot path.
 
 **Status** (`status.proto` / `StatusReport`) is what the agent reports:
 `DeployPhase`, running artifacts, conditions, pid, `observed_generation`,
@@ -191,11 +204,14 @@ plus `MachineSharedStatus` (per-file running digest / last_error).
 ### ArtifactRef
 
 Content-addressed binary (and optional config / shared file): `name`,
-`version`, `digest` (`sha256:…` only), `uri`, `type`. Humans call
-`RegisterArtifact`; `Deploy` / `SetSharedFiles` resolve a version to a
-concrete ref. The agent fetches the URI and verifies the digest. Supported
-URIs today: `http(s)`, `file://`, absolute path. For shared files the
-catalog name defaults to the on-disk basename but may differ via
+`version`, `digest`, `uri`, `type`. Humans call `RegisterArtifact`;
+`Deploy` / `SetSharedFiles` resolve a version to a concrete ref. The agent
+fetches the URI and verifies the digest (`sha256:…` for binaries at verify
+time). **`SetSharedFiles` requires a `sha256:` digest** at API ingress
+(shared store round-trips that prefix); `RegisterArtifact` does not enforce
+the prefix so existing binary/config CI is unchanged. Supported URIs today:
+`http(s)`, `file://`, absolute path. For shared files the catalog name
+defaults to the on-disk basename but may differ via
 `SharedFileRef.artifact_name`.
 
 ### Generation and convergence

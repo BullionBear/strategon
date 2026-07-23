@@ -679,14 +679,42 @@ func TestSetAndListSharedFiles(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected invalid name")
 	}
-	// Reject non-sha256 digests at RegisterArtifact.
+	// Non-sha256 digests are allowed at RegisterArtifact (binary/config CI),
+	// but SetSharedFiles rejects them when resolving the catalog entry.
 	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
 		Artifact: &pb.ArtifactRef{
-			Name: "bad", Version: "v1", Digest: "md5:abc", Uri: "file:///tmp/x",
+			Name: "bad-digest.json", Version: "v1", Digest: "md5:abc", Uri: "file:///tmp/x",
 		},
 	}))
+	if err != nil {
+		t.Fatalf("RegisterArtifact should accept non-sha256 digest: %v", err)
+	}
+	_, err = client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "bad-digest.json", ArtifactVersion: "v1"}},
+	}))
 	if err == nil {
-		t.Fatal("expected reject non-sha256 digest")
+		t.Fatal("expected SetSharedFiles to reject non-sha256 digest")
+	}
+	// Reject archive-looking artifacts (single-file-only model).
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "bundle.tar.gz", Version: "v1",
+			Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Uri:    "https://example.com/bundle.tar.gz",
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files: []*pb.SharedFileRef{{
+			Name: "instruments.json", ArtifactName: "bundle.tar.gz", ArtifactVersion: "v1",
+		}},
+	}))
+	if err == nil {
+		t.Fatal("expected SetSharedFiles to reject archive artifact")
 	}
 }
 

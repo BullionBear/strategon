@@ -499,6 +499,9 @@ func (s *Server) SetSharedFiles(ctx context.Context, req *connect.Request[pb.Set
 			return nil, connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("shared file %q: %w", f.GetName(), err))
 		}
+		if err := sharedfile.RejectArchiveRef(f.GetName(), artName, art.GetUri()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
 		specs = append(specs, &pb.SharedFileSpec{
 			Name:     f.GetName(),
 			Artifact: art,
@@ -660,9 +663,9 @@ func (s *Server) ListAudit(_ context.Context, req *connect.Request[pb.ListAuditR
 
 func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.RegisterArtifactRequest]) (*connect.Response[pb.RegisterArtifactResponse], error) {
 	art := req.Msg.GetArtifact()
-	if err := requireSHA256Digest(art.GetDigest()); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
+	// Digest algorithm is not enforced here: binary/config verify still requires
+	// a matching sha256: digest at the agent, and empty digests remain allowed
+	// for optional config refs. Shared-file digests are checked in SetSharedFiles.
 	if err := s.store.RegisterArtifact(art); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -681,9 +684,10 @@ func (s *Server) ListArtifacts(_ context.Context, req *connect.Request[pb.ListAr
 	return connect.NewResponse(&pb.ListArtifactsResponse{Artifacts: arts}), nil
 }
 
-// requireSHA256Digest enforces the only digest algorithm the agent store
+// requireSHA256Digest enforces the only digest algorithm the shared-file store
 // round-trips today (sha256: + hex). Other prefixes would disagree between
-// digestDirName and RunningSharedDigest.
+// digestDirName and RunningSharedDigest. Scoped to SetSharedFiles so binary/
+// config RegisterArtifact callers are not broken by this hardening.
 func requireSHA256Digest(digest string) error {
 	d := strings.TrimSpace(digest)
 	if d == "" {

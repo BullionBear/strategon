@@ -70,9 +70,14 @@ func (r *Reconciler) applyDesiredShared(ds *pb.DesiredState) {
 	r.desiredShared = next
 }
 
-// reconcileShared converges machine-level shared files before assignments.
+// maxSharedFetches caps concurrent HTTP/file fetches. Excess names wait for a
+// later reconcile pass after an in-flight fetch completes.
+const maxSharedFetches = 4
+
+// reconcileShared initiates machine-level shared-file convergence.
 // Fetch/verify runs in a worker goroutine (same non-blocking pattern as deploy)
-// so a hung artifact endpoint cannot stall the reconciler loop.
+// so a hung artifact endpoint cannot stall the reconciler loop. Assignment
+// starts/deploys are gated separately via sharedConverged until digests are live.
 func (r *Reconciler) reconcileShared() {
 	if r.deps.Artifacts == nil {
 		return
@@ -92,6 +97,13 @@ func (r *Reconciler) reconcileShared() {
 			continue
 		}
 		delete(r.sharedActual, name)
+	}
+
+	inflight := 0
+	for _, st := range r.sharedActual {
+		if st != nil && st.inflight != nil {
+			inflight++
+		}
 	}
 
 	for name, spec := range r.desiredShared {
@@ -130,9 +142,19 @@ func (r *Reconciler) reconcileShared() {
 			st.backoff.RecordCrash(r.now(), r.deps.Jitter)
 			continue
 		}
+		if inflight >= maxSharedFetches {
+			continue // wait for a slot; next pass after a worker completes
+		}
 		r.beginSharedFetch(name, spec.GetArtifact(), st)
+		inflight++
 	}
 
+	// Skip GC while any fetch is in flight: cancel is async, so a worker may
+	// still finish writing after RemoveSharedLink/orphan sweep. Next pass
+	// reclaims once inflight is clear.
+	if inflight > 0 {
+		return
+	}
 	retention := r.deps.SharedRetention
 	if retention <= 0 {
 		retention = 3
@@ -142,6 +164,57 @@ func (r *Reconciler) reconcileShared() {
 		keep[n] = struct{}{}
 	}
 	_ = r.deps.Artifacts.GCShared(retention, keep)
+}
+
+// sharedConverged reports whether every desired shared file is live at its
+// desired digest with no in-flight fetch. Empty desired set is trivially ready.
+// Used to gate beginDeploy / startProcess so a fresh machine does not start a
+// strategy whose config points at a not-yet-fetched shared file.
+func (r *Reconciler) sharedConverged() bool {
+	if len(r.desiredShared) == 0 {
+		return true
+	}
+	if r.deps.Artifacts == nil {
+		return false
+	}
+	for name, spec := range r.desiredShared {
+		want := ""
+		if spec.GetArtifact() != nil {
+			want = spec.GetArtifact().GetDigest()
+		}
+		if want == "" {
+			return false
+		}
+		st := r.sharedActual[name]
+		if st != nil && st.inflight != nil {
+			return false
+		}
+		running := ""
+		if st != nil {
+			running = st.runningDigest
+		}
+		if running == "" {
+			running = r.deps.Artifacts.RunningSharedDigest(name)
+		}
+		if !digestsEqual(running, want) {
+			return false
+		}
+	}
+	return true
+}
+
+// awaitSharedReady returns true when starts/deploys may proceed. When false it
+// emits a one-shot WaitingForShared warning per shared generation.
+func (r *Reconciler) awaitSharedReady(st *strategyState) bool {
+	if r.sharedConverged() {
+		return true
+	}
+	if st.warnedWaitingShared != r.sharedGeneration {
+		st.warnedWaitingShared = r.sharedGeneration
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_WARNING, "WaitingForShared",
+			"deferring start until machine shared files converge")
+	}
+	return false
 }
 
 func (r *Reconciler) beginSharedFetch(name string, art *pb.ArtifactRef, st *sharedFileState) {

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
@@ -130,5 +131,54 @@ func TestGCSharedRetainsLiveAndN(t *testing.T) {
 	// Oldest should be gone with retention 2.
 	if _, err := os.Stat(mgr.SharedStorePath(digests[0], name)); !os.IsNotExist(err) {
 		t.Fatalf("oldest entry should be GC'd, err=%v", err)
+	}
+}
+
+func TestGCSharedPrefersFetchedAtOverMtime(t *testing.T) {
+	src := t.TempDir()
+	base := t.TempDir()
+	mgr := NewManager(base, LocalFetcher{})
+	ctx := context.Background()
+	name := "instruments.json"
+	var digests []string
+	for i, body := range []string{`a`, `b`, `c`} {
+		p, d := writeSource(t, src, body+".json", body)
+		ref := &pb.ArtifactRef{Name: name, Version: "v", Digest: d, Uri: "file://" + p}
+		if err := mgr.EnsureSharedFile(ctx, name, ref); err != nil {
+			t.Fatalf("ensure %d: %v", i, err)
+		}
+		digests = append(digests, d)
+		if err := mgr.SwitchSharedTo(name, d); err != nil {
+			t.Fatalf("switch %d: %v", i, err)
+		}
+	}
+	// Scramble mtimes so the oldest install looks newest on disk.
+	old := mgr.SharedStorePath(digests[0], name)
+	mid := mgr.SharedStorePath(digests[1], name)
+	live := mgr.SharedStorePath(digests[2], name)
+	future := time.Now().Add(24 * time.Hour)
+	past := time.Now().Add(-24 * time.Hour)
+	if err := os.Chtimes(old, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(mid, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(live, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.GCShared(2, map[string]struct{}{name: {}}); err != nil {
+		t.Fatal(err)
+	}
+	// Live + most recently *installed* (digests[1]) retained; mtime-newest
+	// oldest install (digests[0]) must still be GC'd.
+	if _, err := os.Stat(live); err != nil {
+		t.Fatalf("live missing: %v", err)
+	}
+	if _, err := os.Stat(mid); err != nil {
+		t.Fatalf("second-newest install missing: %v", err)
+	}
+	if _, err := os.Stat(old); !os.IsNotExist(err) {
+		t.Fatalf("oldest install should be GC'd despite newest mtime, err=%v", err)
 	}
 }

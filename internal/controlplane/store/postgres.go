@@ -402,11 +402,6 @@ func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) 
 	defer cancel()
 	now := time.Now().Unix()
 
-	// Diff against current desired set before opening a write transaction.
-	rec, ok := p.GetMachine(machineID)
-	if !ok {
-		return 0, 0, false, fmt.Errorf("set shared files: unknown machine %s", machineID)
-	}
 	next := make(map[string]*pb.SharedFileSpec, len(files))
 	for _, f := range files {
 		if f == nil || f.GetName() == "" {
@@ -414,13 +409,34 @@ func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) 
 		}
 		next[f.GetName()] = f
 	}
-	if sharedFilesEqual(rec.SharedFiles, next) {
-		return rec.SharedGeneration, rec.Generation, false, nil
-	}
 
+	// Diff under FOR UPDATE so concurrent callers serialize like Memory's lock.
 	err = p.inTx(ctx, func(tx pgx.Tx) error {
-		if err := requireMachine(ctx, tx, machineID, "set shared files"); err != nil {
+		var curSharedGen, curDesiredGen int64
+		err := tx.QueryRow(ctx,
+			`SELECT shared_generation, generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
+			machineID).Scan(&curSharedGen, &curDesiredGen)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("set shared files: unknown machine %s", machineID)
+		}
+		if err != nil {
 			return err
+		}
+		cur := map[string]*pb.SharedFileSpec{}
+		if err := loadInto(ctx, tx, `SELECT name, artifact FROM machine_shared_files WHERE machine_id=$1`, machineID,
+			func(k string, b []byte) error {
+				art := &pb.ArtifactRef{}
+				if err := proto.Unmarshal(b, art); err != nil {
+					return err
+				}
+				cur[k] = &pb.SharedFileSpec{Name: k, Artifact: art}
+				return nil
+			}); err != nil {
+			return err
+		}
+		if sharedFilesEqual(cur, next) {
+			sharedGen, desiredGen, changed = curSharedGen, curDesiredGen, false
+			return nil
 		}
 		if _, err := tx.Exec(ctx, `DELETE FROM machine_shared_files WHERE machine_id=$1`, machineID); err != nil {
 			return err
@@ -441,18 +457,24 @@ func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) 
 				return err
 			}
 		}
-		return tx.QueryRow(ctx,
+		if err := tx.QueryRow(ctx,
 			`UPDATE machines SET shared_generation = shared_generation + 1,
 				generation = generation + 1
 			 WHERE machine_id=$1
 			 RETURNING shared_generation, generation`,
-			machineID).Scan(&sharedGen, &desiredGen)
+			machineID).Scan(&sharedGen, &desiredGen); err != nil {
+			return err
+		}
+		changed = true
+		return nil
 	})
 	if err != nil {
 		return 0, 0, false, err
 	}
-	p.notify(machineID)
-	return sharedGen, desiredGen, true, nil
+	if changed {
+		p.notify(machineID)
+	}
+	return sharedGen, desiredGen, changed, nil
 }
 
 func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error {

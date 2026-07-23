@@ -39,7 +39,7 @@ func waitSharedWorker(t *testing.T, r *Reconciler) {
 }
 
 func TestReconcileSharedBeforeAssignments(t *testing.T) {
-	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	r, fd, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
 	src := t.TempDir()
 	ref := sharedRef(t, src, "instruments.json", `{"ok":true}`)
 
@@ -54,16 +54,31 @@ func TestReconcileSharedBeforeAssignments(t *testing.T) {
 			assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5}),
 		},
 	})
-	// Pre-seed release so deploy can proceed after shared; we only assert shared ordering
-	// by checking shared is present after one reconcile pass that also sees assignments.
+	// Pre-seed release + pretend current version already matches so reconcile
+	// takes the startProcess path (not a full deploy) once shared is ready.
 	seedRelease(t, mgr, "s", "v1")
 	_ = mgr.SwitchTo("s", "v1")
+	ast := newStrategyState("s")
+	ast.runningArtifact = artRef("v1", "sha256:aaa")
+	r.actual["s"] = ast
 
+	// First pass: fetch is initiated but not yet applied — assignment must not start.
 	r.reconcile()
+	if r.sharedConverged() {
+		t.Fatal("shared should not be converged before worker completes")
+	}
+	if fd.starts() != 0 {
+		t.Fatalf("assignment started before shared converged: %d starts", fd.starts())
+	}
+
 	waitSharedWorker(t, r)
+	r.reconcile()
 
 	if got := mgr.RunningSharedDigest("instruments.json"); got != ref.Digest {
 		t.Fatalf("shared not converged: got %q want %q", got, ref.Digest)
+	}
+	if fd.starts() == 0 {
+		t.Fatal("expected assignment start after shared converged")
 	}
 	st := r.buildSharedStatus()
 	if st == nil || st.GetObservedGeneration() != 1 || len(st.GetFiles()) != 1 {

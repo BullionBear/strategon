@@ -30,6 +30,9 @@ type strategyState struct {
 	backoff      supervisor.BackoffState
 	lastBadVersion string // version marked bad by auto-rollback; skipped on reconcile
 	warnedBadVersion string // version already reported via SkipBadVersion; edge-trigger the warning
+	// warnedWaitingShared is the shared_generation for which WaitingForShared
+	// was already emitted (edge-trigger across ticks).
+	warnedWaitingShared int64
 	failedAtGen    int64  // generation that produced FAILED; stay failed until desired moves
 
 	observedGen int64
