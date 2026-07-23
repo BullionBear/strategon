@@ -34,6 +34,8 @@ web/build/
 web/.env
 web/.env.*
 !web/.env.example
+# pnpm content-addressable store if created under the repo root
+.pnpm-store/
 
 # Cached release assets fetched by deploy/install-agent.sh
 /.cache/
