@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"github.com/bullionbear/strategon/internal/sharedfile"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -458,6 +460,133 @@ func (s *Server) SetSchedule(ctx context.Context, req *connect.Request[pb.SetSch
 	return connect.NewResponse(&pb.SetScheduleResponse{Generation: gen}), nil
 }
 
+func (s *Server) SetSharedFiles(ctx context.Context, req *connect.Request[pb.SetSharedFilesRequest]) (*connect.Response[pb.SetSharedFilesResponse], error) {
+	msg := req.Msg
+	if msg.GetMachineId() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id is required"))
+	}
+	if _, ok := s.store.GetMachine(msg.GetMachineId()); !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", msg.GetMachineId()))
+	}
+	seen := make(map[string]struct{}, len(msg.GetFiles()))
+	specs := make([]*pb.SharedFileSpec, 0, len(msg.GetFiles()))
+	for _, f := range msg.GetFiles() {
+		if f == nil {
+			continue
+		}
+		if err := sharedfile.ValidateName(f.GetName()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		if f.GetArtifactVersion() == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("shared file %q: artifact_version is required", f.GetName()))
+		}
+		if _, dup := seen[f.GetName()]; dup {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("duplicate shared file name %q", f.GetName()))
+		}
+		seen[f.GetName()] = struct{}{}
+		artName := f.GetArtifactName()
+		if artName == "" {
+			artName = f.GetName()
+		}
+		art, ok := s.store.GetArtifact(artName, f.GetArtifactVersion())
+		if !ok {
+			return nil, connect.NewError(connect.CodeNotFound,
+				fmt.Errorf("artifact %q version %q not registered", artName, f.GetArtifactVersion()))
+		}
+		if err := requireSHA256Digest(art.GetDigest()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("shared file %q: %w", f.GetName(), err))
+		}
+		if err := sharedfile.RejectArchiveRef(f.GetName(), artName, art.GetUri()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		specs = append(specs, &pb.SharedFileSpec{
+			Name:     f.GetName(),
+			Artifact: art,
+		})
+	}
+	sharedGen, _, changed, err := s.store.SetSharedFiles(msg.GetMachineId(), specs)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if changed {
+		names := make([]string, 0, len(specs))
+		for _, sp := range specs {
+			names = append(names, sp.GetName())
+		}
+		_ = s.store.AppendAudit(&pb.AuditEntry{
+			Timestamp: timestamppb.Now(),
+			Actor:     auth.ActorFromContext(ctx),
+			Action:    "SetSharedFiles",
+			MachineId: msg.GetMachineId(),
+			Detail:    strings.Join(names, ","),
+		})
+		if s.agents != nil {
+			s.agents.Notify(msg.GetMachineId())
+		}
+	}
+	return connect.NewResponse(&pb.SetSharedFilesResponse{Generation: sharedGen}), nil
+}
+
+func (s *Server) ListSharedFiles(_ context.Context, req *connect.Request[pb.ListSharedFilesRequest]) (*connect.Response[pb.ListSharedFilesResponse], error) {
+	machineID := req.Msg.GetMachineId()
+	if machineID == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id is required"))
+	}
+	rec, ok := s.store.GetMachine(machineID)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", machineID))
+	}
+	running := map[string]*pb.SharedFileStatus{}
+	if rec.SharedStatus != nil {
+		for _, f := range rec.SharedStatus.GetFiles() {
+			running[f.GetName()] = f
+		}
+	}
+	// Union desired + status so agent-reported removal failures stay visible.
+	names := make([]string, 0, len(rec.SharedFiles)+len(running))
+	seen := map[string]struct{}{}
+	for n := range rec.SharedFiles {
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	for n := range running {
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	views := make([]*pb.SharedFileView, 0, len(names))
+	for _, n := range names {
+		spec := rec.SharedFiles[n]
+		st := running[n]
+		desiredDigest := ""
+		desiredVersion := ""
+		if spec != nil && spec.GetArtifact() != nil {
+			desiredDigest = spec.GetArtifact().GetDigest()
+			desiredVersion = spec.GetArtifact().GetVersion()
+		}
+		runningDigest := ""
+		lastErr := ""
+		if st != nil {
+			runningDigest = st.GetRunningDigest()
+			lastErr = st.GetLastError()
+		}
+		views = append(views, &pb.SharedFileView{
+			Name:           n,
+			DesiredVersion: desiredVersion,
+			DesiredDigest:  desiredDigest,
+			RunningDigest:  runningDigest,
+			Converged:      desiredDigest != "" && desiredDigest == runningDigest && lastErr == "",
+			LastError:      lastErr,
+		})
+	}
+	return connect.NewResponse(&pb.ListSharedFilesResponse{Files: views}), nil
+}
+
 func (s *Server) WatchMachine(ctx context.Context, req *connect.Request[pb.GetMachineRequest], stream *connect.ServerStream[pb.MachineStatusEvent]) error {
 	machineID := req.Msg.GetMachineId()
 	if machineID == "" {
@@ -534,6 +663,9 @@ func (s *Server) ListAudit(_ context.Context, req *connect.Request[pb.ListAuditR
 
 func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.RegisterArtifactRequest]) (*connect.Response[pb.RegisterArtifactResponse], error) {
 	art := req.Msg.GetArtifact()
+	// Digest algorithm is not enforced here: binary/config verify still requires
+	// a matching sha256: digest at the agent, and empty digests remain allowed
+	// for optional config refs. Shared-file digests are checked in SetSharedFiles.
 	if err := s.store.RegisterArtifact(art); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -550,6 +682,31 @@ func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.R
 func (s *Server) ListArtifacts(_ context.Context, req *connect.Request[pb.ListArtifactsRequest]) (*connect.Response[pb.ListArtifactsResponse], error) {
 	arts := s.store.ListArtifacts(req.Msg.GetName())
 	return connect.NewResponse(&pb.ListArtifactsResponse{Artifacts: arts}), nil
+}
+
+// requireSHA256Digest enforces the only digest algorithm the shared-file store
+// round-trips today (sha256: + hex). Other prefixes would disagree between
+// digestDirName and RunningSharedDigest. Scoped to SetSharedFiles so binary/
+// config RegisterArtifact callers are not broken by this hardening.
+func requireSHA256Digest(digest string) error {
+	d := strings.TrimSpace(digest)
+	if d == "" {
+		return errors.New("digest is required")
+	}
+	lower := strings.ToLower(d)
+	if !strings.HasPrefix(lower, "sha256:") {
+		return fmt.Errorf("digest must use sha256: prefix, got %q", digest)
+	}
+	hexPart := d[len("sha256:"):]
+	if hexPart == "" {
+		return errors.New("sha256 digest is empty")
+	}
+	for _, c := range hexPart {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return fmt.Errorf("sha256 digest has non-hex character")
+		}
+	}
+	return nil
 }
 
 func defaultOrCloneSpec(existing *pb.StrategyAssignmentSpec, strategy string) *pb.StrategyAssignmentSpec {

@@ -1,9 +1,11 @@
 // Package reconciler implements the agent's level-triggered convergence loop.
 // A single goroutine owns all mutable state and serializes
-// four event sources — new DesiredState, process exits, deploy-worker events,
-// and a unified tick — each of which runs the same path: update local state,
-// call reconcile(), diff desired vs actual, and act. There are no per-command
-// handlers; events are just "something changed, recompute" triggers.
+// event sources — new DesiredState, process exits, deploy-worker events,
+// shared-file fetch workers, health results, and a unified tick — each of
+// which runs the same path: update local state, call reconcile(), diff desired
+// vs actual, and act. There are no per-command handlers; events are just
+// "something changed, recompute" triggers. Shared-file HTTP fetches never run
+// on the main loop (same non-blocking invariant as deploy downloads).
 package reconciler
 
 import (
@@ -65,6 +67,10 @@ type Deps struct {
 	// AgentVersion is stamped into the supervision file header.
 	AgentVersion int
 
+	// SharedRetention is how many store entries to keep per shared-file name
+	// (including the live symlink target). Default 3 when <= 0.
+	SharedRetention int
+
 	// Logger for adopt/persist diagnostics (optional).
 	Logger *slog.Logger
 }
@@ -75,9 +81,14 @@ type Reconciler struct {
 	actual     map[string]*strategyState
 	generation int64
 
+	desiredShared    map[string]*pb.SharedFileSpec
+	sharedGeneration int64
+	sharedActual     map[string]*sharedFileState
+
 	desiredCh chan *pb.DesiredState
 	exitCh    chan processExit
 	workerCh  chan workerEvent
+	sharedCh  chan sharedWorkerEvent
 	healthCh  chan healthResult
 
 	deps         Deps
@@ -113,11 +124,14 @@ func New(deps Deps) *Reconciler {
 		tick = time.Second
 	}
 	return &Reconciler{
-		desired:      map[string]*pb.StrategyAssignmentSpec{},
-		actual:       map[string]*strategyState{},
+		desired:       map[string]*pb.StrategyAssignmentSpec{},
+		actual:        map[string]*strategyState{},
+		desiredShared: map[string]*pb.SharedFileSpec{},
+		sharedActual:  map[string]*sharedFileState{},
 		desiredCh:    make(chan *pb.DesiredState, 8),
 		exitCh:       make(chan processExit, 16),
 		workerCh:     make(chan workerEvent, 32),
+		sharedCh:     make(chan sharedWorkerEvent, 32),
 		healthCh:     make(chan healthResult, 32),
 		deps:         deps,
 		tickInterval: tick,
@@ -179,6 +193,8 @@ func (r *Reconciler) Run(ctx context.Context) {
 			r.handleExit(ex)
 		case ev := <-r.workerCh:
 			r.applyWorkerEvent(ev)
+		case ev := <-r.sharedCh:
+			r.applySharedWorkerEvent(ev)
 		case hr := <-r.healthCh:
 			r.applyHealthResult(hr)
 		case now := <-tick.C():
@@ -203,6 +219,7 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 		return
 	}
 	r.generation = ds.GetGeneration()
+	r.applyDesiredShared(ds)
 	next := map[string]*pb.StrategyAssignmentSpec{}
 	for _, a := range ds.GetAssignments() {
 		next[a.GetStrategy()] = a
@@ -223,6 +240,10 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 
 // reconcile is the sole convergence entry point.
 func (r *Reconciler) reconcile() {
+	// Initiate shared convergence first; assignment start/deploy is gated on
+	// sharedPresent (absent only) so a fresh machine does not start before the
+	// catalog lands — stale digests do not freeze the machine.
+	r.reconcileShared()
 	for name, spec := range r.desired {
 		st := r.actual[name]
 		if st == nil {
@@ -261,6 +282,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		// above) paces the restarts.
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING &&
 			st.proc == nil && versionMatches(spec, st) {
+			if !r.awaitSharedReady(st) {
+				return
+			}
 			r.startProcess(spec, st, true)
 		}
 		return // otherwise wait for worker events
@@ -277,6 +301,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return // steady state
 
 	case versionMatches(spec, st) && st.proc == nil:
+		if !r.awaitSharedReady(st) {
+			return
+		}
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_STOPPED {
 			// Resume in place: re-run the health window (STARTING → HEALTH_CHECKING).
 			r.startProcess(spec, st, true)
@@ -297,6 +324,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 				r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_WARNING, "SkipBadVersion",
 					fmt.Sprintf("skipping known-bad version %s", st.lastBadVersion))
 			}
+			return
+		}
+		if !r.awaitSharedReady(st) {
 			return
 		}
 		r.beginDeploy(spec, st)

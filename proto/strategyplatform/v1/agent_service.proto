@@ -76,6 +76,7 @@ enum EventSeverity {
 message StatusReport {
   int64 observed_generation = 1;
   repeated StrategyAssignmentStatus assignments = 2;
+  MachineSharedStatus shared = 3;
 }
 
 // List a directory under a strategy's WorkDir. path is relative to the

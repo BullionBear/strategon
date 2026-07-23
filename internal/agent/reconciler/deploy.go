@@ -332,7 +332,11 @@ func (r *Reconciler) buildStatusReport() *pb.StatusReport {
 			LastError:          st.lastError,
 		})
 	}
-	return &pb.StatusReport{ObservedGeneration: r.observedGenA.Load(), Assignments: assignments}
+	return &pb.StatusReport{
+		ObservedGeneration: r.observedGenA.Load(),
+		Assignments:        assignments,
+		Shared:             r.buildSharedStatus(),
+	}
 }
 
 func (r *Reconciler) send(msg *pb.AgentMessage) {
@@ -354,6 +358,12 @@ func statusKey(sr *pb.StatusReport) string {
 			a.GetPid(), a.GetRestartCount(), a.GetLastError())
 		for _, c := range a.GetConditions() {
 			fmt.Fprintf(&b, "%s=%d,", c.GetType(), c.GetStatus())
+		}
+	}
+	if sh := sr.GetShared(); sh != nil {
+		fmt.Fprintf(&b, "shared:og=%d;", sh.GetObservedGeneration())
+		for _, f := range sh.GetFiles() {
+			fmt.Fprintf(&b, "%s:d=%s,err=%s;", f.GetName(), f.GetRunningDigest(), f.GetLastError())
 		}
 	}
 	return b.String()

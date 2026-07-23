@@ -146,12 +146,15 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 		Assignments:       map[string]*pb.StrategyAssignmentSpec{},
 		Status:            map[string]*pb.StrategyAssignmentStatus{},
 		PreviousArtifacts: map[string]*pb.ArtifactRef{},
+		SharedFiles:       map[string]*pb.SharedFileSpec{},
 	}
-	var register, resources, processes []byte
+	var register, resources, processes, sharedStatus []byte
 	err := q.QueryRow(ctx, `SELECT register, reachable, agent_version, agent_build_version,
-		last_resources, last_processes, last_heartbeat, generation, observed_gen FROM machines WHERE machine_id=$1`, id).
+		last_resources, last_processes, last_heartbeat, generation, observed_gen,
+		shared_generation, shared_status FROM machines WHERE machine_id=$1`, id).
 		Scan(&register, &rec.Reachable, &rec.AgentVersion, &rec.AgentBuildVersion, &resources, &processes,
-			&rec.LastHeartbeat, &rec.Generation, &rec.ObservedGen)
+			&rec.LastHeartbeat, &rec.Generation, &rec.ObservedGen,
+			&rec.SharedGeneration, &sharedStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -176,6 +179,12 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 			return nil, false, err
 		}
 		rec.LastProcesses = list.GetProcesses()
+	}
+	if sharedStatus != nil {
+		rec.SharedStatus = &pb.MachineSharedStatus{}
+		if err := proto.Unmarshal(sharedStatus, rec.SharedStatus); err != nil {
+			return nil, false, err
+		}
 	}
 	if err := loadInto(ctx, q, `SELECT strategy, spec FROM assignments WHERE machine_id=$1`, id,
 		func(k string, b []byte) error {
@@ -206,6 +215,17 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 				return err
 			}
 			rec.PreviousArtifacts[k] = m
+			return nil
+		}); err != nil {
+		return nil, false, err
+	}
+	if err := loadInto(ctx, q, `SELECT name, artifact FROM machine_shared_files WHERE machine_id=$1`, id,
+		func(k string, b []byte) error {
+			art := &pb.ArtifactRef{}
+			if err := proto.Unmarshal(b, art); err != nil {
+				return err
+			}
+			rec.SharedFiles[k] = &pb.SharedFileSpec{Name: k, Artifact: art}
 			return nil
 		}); err != nil {
 		return nil, false, err
@@ -377,6 +397,86 @@ func (p *Postgres) SetAssignment(machineID, strategy string, spec *pb.StrategyAs
 	return gen, nil
 }
 
+func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error) {
+	ctx, cancel := opCtx()
+	defer cancel()
+	now := time.Now().Unix()
+
+	next := make(map[string]*pb.SharedFileSpec, len(files))
+	for _, f := range files {
+		if f == nil || f.GetName() == "" {
+			continue
+		}
+		next[f.GetName()] = f
+	}
+
+	// Diff under FOR UPDATE so concurrent callers serialize like Memory's lock.
+	err = p.inTx(ctx, func(tx pgx.Tx) error {
+		var curSharedGen, curDesiredGen int64
+		err := tx.QueryRow(ctx,
+			`SELECT shared_generation, generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
+			machineID).Scan(&curSharedGen, &curDesiredGen)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("set shared files: unknown machine %s", machineID)
+		}
+		if err != nil {
+			return err
+		}
+		cur := map[string]*pb.SharedFileSpec{}
+		if err := loadInto(ctx, tx, `SELECT name, artifact FROM machine_shared_files WHERE machine_id=$1`, machineID,
+			func(k string, b []byte) error {
+				art := &pb.ArtifactRef{}
+				if err := proto.Unmarshal(b, art); err != nil {
+					return err
+				}
+				cur[k] = &pb.SharedFileSpec{Name: k, Artifact: art}
+				return nil
+			}); err != nil {
+			return err
+		}
+		if sharedFilesEqual(cur, next) {
+			sharedGen, desiredGen, changed = curSharedGen, curDesiredGen, false
+			return nil
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM machine_shared_files WHERE machine_id=$1`, machineID); err != nil {
+			return err
+		}
+		for _, f := range files {
+			if f == nil || f.GetName() == "" || f.GetArtifact() == nil {
+				continue
+			}
+			artBytes, err := proto.Marshal(f.GetArtifact())
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx, `INSERT INTO machine_shared_files
+				(machine_id, name, artifact_version, digest, artifact, updated_at)
+				VALUES ($1,$2,$3,$4,$5,$6)`,
+				machineID, f.GetName(), f.GetArtifact().GetVersion(), f.GetArtifact().GetDigest(),
+				artBytes, now); err != nil {
+				return err
+			}
+		}
+		if err := tx.QueryRow(ctx,
+			`UPDATE machines SET shared_generation = shared_generation + 1,
+				generation = generation + 1
+			 WHERE machine_id=$1
+			 RETURNING shared_generation, generation`,
+			machineID).Scan(&sharedGen, &desiredGen); err != nil {
+			return err
+		}
+		changed = true
+		return nil
+	})
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if changed {
+		p.notify(machineID)
+	}
+	return sharedGen, desiredGen, changed, nil
+}
+
 func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	ctx, cancel := opCtx()
 	defer cancel()
@@ -407,6 +507,17 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 			if _, err := tx.Exec(ctx,
 				`DELETE FROM statuses WHERE machine_id=$1 AND NOT (strategy = ANY($2))`,
 				machineID, keep); err != nil {
+				return err
+			}
+		}
+		if report.GetShared() != nil {
+			b, err := proto.Marshal(report.GetShared())
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx,
+				`UPDATE machines SET shared_status = $2 WHERE machine_id=$1`,
+				machineID, b); err != nil {
 				return err
 			}
 		}

@@ -60,6 +60,12 @@ const (
 	// ControlPlaneServiceSetScheduleProcedure is the fully-qualified name of the ControlPlaneService's
 	// SetSchedule RPC.
 	ControlPlaneServiceSetScheduleProcedure = "/strategyplatform.v1.ControlPlaneService/SetSchedule"
+	// ControlPlaneServiceSetSharedFilesProcedure is the fully-qualified name of the
+	// ControlPlaneService's SetSharedFiles RPC.
+	ControlPlaneServiceSetSharedFilesProcedure = "/strategyplatform.v1.ControlPlaneService/SetSharedFiles"
+	// ControlPlaneServiceListSharedFilesProcedure is the fully-qualified name of the
+	// ControlPlaneService's ListSharedFiles RPC.
+	ControlPlaneServiceListSharedFilesProcedure = "/strategyplatform.v1.ControlPlaneService/ListSharedFiles"
 	// ControlPlaneServiceWatchMachineProcedure is the fully-qualified name of the ControlPlaneService's
 	// WatchMachine RPC.
 	ControlPlaneServiceWatchMachineProcedure = "/strategyplatform.v1.ControlPlaneService/WatchMachine"
@@ -98,6 +104,8 @@ var (
 	controlPlaneServiceStartMethodDescriptor                  = controlPlaneServiceServiceDescriptor.Methods().ByName("Start")
 	controlPlaneServiceUndeployMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Undeploy")
 	controlPlaneServiceSetScheduleMethodDescriptor            = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSchedule")
+	controlPlaneServiceSetSharedFilesMethodDescriptor         = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSharedFiles")
+	controlPlaneServiceListSharedFilesMethodDescriptor        = controlPlaneServiceServiceDescriptor.Methods().ByName("ListSharedFiles")
 	controlPlaneServiceWatchMachineMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("WatchMachine")
 	controlPlaneServiceListAuditMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("ListAudit")
 	controlPlaneServiceRegisterArtifactMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("RegisterArtifact")
@@ -119,6 +127,9 @@ type ControlPlaneServiceClient interface {
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
 	SetSchedule(context.Context, *connect.Request[v1.SetScheduleRequest]) (*connect.Response[v1.SetScheduleResponse], error)
+	// Machine-level shared files (full overwrite; independent of assignments).
+	SetSharedFiles(context.Context, *connect.Request[v1.SetSharedFilesRequest]) (*connect.Response[v1.SetSharedFilesResponse], error)
+	ListSharedFiles(context.Context, *connect.Request[v1.ListSharedFilesRequest]) (*connect.Response[v1.ListSharedFilesResponse], error)
 	// UI real-time panel: machine status and deploy progress push.
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest]) (*connect.ServerStreamForClient[v1.MachineStatusEvent], error)
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
@@ -199,6 +210,18 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceSetScheduleMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		setSharedFiles: connect.NewClient[v1.SetSharedFilesRequest, v1.SetSharedFilesResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceSetSharedFilesProcedure,
+			connect.WithSchema(controlPlaneServiceSetSharedFilesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		listSharedFiles: connect.NewClient[v1.ListSharedFilesRequest, v1.ListSharedFilesResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceListSharedFilesProcedure,
+			connect.WithSchema(controlPlaneServiceListSharedFilesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		watchMachine: connect.NewClient[v1.GetMachineRequest, v1.MachineStatusEvent](
 			httpClient,
 			baseURL+ControlPlaneServiceWatchMachineProcedure,
@@ -261,6 +284,8 @@ type controlPlaneServiceClient struct {
 	start                  *connect.Client[v1.StartRequest, v1.StartResponse]
 	undeploy               *connect.Client[v1.UndeployRequest, v1.UndeployResponse]
 	setSchedule            *connect.Client[v1.SetScheduleRequest, v1.SetScheduleResponse]
+	setSharedFiles         *connect.Client[v1.SetSharedFilesRequest, v1.SetSharedFilesResponse]
+	listSharedFiles        *connect.Client[v1.ListSharedFilesRequest, v1.ListSharedFilesResponse]
 	watchMachine           *connect.Client[v1.GetMachineRequest, v1.MachineStatusEvent]
 	listAudit              *connect.Client[v1.ListAuditRequest, v1.ListAuditResponse]
 	registerArtifact       *connect.Client[v1.RegisterArtifactRequest, v1.RegisterArtifactResponse]
@@ -316,6 +341,16 @@ func (c *controlPlaneServiceClient) SetSchedule(ctx context.Context, req *connec
 	return c.setSchedule.CallUnary(ctx, req)
 }
 
+// SetSharedFiles calls strategyplatform.v1.ControlPlaneService.SetSharedFiles.
+func (c *controlPlaneServiceClient) SetSharedFiles(ctx context.Context, req *connect.Request[v1.SetSharedFilesRequest]) (*connect.Response[v1.SetSharedFilesResponse], error) {
+	return c.setSharedFiles.CallUnary(ctx, req)
+}
+
+// ListSharedFiles calls strategyplatform.v1.ControlPlaneService.ListSharedFiles.
+func (c *controlPlaneServiceClient) ListSharedFiles(ctx context.Context, req *connect.Request[v1.ListSharedFilesRequest]) (*connect.Response[v1.ListSharedFilesResponse], error) {
+	return c.listSharedFiles.CallUnary(ctx, req)
+}
+
 // WatchMachine calls strategyplatform.v1.ControlPlaneService.WatchMachine.
 func (c *controlPlaneServiceClient) WatchMachine(ctx context.Context, req *connect.Request[v1.GetMachineRequest]) (*connect.ServerStreamForClient[v1.MachineStatusEvent], error) {
 	return c.watchMachine.CallServerStream(ctx, req)
@@ -368,6 +403,9 @@ type ControlPlaneServiceHandler interface {
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
 	SetSchedule(context.Context, *connect.Request[v1.SetScheduleRequest]) (*connect.Response[v1.SetScheduleResponse], error)
+	// Machine-level shared files (full overwrite; independent of assignments).
+	SetSharedFiles(context.Context, *connect.Request[v1.SetSharedFilesRequest]) (*connect.Response[v1.SetSharedFilesResponse], error)
+	ListSharedFiles(context.Context, *connect.Request[v1.ListSharedFilesRequest]) (*connect.Response[v1.ListSharedFilesResponse], error)
 	// UI real-time panel: machine status and deploy progress push.
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest], *connect.ServerStream[v1.MachineStatusEvent]) error
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
@@ -444,6 +482,18 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceSetScheduleMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceSetSharedFilesHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceSetSharedFilesProcedure,
+		svc.SetSharedFiles,
+		connect.WithSchema(controlPlaneServiceSetSharedFilesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceListSharedFilesHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceListSharedFilesProcedure,
+		svc.ListSharedFiles,
+		connect.WithSchema(controlPlaneServiceListSharedFilesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	controlPlaneServiceWatchMachineHandler := connect.NewServerStreamHandler(
 		ControlPlaneServiceWatchMachineProcedure,
 		svc.WatchMachine,
@@ -512,6 +562,10 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceUndeployHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceSetScheduleProcedure:
 			controlPlaneServiceSetScheduleHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceSetSharedFilesProcedure:
+			controlPlaneServiceSetSharedFilesHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceListSharedFilesProcedure:
+			controlPlaneServiceListSharedFilesHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceWatchMachineProcedure:
 			controlPlaneServiceWatchMachineHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceListAuditProcedure:
@@ -571,6 +625,14 @@ func (UnimplementedControlPlaneServiceHandler) Undeploy(context.Context, *connec
 
 func (UnimplementedControlPlaneServiceHandler) SetSchedule(context.Context, *connect.Request[v1.SetScheduleRequest]) (*connect.Response[v1.SetScheduleResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.SetSchedule is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) SetSharedFiles(context.Context, *connect.Request[v1.SetSharedFilesRequest]) (*connect.Response[v1.SetSharedFilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.SetSharedFiles is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ListSharedFiles(context.Context, *connect.Request[v1.ListSharedFilesRequest]) (*connect.Response[v1.ListSharedFilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListSharedFiles is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest], *connect.ServerStream[v1.MachineStatusEvent]) error {

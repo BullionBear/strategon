@@ -133,31 +133,100 @@ agent-initiated `Connect` bidi stream.
 
 ## Core concepts
 
-### Machine and assignment
+### Three layers: artifact, deployment, machine-shared
+
+| Layer | Scope | What it versions |
+|-------|--------|------------------|
+| **Artifact** | catalog | Content-addressed binary / config / shared-file blob |
+| **Deployment** | machine × strategy | Immutable combination (binary + config + args/env) |
+| **MachineShared** | machine | Mutable reference data shared by all strategies |
 
 A **machine** is one agent identity. Its **spec** holds strategy assignments
 (`StrategyAssignmentSpec` in `proto/.../spec.proto`): artifact + optional
 config, driver, args/env, deploy policy, lease/cron hints.
 
-**Status** (`status.proto`) is what the agent reports: `DeployPhase`, running
-artifacts, conditions, pid, `observed_generation`.
+**Machine-shared files** (`MachineSharedSpec` on `DesiredState.shared`) are
+independent of assignment generations. Operators set them via
+`SetSharedFiles` (full replace). The agent materializes:
+
+```
+<base>/shared/store/<digest>/<name>   # content-addressed
+<base>/shared/store/<digest>/<name>.fetched_at  # install time (GC order)
+<base>/shared/<name> -> store/...     # atomic symlink switch
+<base>/<strategy>/releases/<v>/shared -> ../../../shared
+```
+
+Every release gets `releases/<v>/shared` on Download even when no shared
+files are desired yet — so a later `SetSharedFiles` works without
+re-fetching the binary. A dangling symlink is inert.
+
+Process `WorkDir` is `StrategyDir` = `<base>/<strategy>`, while the shared
+tree is reached via `releases/<v>/shared`. So a path like
+`./shared/instruments.json` resolves **only** for binaries that resolve
+relative paths against the **config file's directory** (not cwd). `seq`
+does this (`filepath.Join(filepath.Dir(path), cfg.Catalog.Instruments)`).
+A binary resolving relative to cwd would look under
+`<base>/<strategy>/shared/…` and miss. **Shared paths in config must be
+written relative to the config file, and the consuming binary must resolve
+them that way.**
+
+For seq, set:
+
+```yaml
+catalog:
+  instruments: ./shared/instruments.json
+```
+
+`SharedFileRef.artifact_name` selects the catalog artifact; when empty it
+defaults to the on-disk `name`. Digests must use the `sha256:` prefix.
+Shared files are **single-file only** today: `SetSharedFiles` rejects names
+or URIs that look like archives (`.tar.gz`, `.zip`, …). Directory/tarball
+extraction is deferred. Identical re-pushes of the same name→digest set are
+no-ops (no generation bump, no audit). Shared-file fetch runs off the
+reconciler loop (worker goroutine) so a slow URI cannot stall heartbeats or
+deploys. Concurrent fetches are capped; GC waits until in-flight work
+finishes and orders retention by recorded install time (not mtime).
+
+**Update semantics are next-start:** re-pointing the shared symlink does not
+reload running processes; the new content is seen on the next deploy,
+restart, or crash-recovery start. The reconciler *initiates* shared
+convergence before walking assignments, and **gates** `beginDeploy` /
+`startProcess` only while a desired shared file is still **absent**
+(`WaitingForShared` — never landed). A stale digest (old live copy while a
+new version is fetching or failing) does **not** block starts: keeping the
+previous copy is exactly next-start semantics, and blocking on stale would
+freeze every strategy on the machine when one bad shared URI fails. Crash-loop
+remains a backstop for runtime open failures.
+
+**Status** (`status.proto` / `StatusReport`) is what the agent reports:
+`DeployPhase`, running artifacts, conditions, pid, `observed_generation`,
+plus `MachineSharedStatus` (per-file running digest / last_error).
 
 ### ArtifactRef
 
-Content-addressed binary (and optional config): `name`, `version`,
-`digest` (`sha256:…`), `uri`, `type`. Humans call `RegisterArtifact`; `Deploy`
-resolves a version (including `"latest"`) to a concrete ref. The agent fetches
-the URI and verifies the digest. Supported URIs today: `http(s)`, `file://`,
-absolute path.
+Content-addressed binary (and optional config / shared file): `name`,
+`version`, `digest`, `uri`, `type`. Humans call `RegisterArtifact`;
+`Deploy` / `SetSharedFiles` resolve a version to a concrete ref. The agent
+fetches the URI and verifies the digest (`sha256:…` for binaries at verify
+time). **`SetSharedFiles` requires a `sha256:` digest** at API ingress
+(shared store round-trips that prefix); `RegisterArtifact` does not enforce
+the prefix so existing binary/config CI is unchanged. Supported URIs today:
+`http(s)`, `file://`, absolute path. For shared files the catalog name
+defaults to the on-disk basename but may differ via
+`SharedFileRef.artifact_name`.
 
 ### Generation and convergence
 
 - Every mutating assignment write bumps a monotonic **machine generation**.
-- `DesiredState.generation` is that snapshot version.
+- `SetSharedFiles` bumps `shared_generation` and also `machines.generation`
+  only when the desired name→digest set actually changes; identical re-pushes
+  are no-ops. `MachineSharedSpec.generation` is reported independently in status.
+- `DesiredState.generation` is the whole southbound snapshot version.
 - Per-strategy `observed_generation` advances when that strategy matches
   desired digests and is `HEALTHY`.
 - UI `converged` means: phase is `HEALTHY` and desired/running digests match
-  (artifact + config).
+  (artifact + config). Shared-file converged means running digest equals
+  desired digest with no error.
 
 Level-triggered: late or reconnecting agents always get a full snapshot; they
 do not replay an event log.

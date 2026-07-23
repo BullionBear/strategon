@@ -58,6 +58,10 @@ type MachineRecord struct {
 	// Rollback with empty target_version can re-point desired state.
 	PreviousArtifacts map[string]*pb.ArtifactRef
 	ObservedGen       int64
+	// Machine-scoped shared files (independent of assignment generations).
+	SharedGeneration int64
+	SharedFiles      map[string]*pb.SharedFileSpec // name -> spec with ArtifactRef
+	SharedStatus     *pb.MachineSharedStatus       // latest agent-reported status
 }
 
 // Store is the control-plane persistence boundary.
@@ -79,10 +83,17 @@ type Store interface {
 	// bumps the machine generation. Returns the new generation.
 	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error)
 
+	// SetSharedFiles replaces the full set of machine-level shared files.
+	// When the desired set is unchanged (same names → digests), it is a no-op:
+	// generations are not bumped and notify is not fired. files must carry
+	// resolved ArtifactRefs (digest + uri). Returns (sharedGen, desiredGen, changed).
+	SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error)
+
 	// ApplyStatus records an agent-reported StatusReport. The report's
 	// Assignments are a full snapshot of strategies the agent still tracks;
 	// statuses for strategies absent from the report are pruned (so a finished
 	// undeploy/drain does not leave a DRAINING tombstone in the UI).
+	// report.Shared is persisted as the machine's shared_status when present.
 	ApplyStatus(machineID string, report *pb.StatusReport) error
 
 	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent versions).

@@ -90,6 +90,7 @@ func (m *Memory) UpsertMachine(reg *pb.Register) (*MachineRecord, error) {
 			Assignments:       map[string]*pb.StrategyAssignmentSpec{},
 			Status:            map[string]*pb.StrategyAssignmentStatus{},
 			PreviousArtifacts: map[string]*pb.ArtifactRef{},
+			SharedFiles:       map[string]*pb.SharedFileSpec{},
 		}
 		m.machines[reg.GetMachineId()] = rec
 	}
@@ -179,9 +180,67 @@ func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	if report.GetObservedGeneration() > rec.ObservedGen {
 		rec.ObservedGen = report.GetObservedGeneration()
 	}
+	if report.GetShared() != nil {
+		rec.SharedStatus = proto.Clone(report.GetShared()).(*pb.MachineSharedStatus)
+	}
 	m.mu.Unlock()
 	m.notify(machineID)
 	return nil
+}
+
+func (m *Memory) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error) {
+	m.mu.Lock()
+	rec, ok := m.machines[machineID]
+	if !ok {
+		m.mu.Unlock()
+		return 0, 0, false, fmt.Errorf("set shared files: unknown machine %s", machineID)
+	}
+	next := make(map[string]*pb.SharedFileSpec, len(files))
+	for _, f := range files {
+		if f == nil || f.GetName() == "" {
+			continue
+		}
+		next[f.GetName()] = proto.Clone(f).(*pb.SharedFileSpec)
+	}
+	if sharedFilesEqual(rec.SharedFiles, next) {
+		sharedGen = rec.SharedGeneration
+		desiredGen = rec.Generation
+		m.mu.Unlock()
+		return sharedGen, desiredGen, false, nil
+	}
+	rec.SharedFiles = next
+	rec.SharedGeneration++
+	rec.Generation++
+	sharedGen = rec.SharedGeneration
+	desiredGen = rec.Generation
+	m.mu.Unlock()
+	m.notify(machineID)
+	return sharedGen, desiredGen, true, nil
+}
+
+// sharedFilesEqual compares name → artifact digest maps (version/uri ignored
+// for equality — digest is the content identity the agent converges on).
+func sharedFilesEqual(a, b map[string]*pb.SharedFileSpec) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name, sa := range a {
+		sb, ok := b[name]
+		if !ok {
+			return false
+		}
+		da, db := "", ""
+		if sa != nil && sa.GetArtifact() != nil {
+			da = sa.GetArtifact().GetDigest()
+		}
+		if sb != nil && sb.GetArtifact() != nil {
+			db = sb.GetArtifact().GetDigest()
+		}
+		if da != db {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Memory) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64) error {
@@ -469,10 +528,27 @@ func buildDesiredState(rec *MachineRecord) *pb.DesiredState {
 	for _, n := range names {
 		assignments = append(assignments, proto.Clone(rec.Assignments[n]).(*pb.StrategyAssignmentSpec))
 	}
+	sharedNames := make([]string, 0, len(rec.SharedFiles))
+	for n := range rec.SharedFiles {
+		sharedNames = append(sharedNames, n)
+	}
+	sort.Strings(sharedNames)
+	sharedFiles := make([]*pb.SharedFileSpec, 0, len(sharedNames))
+	for _, n := range sharedNames {
+		sharedFiles = append(sharedFiles, proto.Clone(rec.SharedFiles[n]).(*pb.SharedFileSpec))
+	}
+	var shared *pb.MachineSharedSpec
+	if rec.SharedGeneration > 0 || len(sharedFiles) > 0 {
+		shared = &pb.MachineSharedSpec{
+			Files:      sharedFiles,
+			Generation: rec.SharedGeneration,
+		}
+	}
 	return &pb.DesiredState{
 		Generation:  rec.Generation,
 		Assignments: assignments,
 		IssuedAt:    timestamppb.Now(),
+		Shared:      shared,
 	}
 }
 
@@ -486,9 +562,11 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 		LastHeartbeat:     rec.LastHeartbeat,
 		Generation:        rec.Generation,
 		ObservedGen:       rec.ObservedGen,
+		SharedGeneration:  rec.SharedGeneration,
 		Assignments:       map[string]*pb.StrategyAssignmentSpec{},
 		Status:            map[string]*pb.StrategyAssignmentStatus{},
 		PreviousArtifacts: map[string]*pb.ArtifactRef{},
+		SharedFiles:       map[string]*pb.SharedFileSpec{},
 	}
 	if rec.Register != nil {
 		cp.Register = proto.Clone(rec.Register).(*pb.Register)
@@ -499,6 +577,9 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	if len(rec.LastProcesses) > 0 {
 		cp.LastProcesses = cloneProcesses(rec.LastProcesses)
 	}
+	if rec.SharedStatus != nil {
+		cp.SharedStatus = proto.Clone(rec.SharedStatus).(*pb.MachineSharedStatus)
+	}
 	for k, v := range rec.Assignments {
 		cp.Assignments[k] = proto.Clone(v).(*pb.StrategyAssignmentSpec)
 	}
@@ -507,6 +588,9 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	}
 	for k, v := range rec.PreviousArtifacts {
 		cp.PreviousArtifacts[k] = proto.Clone(v).(*pb.ArtifactRef)
+	}
+	for k, v := range rec.SharedFiles {
+		cp.SharedFiles[k] = proto.Clone(v).(*pb.SharedFileSpec)
 	}
 	return cp
 }

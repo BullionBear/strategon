@@ -161,7 +161,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "SetSharedFiles"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -257,6 +257,46 @@ message GetMachineMetricsResponse {
   repeated ResourceSamplePoint samples = 1;
 }
 
+// SetSharedFiles sets the full set of machine-level shared files (full overwrite,
+// mirroring SetSchedule semantics). Each entry references a registered artifact.
+message SetSharedFilesRequest {
+  string machine_id = 1;
+  repeated SharedFileRef files = 2; // full replace
+}
+
+message SharedFileRef {
+  // On-disk basename under <base>/shared/, e.g. "instruments.json".
+  string name = 1;
+  // Version of the registered artifact to materialize.
+  string artifact_version = 2;
+  // Catalog name of the registered artifact. Empty means use `name` (the
+  // on-disk basename). Set explicitly when the catalog name differs from the
+  // landing basename (e.g. future archives: artifact "instruments.tar.gz"
+  // landing as "instruments").
+  string artifact_name = 3;
+}
+
+message SetSharedFilesResponse {
+  int64 generation = 1; // new MachineSharedSpec.generation
+}
+
+message ListSharedFilesRequest {
+  string machine_id = 1;
+}
+
+message ListSharedFilesResponse {
+  repeated SharedFileView files = 1;
+}
+
+message SharedFileView {
+  string name = 1;
+  string desired_version = 2;
+  string desired_digest = 3;
+  string running_digest = 4; // from status; may lag
+  bool converged = 5;
+  string last_error = 6;
+}
+
 service ControlPlaneService {
   rpc ListMachines(ListMachinesRequest) returns (ListMachinesResponse);
   rpc GetMachine(GetMachineRequest) returns (Machine);
@@ -268,6 +308,10 @@ service ControlPlaneService {
   rpc Start(StartRequest) returns (StartResponse);
   rpc Undeploy(UndeployRequest) returns (UndeployResponse);
   rpc SetSchedule(SetScheduleRequest) returns (SetScheduleResponse);
+
+  // Machine-level shared files (full overwrite; independent of assignments).
+  rpc SetSharedFiles(SetSharedFilesRequest) returns (SetSharedFilesResponse);
+  rpc ListSharedFiles(ListSharedFilesRequest) returns (ListSharedFilesResponse);
 
   // UI real-time panel: machine status and deploy progress push.
   rpc WatchMachine(GetMachineRequest) returns (stream MachineStatusEvent);

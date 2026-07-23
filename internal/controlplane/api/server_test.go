@@ -411,7 +411,7 @@ func TestSetDeploymentSetsArgsEnvAndConfig(t *testing.T) {
 		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
 	}))
 	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
-		Artifact: &pb.ArtifactRef{Name: "s-config", Version: "c17", Digest: "sha256:cfg", Uri: "file:///c.yml"},
+		Artifact: &pb.ArtifactRef{Name: "s-config", Version: "c17", Digest: "sha256:c17", Uri: "file:///c.yml"},
 	}))
 
 	resp, err := client.SetDeployment(ctx, connect.NewRequest(&pb.SetDeploymentRequest{
@@ -577,6 +577,144 @@ func TestDeployBlockedWhileOtherMachineHoldsLease(t *testing.T) {
 	}
 	if !got.Msg.GetStrategies()[0].GetLeaseHeld() {
 		t.Fatal("expected lease_held on m1 StrategyView")
+	}
+}
+
+func TestSetAndListSharedFiles(t *testing.T) {
+	client, st, _, agents := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "instruments.json", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/i.json",
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n0 := agents.n
+	resp, err := client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "instruments.json", ArtifactVersion: "v1"}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Msg.GetGeneration() != 1 {
+		t.Fatalf("shared generation = %d", resp.Msg.GetGeneration())
+	}
+	if agents.n != n0+1 {
+		t.Fatalf("expected Notify, agents.n=%d", agents.n)
+	}
+	list, err := client.ListSharedFiles(ctx, connect.NewRequest(&pb.ListSharedFilesRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Msg.GetFiles()) != 1 || list.Msg.GetFiles()[0].GetDesiredDigest() != "sha256:aaa" {
+		t.Fatalf("list = %+v", list.Msg.GetFiles())
+	}
+	if list.Msg.GetFiles()[0].GetConverged() {
+		t.Fatal("should not be converged without status")
+	}
+	_ = st.ApplyStatus("m1", &pb.StatusReport{
+		Shared: &pb.MachineSharedStatus{
+			ObservedGeneration: 1,
+			Files:              []*pb.SharedFileStatus{{Name: "instruments.json", RunningDigest: "sha256:aaa"}},
+		},
+	})
+	list, err = client.ListSharedFiles(ctx, connect.NewRequest(&pb.ListSharedFilesRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !list.Msg.GetFiles()[0].GetConverged() {
+		t.Fatal("expected converged after matching status")
+	}
+	// Identical re-push: no Notify, generation unchanged.
+	n1 := agents.n
+	resp2, err := client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "instruments.json", ArtifactVersion: "v1"}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp2.Msg.GetGeneration() != 1 || agents.n != n1 {
+		t.Fatalf("noop should not notify/bump: gen=%d notify=%d", resp2.Msg.GetGeneration(), agents.n-n1)
+	}
+	// artifact_name can differ from on-disk basename.
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "catalog-blob", Version: "v1", Digest: "sha256:bbb", Uri: "file:///tmp/blob.json",
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp3, err := client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files: []*pb.SharedFileRef{{
+			Name: "instruments.json", ArtifactVersion: "v1", ArtifactName: "catalog-blob",
+		}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp3.Msg.GetGeneration() != 2 {
+		t.Fatalf("expected bump after catalog rename, gen=%d", resp3.Msg.GetGeneration())
+	}
+	list, err = client.ListSharedFiles(ctx, connect.NewRequest(&pb.ListSharedFilesRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Msg.GetFiles()[0].GetDesiredDigest() != "sha256:bbb" {
+		t.Fatalf("expected digest from artifact_name, got %+v", list.Msg.GetFiles()[0])
+	}
+	// Reject path separators.
+	_, err = client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "../x", ArtifactVersion: "v1"}},
+	}))
+	if err == nil {
+		t.Fatal("expected invalid name")
+	}
+	// Non-sha256 digests are allowed at RegisterArtifact (binary/config CI),
+	// but SetSharedFiles rejects them when resolving the catalog entry.
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "bad-digest.json", Version: "v1", Digest: "md5:abc", Uri: "file:///tmp/x",
+		},
+	}))
+	if err != nil {
+		t.Fatalf("RegisterArtifact should accept non-sha256 digest: %v", err)
+	}
+	_, err = client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "bad-digest.json", ArtifactVersion: "v1"}},
+	}))
+	if err == nil {
+		t.Fatal("expected SetSharedFiles to reject non-sha256 digest")
+	}
+	// Reject archive-looking artifacts (single-file-only model).
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "bundle.tar.gz", Version: "v1",
+			Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			Uri:    "https://example.com/bundle.tar.gz",
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files: []*pb.SharedFileRef{{
+			Name: "instruments.json", ArtifactName: "bundle.tar.gz", ArtifactVersion: "v1",
+		}},
+	}))
+	if err == nil {
+		t.Fatal("expected SetSharedFiles to reject archive artifact")
 	}
 }
 

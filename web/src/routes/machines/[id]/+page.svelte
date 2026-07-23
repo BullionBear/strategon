@@ -13,6 +13,7 @@
 		memoryPercent
 	} from '$lib/fleet';
 	import Sparkline from '$lib/Sparkline.svelte';
+	import SharedFilesPanel from '$lib/SharedFilesPanel.svelte';
 
 	let machine = $state<Machine | null>(null);
 	let live = $state(false);
@@ -199,6 +200,8 @@
 				</div>
 			{/if}
 		</div>
+
+		<SharedFilesPanel machineId={id} />
 
 		<h2 style="margin-top:1.75rem">Strategies</h2>
 		<p class="muted">Desired vs actual. Diverging rows are highlighted.</p>

@@ -3,8 +3,10 @@
 //
 //	<base>/<strategy>/releases/<version>/bin           # the strategy binary
 //	<base>/<strategy>/releases/<version>/config[.ext]  # optional config (ext from URI)
+//	<base>/<strategy>/releases/<version>/shared -> ../../../shared
 //	<base>/<strategy>/current -> releases/<version>    # atomic switch point
-//	<base>/<strategy>/shared/                          # cross-version data
+//	<base>/shared/<name> -> store/<digest>/<name>      # machine-level shared files
+//	<base>/shared/store/<digest>/<name>                # content-addressed store
 //
 // Rollback is O(1): re-point the `current` symlink at an already-present
 // release, no re-download. Fetching is pluggable; the v1 Fetcher is a
@@ -143,6 +145,9 @@ func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, co
 		if err := m.Fetcher.Fetch(ctx, configRef, cfg); err != nil {
 			return fmt.Errorf("fetch config: %w", err)
 		}
+	}
+	if err := m.LinkReleaseShared(strategy, artifactRef.GetVersion()); err != nil {
+		return err
 	}
 	return nil
 }
