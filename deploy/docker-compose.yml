@@ -42,6 +42,17 @@ services:
       - --discord-guild-id=${DISCORD_GUILD_ID}
       - --discord-redirect-url=https://s7n.lynkora.com/auth/callback
       - --auth-frontend-url=https://s7n.lynkora.com
+      # S3-compatible store for authenticated artifact delivery. Endpoint is
+      # deliberately the public/Tailscale-reachable URL, not the docker-network
+      # alias: this same value is baked into presigned URLs that remote agents
+      # (not on this host's `web` network) fetch directly. Unset -> disabled.
+      - --s3-endpoint=${STRATEGON_S3_ENDPOINT:-}
+      - --s3-bucket=${STRATEGON_S3_BUCKET:-}
+      - --s3-region=${STRATEGON_S3_REGION:-us-east-1}
+    environment:
+      # Env, not flags, so the secret keys never show up in argv/docker inspect.
+      STRATEGON_S3_ACCESS_KEY: ${STRATEGON_S3_ACCESS_KEY:-}
+      STRATEGON_S3_SECRET_KEY: ${STRATEGON_S3_SECRET_KEY:-}
     ports:
       # Tailscale-only. Binding the host's 100.x address keeps AgentService off
       # the public interface entirely — 139.162.74.23:8443 stays closed.
