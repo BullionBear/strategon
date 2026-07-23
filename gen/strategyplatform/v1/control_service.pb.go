@@ -1899,16 +1899,82 @@ func (x *ListArtifactsRequest) GetName() string {
 	return ""
 }
 
+// ArtifactCatalogEntry is the catalog-layer view of a registered artifact.
+// Ingest state lives here — not on ArtifactRef — so PENDING/FAILED never
+// flow into DesiredState / assignment status.
+type ArtifactCatalogEntry struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Artifact *ArtifactRef           `protobuf:"bytes,1,opt,name=artifact,proto3" json:"artifact,omitempty"`
+	// PENDING | READY | FAILED
+	State         string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	StateReason   string `protobuf:"bytes,3,opt,name=state_reason,json=stateReason,proto3" json:"state_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ArtifactCatalogEntry) Reset() {
+	*x = ArtifactCatalogEntry{}
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ArtifactCatalogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ArtifactCatalogEntry) ProtoMessage() {}
+
+func (x *ArtifactCatalogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ArtifactCatalogEntry.ProtoReflect.Descriptor instead.
+func (*ArtifactCatalogEntry) Descriptor() ([]byte, []int) {
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ArtifactCatalogEntry) GetArtifact() *ArtifactRef {
+	if x != nil {
+		return x.Artifact
+	}
+	return nil
+}
+
+func (x *ArtifactCatalogEntry) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *ArtifactCatalogEntry) GetStateReason() string {
+	if x != nil {
+		return x.StateReason
+	}
+	return ""
+}
+
 type ListArtifactsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Artifacts     []*ArtifactRef         `protobuf:"bytes,1,rep,name=artifacts,proto3" json:"artifacts,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Refs only (no ingest state). Prefer entries for UI; kept for older clients.
+	Artifacts     []*ArtifactRef          `protobuf:"bytes,1,rep,name=artifacts,proto3" json:"artifacts,omitempty"`
+	Entries       []*ArtifactCatalogEntry `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListArtifactsResponse) Reset() {
 	*x = ListArtifactsResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1920,7 +1986,7 @@ func (x *ListArtifactsResponse) String() string {
 func (*ListArtifactsResponse) ProtoMessage() {}
 
 func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1933,12 +1999,19 @@ func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArtifactsResponse.ProtoReflect.Descriptor instead.
 func (*ListArtifactsResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{30}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *ListArtifactsResponse) GetArtifacts() []*ArtifactRef {
 	if x != nil {
 		return x.Artifacts
+	}
+	return nil
+}
+
+func (x *ListArtifactsResponse) GetEntries() []*ArtifactCatalogEntry {
+	if x != nil {
+		return x.Entries
 	}
 	return nil
 }
@@ -1952,7 +2025,7 @@ type GetControlPlaneVersionRequest struct {
 
 func (x *GetControlPlaneVersionRequest) Reset() {
 	*x = GetControlPlaneVersionRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1964,7 +2037,7 @@ func (x *GetControlPlaneVersionRequest) String() string {
 func (*GetControlPlaneVersionRequest) ProtoMessage() {}
 
 func (x *GetControlPlaneVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1977,7 +2050,7 @@ func (x *GetControlPlaneVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetControlPlaneVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetControlPlaneVersionRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{31}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{32}
 }
 
 type ControlPlaneVersion struct {
@@ -1991,7 +2064,7 @@ type ControlPlaneVersion struct {
 
 func (x *ControlPlaneVersion) Reset() {
 	*x = ControlPlaneVersion{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2003,7 +2076,7 @@ func (x *ControlPlaneVersion) String() string {
 func (*ControlPlaneVersion) ProtoMessage() {}
 
 func (x *ControlPlaneVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2016,7 +2089,7 @@ func (x *ControlPlaneVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlPlaneVersion.ProtoReflect.Descriptor instead.
 func (*ControlPlaneVersion) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{32}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ControlPlaneVersion) GetVersion() string {
@@ -2052,7 +2125,7 @@ type ResourceSamplePoint struct {
 
 func (x *ResourceSamplePoint) Reset() {
 	*x = ResourceSamplePoint{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2064,7 +2137,7 @@ func (x *ResourceSamplePoint) String() string {
 func (*ResourceSamplePoint) ProtoMessage() {}
 
 func (x *ResourceSamplePoint) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2077,7 +2150,7 @@ func (x *ResourceSamplePoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceSamplePoint.ProtoReflect.Descriptor instead.
 func (*ResourceSamplePoint) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{33}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ResourceSamplePoint) GetSampledAt() *timestamppb.Timestamp {
@@ -2114,7 +2187,7 @@ type GetMachineMetricsRequest struct {
 
 func (x *GetMachineMetricsRequest) Reset() {
 	*x = GetMachineMetricsRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2126,7 +2199,7 @@ func (x *GetMachineMetricsRequest) String() string {
 func (*GetMachineMetricsRequest) ProtoMessage() {}
 
 func (x *GetMachineMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2139,7 +2212,7 @@ func (x *GetMachineMetricsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMachineMetricsRequest.ProtoReflect.Descriptor instead.
 func (*GetMachineMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{34}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GetMachineMetricsRequest) GetMachineId() string {
@@ -2172,7 +2245,7 @@ type GetMachineMetricsResponse struct {
 
 func (x *GetMachineMetricsResponse) Reset() {
 	*x = GetMachineMetricsResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2184,7 +2257,7 @@ func (x *GetMachineMetricsResponse) String() string {
 func (*GetMachineMetricsResponse) ProtoMessage() {}
 
 func (x *GetMachineMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2197,7 +2270,7 @@ func (x *GetMachineMetricsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMachineMetricsResponse.ProtoReflect.Descriptor instead.
 func (*GetMachineMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{35}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GetMachineMetricsResponse) GetSamples() []*ResourceSamplePoint {
@@ -2219,7 +2292,7 @@ type SetSharedFilesRequest struct {
 
 func (x *SetSharedFilesRequest) Reset() {
 	*x = SetSharedFilesRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2231,7 +2304,7 @@ func (x *SetSharedFilesRequest) String() string {
 func (*SetSharedFilesRequest) ProtoMessage() {}
 
 func (x *SetSharedFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2244,7 +2317,7 @@ func (x *SetSharedFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSharedFilesRequest.ProtoReflect.Descriptor instead.
 func (*SetSharedFilesRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{36}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SetSharedFilesRequest) GetMachineId() string {
@@ -2278,7 +2351,7 @@ type SharedFileRef struct {
 
 func (x *SharedFileRef) Reset() {
 	*x = SharedFileRef{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2290,7 +2363,7 @@ func (x *SharedFileRef) String() string {
 func (*SharedFileRef) ProtoMessage() {}
 
 func (x *SharedFileRef) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2303,7 +2376,7 @@ func (x *SharedFileRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedFileRef.ProtoReflect.Descriptor instead.
 func (*SharedFileRef) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{37}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *SharedFileRef) GetName() string {
@@ -2336,7 +2409,7 @@ type SetSharedFilesResponse struct {
 
 func (x *SetSharedFilesResponse) Reset() {
 	*x = SetSharedFilesResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2348,7 +2421,7 @@ func (x *SetSharedFilesResponse) String() string {
 func (*SetSharedFilesResponse) ProtoMessage() {}
 
 func (x *SetSharedFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2361,7 +2434,7 @@ func (x *SetSharedFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSharedFilesResponse.ProtoReflect.Descriptor instead.
 func (*SetSharedFilesResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{38}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *SetSharedFilesResponse) GetGeneration() int64 {
@@ -2380,7 +2453,7 @@ type ListSharedFilesRequest struct {
 
 func (x *ListSharedFilesRequest) Reset() {
 	*x = ListSharedFilesRequest{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2392,7 +2465,7 @@ func (x *ListSharedFilesRequest) String() string {
 func (*ListSharedFilesRequest) ProtoMessage() {}
 
 func (x *ListSharedFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2405,7 +2478,7 @@ func (x *ListSharedFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedFilesRequest.ProtoReflect.Descriptor instead.
 func (*ListSharedFilesRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{39}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *ListSharedFilesRequest) GetMachineId() string {
@@ -2424,7 +2497,7 @@ type ListSharedFilesResponse struct {
 
 func (x *ListSharedFilesResponse) Reset() {
 	*x = ListSharedFilesResponse{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2436,7 +2509,7 @@ func (x *ListSharedFilesResponse) String() string {
 func (*ListSharedFilesResponse) ProtoMessage() {}
 
 func (x *ListSharedFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2449,7 +2522,7 @@ func (x *ListSharedFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedFilesResponse.ProtoReflect.Descriptor instead.
 func (*ListSharedFilesResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{40}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ListSharedFilesResponse) GetFiles() []*SharedFileView {
@@ -2473,7 +2546,7 @@ type SharedFileView struct {
 
 func (x *SharedFileView) Reset() {
 	*x = SharedFileView{}
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2485,7 +2558,7 @@ func (x *SharedFileView) String() string {
 func (*SharedFileView) ProtoMessage() {}
 
 func (x *SharedFileView) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2498,7 +2571,7 @@ func (x *SharedFileView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedFileView.ProtoReflect.Descriptor instead.
 func (*SharedFileView) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{41}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SharedFileView) GetName() string {
@@ -2717,9 +2790,14 @@ const file_strategyplatform_v1_control_service_proto_rawDesc = "" +
 	"\bartifact\x18\x01 \x01(\v2 .strategyplatform.v1.ArtifactRefR\bartifact\"\x1a\n" +
 	"\x18RegisterArtifactResponse\"*\n" +
 	"\x14ListArtifactsRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"W\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x8d\x01\n" +
+	"\x14ArtifactCatalogEntry\x12<\n" +
+	"\bartifact\x18\x01 \x01(\v2 .strategyplatform.v1.ArtifactRefR\bartifact\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12!\n" +
+	"\fstate_reason\x18\x03 \x01(\tR\vstateReason\"\x9c\x01\n" +
 	"\x15ListArtifactsResponse\x12>\n" +
-	"\tartifacts\x18\x01 \x03(\v2 .strategyplatform.v1.ArtifactRefR\tartifacts\"\x1f\n" +
+	"\tartifacts\x18\x01 \x03(\v2 .strategyplatform.v1.ArtifactRefR\tartifacts\x12C\n" +
+	"\aentries\x18\x02 \x03(\v2).strategyplatform.v1.ArtifactCatalogEntryR\aentries\"\x1f\n" +
 	"\x1dGetControlPlaneVersionRequest\"o\n" +
 	"\x13ControlPlaneVersion\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x1f\n" +
@@ -2799,7 +2877,7 @@ func file_strategyplatform_v1_control_service_proto_rawDescGZIP() []byte {
 	return file_strategyplatform_v1_control_service_proto_rawDescData
 }
 
-var file_strategyplatform_v1_control_service_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
+var file_strategyplatform_v1_control_service_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_strategyplatform_v1_control_service_proto_goTypes = []any{
 	(*Machine)(nil),                       // 0: strategyplatform.v1.Machine
 	(*StrategyView)(nil),                  // 1: strategyplatform.v1.StrategyView
@@ -2831,106 +2909,109 @@ var file_strategyplatform_v1_control_service_proto_goTypes = []any{
 	(*RegisterArtifactRequest)(nil),       // 27: strategyplatform.v1.RegisterArtifactRequest
 	(*RegisterArtifactResponse)(nil),      // 28: strategyplatform.v1.RegisterArtifactResponse
 	(*ListArtifactsRequest)(nil),          // 29: strategyplatform.v1.ListArtifactsRequest
-	(*ListArtifactsResponse)(nil),         // 30: strategyplatform.v1.ListArtifactsResponse
-	(*GetControlPlaneVersionRequest)(nil), // 31: strategyplatform.v1.GetControlPlaneVersionRequest
-	(*ControlPlaneVersion)(nil),           // 32: strategyplatform.v1.ControlPlaneVersion
-	(*ResourceSamplePoint)(nil),           // 33: strategyplatform.v1.ResourceSamplePoint
-	(*GetMachineMetricsRequest)(nil),      // 34: strategyplatform.v1.GetMachineMetricsRequest
-	(*GetMachineMetricsResponse)(nil),     // 35: strategyplatform.v1.GetMachineMetricsResponse
-	(*SetSharedFilesRequest)(nil),         // 36: strategyplatform.v1.SetSharedFilesRequest
-	(*SharedFileRef)(nil),                 // 37: strategyplatform.v1.SharedFileRef
-	(*SetSharedFilesResponse)(nil),        // 38: strategyplatform.v1.SetSharedFilesResponse
-	(*ListSharedFilesRequest)(nil),        // 39: strategyplatform.v1.ListSharedFilesRequest
-	(*ListSharedFilesResponse)(nil),       // 40: strategyplatform.v1.ListSharedFilesResponse
-	(*SharedFileView)(nil),                // 41: strategyplatform.v1.SharedFileView
-	nil,                                   // 42: strategyplatform.v1.SetDeploymentRequest.EnvEntry
-	(*ObjectMeta)(nil),                    // 43: strategyplatform.v1.ObjectMeta
-	(*MachineSpec)(nil),                   // 44: strategyplatform.v1.MachineSpec
-	(*MachineResources)(nil),              // 45: strategyplatform.v1.MachineResources
-	(*timestamppb.Timestamp)(nil),         // 46: google.protobuf.Timestamp
-	(*ProcessMetrics)(nil),                // 47: strategyplatform.v1.ProcessMetrics
-	(*ArtifactRef)(nil),                   // 48: strategyplatform.v1.ArtifactRef
-	(DeployPhase)(0),                      // 49: strategyplatform.v1.DeployPhase
-	(*Condition)(nil),                     // 50: strategyplatform.v1.Condition
-	(*CronSchedule)(nil),                  // 51: strategyplatform.v1.CronSchedule
-	(*DirEntry)(nil),                      // 52: strategyplatform.v1.DirEntry
-	(TransferKind)(0),                     // 53: strategyplatform.v1.TransferKind
+	(*ArtifactCatalogEntry)(nil),          // 30: strategyplatform.v1.ArtifactCatalogEntry
+	(*ListArtifactsResponse)(nil),         // 31: strategyplatform.v1.ListArtifactsResponse
+	(*GetControlPlaneVersionRequest)(nil), // 32: strategyplatform.v1.GetControlPlaneVersionRequest
+	(*ControlPlaneVersion)(nil),           // 33: strategyplatform.v1.ControlPlaneVersion
+	(*ResourceSamplePoint)(nil),           // 34: strategyplatform.v1.ResourceSamplePoint
+	(*GetMachineMetricsRequest)(nil),      // 35: strategyplatform.v1.GetMachineMetricsRequest
+	(*GetMachineMetricsResponse)(nil),     // 36: strategyplatform.v1.GetMachineMetricsResponse
+	(*SetSharedFilesRequest)(nil),         // 37: strategyplatform.v1.SetSharedFilesRequest
+	(*SharedFileRef)(nil),                 // 38: strategyplatform.v1.SharedFileRef
+	(*SetSharedFilesResponse)(nil),        // 39: strategyplatform.v1.SetSharedFilesResponse
+	(*ListSharedFilesRequest)(nil),        // 40: strategyplatform.v1.ListSharedFilesRequest
+	(*ListSharedFilesResponse)(nil),       // 41: strategyplatform.v1.ListSharedFilesResponse
+	(*SharedFileView)(nil),                // 42: strategyplatform.v1.SharedFileView
+	nil,                                   // 43: strategyplatform.v1.SetDeploymentRequest.EnvEntry
+	(*ObjectMeta)(nil),                    // 44: strategyplatform.v1.ObjectMeta
+	(*MachineSpec)(nil),                   // 45: strategyplatform.v1.MachineSpec
+	(*MachineResources)(nil),              // 46: strategyplatform.v1.MachineResources
+	(*timestamppb.Timestamp)(nil),         // 47: google.protobuf.Timestamp
+	(*ProcessMetrics)(nil),                // 48: strategyplatform.v1.ProcessMetrics
+	(*ArtifactRef)(nil),                   // 49: strategyplatform.v1.ArtifactRef
+	(DeployPhase)(0),                      // 50: strategyplatform.v1.DeployPhase
+	(*Condition)(nil),                     // 51: strategyplatform.v1.Condition
+	(*CronSchedule)(nil),                  // 52: strategyplatform.v1.CronSchedule
+	(*DirEntry)(nil),                      // 53: strategyplatform.v1.DirEntry
+	(TransferKind)(0),                     // 54: strategyplatform.v1.TransferKind
 }
 var file_strategyplatform_v1_control_service_proto_depIdxs = []int32{
-	43, // 0: strategyplatform.v1.Machine.metadata:type_name -> strategyplatform.v1.ObjectMeta
-	44, // 1: strategyplatform.v1.Machine.spec:type_name -> strategyplatform.v1.MachineSpec
-	45, // 2: strategyplatform.v1.Machine.last_resources:type_name -> strategyplatform.v1.MachineResources
-	46, // 3: strategyplatform.v1.Machine.last_heartbeat:type_name -> google.protobuf.Timestamp
+	44, // 0: strategyplatform.v1.Machine.metadata:type_name -> strategyplatform.v1.ObjectMeta
+	45, // 1: strategyplatform.v1.Machine.spec:type_name -> strategyplatform.v1.MachineSpec
+	46, // 2: strategyplatform.v1.Machine.last_resources:type_name -> strategyplatform.v1.MachineResources
+	47, // 3: strategyplatform.v1.Machine.last_heartbeat:type_name -> google.protobuf.Timestamp
 	1,  // 4: strategyplatform.v1.Machine.strategies:type_name -> strategyplatform.v1.StrategyView
-	47, // 5: strategyplatform.v1.Machine.last_processes:type_name -> strategyplatform.v1.ProcessMetrics
-	48, // 6: strategyplatform.v1.StrategyView.desired_artifact:type_name -> strategyplatform.v1.ArtifactRef
-	48, // 7: strategyplatform.v1.StrategyView.desired_config:type_name -> strategyplatform.v1.ArtifactRef
-	49, // 8: strategyplatform.v1.StrategyView.phase:type_name -> strategyplatform.v1.DeployPhase
-	48, // 9: strategyplatform.v1.StrategyView.running_artifact:type_name -> strategyplatform.v1.ArtifactRef
-	48, // 10: strategyplatform.v1.StrategyView.running_config:type_name -> strategyplatform.v1.ArtifactRef
-	50, // 11: strategyplatform.v1.StrategyView.conditions:type_name -> strategyplatform.v1.Condition
-	46, // 12: strategyplatform.v1.StrategyView.lease_expires_at:type_name -> google.protobuf.Timestamp
-	51, // 13: strategyplatform.v1.StrategyView.schedules:type_name -> strategyplatform.v1.CronSchedule
-	46, // 14: strategyplatform.v1.StrategyView.started_at:type_name -> google.protobuf.Timestamp
-	46, // 15: strategyplatform.v1.StrategyView.deployed_at:type_name -> google.protobuf.Timestamp
+	48, // 5: strategyplatform.v1.Machine.last_processes:type_name -> strategyplatform.v1.ProcessMetrics
+	49, // 6: strategyplatform.v1.StrategyView.desired_artifact:type_name -> strategyplatform.v1.ArtifactRef
+	49, // 7: strategyplatform.v1.StrategyView.desired_config:type_name -> strategyplatform.v1.ArtifactRef
+	50, // 8: strategyplatform.v1.StrategyView.phase:type_name -> strategyplatform.v1.DeployPhase
+	49, // 9: strategyplatform.v1.StrategyView.running_artifact:type_name -> strategyplatform.v1.ArtifactRef
+	49, // 10: strategyplatform.v1.StrategyView.running_config:type_name -> strategyplatform.v1.ArtifactRef
+	51, // 11: strategyplatform.v1.StrategyView.conditions:type_name -> strategyplatform.v1.Condition
+	47, // 12: strategyplatform.v1.StrategyView.lease_expires_at:type_name -> google.protobuf.Timestamp
+	52, // 13: strategyplatform.v1.StrategyView.schedules:type_name -> strategyplatform.v1.CronSchedule
+	47, // 14: strategyplatform.v1.StrategyView.started_at:type_name -> google.protobuf.Timestamp
+	47, // 15: strategyplatform.v1.StrategyView.deployed_at:type_name -> google.protobuf.Timestamp
 	0,  // 16: strategyplatform.v1.ListMachinesResponse.machines:type_name -> strategyplatform.v1.Machine
-	42, // 17: strategyplatform.v1.SetDeploymentRequest.env:type_name -> strategyplatform.v1.SetDeploymentRequest.EnvEntry
-	51, // 18: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
-	46, // 19: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
-	52, // 20: strategyplatform.v1.BrowseDirResponse.entries:type_name -> strategyplatform.v1.DirEntry
-	53, // 21: strategyplatform.v1.DownloadChunk.transfer_kind:type_name -> strategyplatform.v1.TransferKind
+	43, // 17: strategyplatform.v1.SetDeploymentRequest.env:type_name -> strategyplatform.v1.SetDeploymentRequest.EnvEntry
+	52, // 18: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
+	47, // 19: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
+	53, // 20: strategyplatform.v1.BrowseDirResponse.entries:type_name -> strategyplatform.v1.DirEntry
+	54, // 21: strategyplatform.v1.DownloadChunk.transfer_kind:type_name -> strategyplatform.v1.TransferKind
 	19, // 22: strategyplatform.v1.ListAuditResponse.entries:type_name -> strategyplatform.v1.AuditEntry
 	0,  // 23: strategyplatform.v1.MachineStatusEvent.machine:type_name -> strategyplatform.v1.Machine
-	46, // 24: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
-	48, // 25: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
-	48, // 26: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
-	46, // 27: strategyplatform.v1.ResourceSamplePoint.sampled_at:type_name -> google.protobuf.Timestamp
-	33, // 28: strategyplatform.v1.GetMachineMetricsResponse.samples:type_name -> strategyplatform.v1.ResourceSamplePoint
-	37, // 29: strategyplatform.v1.SetSharedFilesRequest.files:type_name -> strategyplatform.v1.SharedFileRef
-	41, // 30: strategyplatform.v1.ListSharedFilesResponse.files:type_name -> strategyplatform.v1.SharedFileView
-	2,  // 31: strategyplatform.v1.ControlPlaneService.ListMachines:input_type -> strategyplatform.v1.ListMachinesRequest
-	4,  // 32: strategyplatform.v1.ControlPlaneService.GetMachine:input_type -> strategyplatform.v1.GetMachineRequest
-	5,  // 33: strategyplatform.v1.ControlPlaneService.Deploy:input_type -> strategyplatform.v1.DeployRequest
-	7,  // 34: strategyplatform.v1.ControlPlaneService.SetDeployment:input_type -> strategyplatform.v1.SetDeploymentRequest
-	9,  // 35: strategyplatform.v1.ControlPlaneService.Rollback:input_type -> strategyplatform.v1.RollbackRequest
-	13, // 36: strategyplatform.v1.ControlPlaneService.Stop:input_type -> strategyplatform.v1.StopRequest
-	15, // 37: strategyplatform.v1.ControlPlaneService.Start:input_type -> strategyplatform.v1.StartRequest
-	11, // 38: strategyplatform.v1.ControlPlaneService.Undeploy:input_type -> strategyplatform.v1.UndeployRequest
-	17, // 39: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
-	36, // 40: strategyplatform.v1.ControlPlaneService.SetSharedFiles:input_type -> strategyplatform.v1.SetSharedFilesRequest
-	39, // 41: strategyplatform.v1.ControlPlaneService.ListSharedFiles:input_type -> strategyplatform.v1.ListSharedFilesRequest
-	4,  // 42: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
-	24, // 43: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
-	27, // 44: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
-	29, // 45: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
-	31, // 46: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:input_type -> strategyplatform.v1.GetControlPlaneVersionRequest
-	34, // 47: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:input_type -> strategyplatform.v1.GetMachineMetricsRequest
-	20, // 48: strategyplatform.v1.ControlPlaneService.BrowseDir:input_type -> strategyplatform.v1.BrowseDirRequest
-	22, // 49: strategyplatform.v1.ControlPlaneService.DownloadFiles:input_type -> strategyplatform.v1.DownloadFilesRequest
-	3,  // 50: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
-	0,  // 51: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
-	6,  // 52: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
-	8,  // 53: strategyplatform.v1.ControlPlaneService.SetDeployment:output_type -> strategyplatform.v1.SetDeploymentResponse
-	10, // 54: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
-	14, // 55: strategyplatform.v1.ControlPlaneService.Stop:output_type -> strategyplatform.v1.StopResponse
-	16, // 56: strategyplatform.v1.ControlPlaneService.Start:output_type -> strategyplatform.v1.StartResponse
-	12, // 57: strategyplatform.v1.ControlPlaneService.Undeploy:output_type -> strategyplatform.v1.UndeployResponse
-	18, // 58: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
-	38, // 59: strategyplatform.v1.ControlPlaneService.SetSharedFiles:output_type -> strategyplatform.v1.SetSharedFilesResponse
-	40, // 60: strategyplatform.v1.ControlPlaneService.ListSharedFiles:output_type -> strategyplatform.v1.ListSharedFilesResponse
-	26, // 61: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
-	25, // 62: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
-	28, // 63: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
-	30, // 64: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
-	32, // 65: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:output_type -> strategyplatform.v1.ControlPlaneVersion
-	35, // 66: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:output_type -> strategyplatform.v1.GetMachineMetricsResponse
-	21, // 67: strategyplatform.v1.ControlPlaneService.BrowseDir:output_type -> strategyplatform.v1.BrowseDirResponse
-	23, // 68: strategyplatform.v1.ControlPlaneService.DownloadFiles:output_type -> strategyplatform.v1.DownloadChunk
-	50, // [50:69] is the sub-list for method output_type
-	31, // [31:50] is the sub-list for method input_type
-	31, // [31:31] is the sub-list for extension type_name
-	31, // [31:31] is the sub-list for extension extendee
-	0,  // [0:31] is the sub-list for field type_name
+	47, // 24: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
+	49, // 25: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
+	49, // 26: strategyplatform.v1.ArtifactCatalogEntry.artifact:type_name -> strategyplatform.v1.ArtifactRef
+	49, // 27: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
+	30, // 28: strategyplatform.v1.ListArtifactsResponse.entries:type_name -> strategyplatform.v1.ArtifactCatalogEntry
+	47, // 29: strategyplatform.v1.ResourceSamplePoint.sampled_at:type_name -> google.protobuf.Timestamp
+	34, // 30: strategyplatform.v1.GetMachineMetricsResponse.samples:type_name -> strategyplatform.v1.ResourceSamplePoint
+	38, // 31: strategyplatform.v1.SetSharedFilesRequest.files:type_name -> strategyplatform.v1.SharedFileRef
+	42, // 32: strategyplatform.v1.ListSharedFilesResponse.files:type_name -> strategyplatform.v1.SharedFileView
+	2,  // 33: strategyplatform.v1.ControlPlaneService.ListMachines:input_type -> strategyplatform.v1.ListMachinesRequest
+	4,  // 34: strategyplatform.v1.ControlPlaneService.GetMachine:input_type -> strategyplatform.v1.GetMachineRequest
+	5,  // 35: strategyplatform.v1.ControlPlaneService.Deploy:input_type -> strategyplatform.v1.DeployRequest
+	7,  // 36: strategyplatform.v1.ControlPlaneService.SetDeployment:input_type -> strategyplatform.v1.SetDeploymentRequest
+	9,  // 37: strategyplatform.v1.ControlPlaneService.Rollback:input_type -> strategyplatform.v1.RollbackRequest
+	13, // 38: strategyplatform.v1.ControlPlaneService.Stop:input_type -> strategyplatform.v1.StopRequest
+	15, // 39: strategyplatform.v1.ControlPlaneService.Start:input_type -> strategyplatform.v1.StartRequest
+	11, // 40: strategyplatform.v1.ControlPlaneService.Undeploy:input_type -> strategyplatform.v1.UndeployRequest
+	17, // 41: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
+	37, // 42: strategyplatform.v1.ControlPlaneService.SetSharedFiles:input_type -> strategyplatform.v1.SetSharedFilesRequest
+	40, // 43: strategyplatform.v1.ControlPlaneService.ListSharedFiles:input_type -> strategyplatform.v1.ListSharedFilesRequest
+	4,  // 44: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
+	24, // 45: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
+	27, // 46: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
+	29, // 47: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
+	32, // 48: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:input_type -> strategyplatform.v1.GetControlPlaneVersionRequest
+	35, // 49: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:input_type -> strategyplatform.v1.GetMachineMetricsRequest
+	20, // 50: strategyplatform.v1.ControlPlaneService.BrowseDir:input_type -> strategyplatform.v1.BrowseDirRequest
+	22, // 51: strategyplatform.v1.ControlPlaneService.DownloadFiles:input_type -> strategyplatform.v1.DownloadFilesRequest
+	3,  // 52: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
+	0,  // 53: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
+	6,  // 54: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
+	8,  // 55: strategyplatform.v1.ControlPlaneService.SetDeployment:output_type -> strategyplatform.v1.SetDeploymentResponse
+	10, // 56: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
+	14, // 57: strategyplatform.v1.ControlPlaneService.Stop:output_type -> strategyplatform.v1.StopResponse
+	16, // 58: strategyplatform.v1.ControlPlaneService.Start:output_type -> strategyplatform.v1.StartResponse
+	12, // 59: strategyplatform.v1.ControlPlaneService.Undeploy:output_type -> strategyplatform.v1.UndeployResponse
+	18, // 60: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
+	39, // 61: strategyplatform.v1.ControlPlaneService.SetSharedFiles:output_type -> strategyplatform.v1.SetSharedFilesResponse
+	41, // 62: strategyplatform.v1.ControlPlaneService.ListSharedFiles:output_type -> strategyplatform.v1.ListSharedFilesResponse
+	26, // 63: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
+	25, // 64: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
+	28, // 65: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
+	31, // 66: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
+	33, // 67: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:output_type -> strategyplatform.v1.ControlPlaneVersion
+	36, // 68: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:output_type -> strategyplatform.v1.GetMachineMetricsResponse
+	21, // 69: strategyplatform.v1.ControlPlaneService.BrowseDir:output_type -> strategyplatform.v1.BrowseDirResponse
+	23, // 70: strategyplatform.v1.ControlPlaneService.DownloadFiles:output_type -> strategyplatform.v1.DownloadChunk
+	52, // [52:71] is the sub-list for method output_type
+	33, // [33:52] is the sub-list for method input_type
+	33, // [33:33] is the sub-list for extension type_name
+	33, // [33:33] is the sub-list for extension extendee
+	0,  // [0:33] is the sub-list for field type_name
 }
 
 func init() { file_strategyplatform_v1_control_service_proto_init() }
@@ -2949,7 +3030,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_strategyplatform_v1_control_service_proto_rawDesc), len(file_strategyplatform_v1_control_service_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   43,
+			NumMessages:   44,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

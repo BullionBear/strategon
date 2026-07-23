@@ -23,6 +23,21 @@ func sortArtifactsByNameThenNewest(out []*pb.ArtifactRef) {
 	})
 }
 
+func sortArtifactRecordsByNameThenNewest(out []*ArtifactRecord) {
+	sort.Slice(out, func(i, j int) bool {
+		ai, aj := out[i].Ref, out[j].Ref
+		if ai.GetName() != aj.GetName() {
+			return ai.GetName() < aj.GetName()
+		}
+		ti := artifactCreatedUnix(ai)
+		tj := artifactCreatedUnix(aj)
+		if ti != tj {
+			return ti > tj
+		}
+		return ai.GetVersion() < aj.GetVersion()
+	})
+}
+
 func artifactCreatedUnix(ref *pb.ArtifactRef) int64 {
 	if ref == nil || ref.GetCreatedAt() == nil {
 		return 0

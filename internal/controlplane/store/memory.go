@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +22,7 @@ import (
 type Memory struct {
 	mu          sync.RWMutex
 	machines    map[string]*MachineRecord
-	artifacts   map[string]*pb.ArtifactRef // key = name + "\x00" + version
+	artifacts   map[string]*ArtifactRecord // key = name + "\x00" + version
 	audit       []*pb.AuditEntry
 	leases      map[string]*LeaseInfo // strategy -> lease
 	apiTokens   map[string]*TokenRow  // id -> row
@@ -39,7 +40,7 @@ type Memory struct {
 func NewMemory(hub *Hub) *Memory {
 	return &Memory{
 		machines:     map[string]*MachineRecord{},
-		artifacts:    map[string]*pb.ArtifactRef{},
+		artifacts:    map[string]*ArtifactRecord{},
 		leases:       map[string]*LeaseInfo{},
 		apiTokens:    map[string]*TokenRow{},
 		leaseMargin:  DefaultLeaseMarginCP,
@@ -379,6 +380,14 @@ func (m *Memory) ListAudit(machineID, strategy string) []*pb.AuditEntry {
 }
 
 func (m *Memory) RegisterArtifact(ref *pb.ArtifactRef) error {
+	return m.RegisterArtifactRecord(&ArtifactRecord{Ref: ref, State: ArtifactStateReady})
+}
+
+func (m *Memory) RegisterArtifactRecord(rec *ArtifactRecord) error {
+	if rec == nil || rec.Ref == nil {
+		return fmt.Errorf("register artifact: record is required")
+	}
+	ref := rec.Ref
 	if ref.GetName() == "" || ref.GetVersion() == "" || ref.GetDigest() == "" {
 		return fmt.Errorf("register artifact: name, version, and digest are required")
 	}
@@ -388,43 +397,120 @@ func (m *Memory) RegisterArtifact(ref *pb.ArtifactRef) error {
 	if err := artifacturi.Validate(ref.GetUri()); err != nil {
 		return fmt.Errorf("register artifact: %w", err)
 	}
+	state, err := NormalizeArtifactState(rec.State)
+	if err != nil {
+		return fmt.Errorf("register artifact: %w", err)
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cloned := proto.Clone(ref).(*pb.ArtifactRef)
 	key := artifactKey(ref.GetName(), ref.GetVersion())
 	// Preserve created_at on re-register of the same name+version; otherwise
 	// stamp registration time (defines "latest" for the catalog UI).
-	if existing, ok := m.artifacts[key]; ok && existing.GetCreatedAt() != nil {
-		cloned.CreatedAt = existing.GetCreatedAt()
+	if existing, ok := m.artifacts[key]; ok && existing.Ref != nil && existing.Ref.GetCreatedAt() != nil {
+		cloned.CreatedAt = existing.Ref.GetCreatedAt()
 	} else {
 		cloned.CreatedAt = timestamppb.New(m.now())
 	}
-	m.artifacts[key] = cloned
+	m.artifacts[key] = &ArtifactRecord{
+		Ref:         cloned,
+		State:       state,
+		StateReason: rec.StateReason,
+	}
 	return nil
 }
 
 func (m *Memory) GetArtifact(name, version string) (*pb.ArtifactRef, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	ref, ok := m.artifacts[artifactKey(name, version)]
+	rec, ok := m.GetArtifactRecord(name, version)
 	if !ok {
 		return nil, false
 	}
-	return proto.Clone(ref).(*pb.ArtifactRef), true
+	return rec.Ref, true
+}
+
+func (m *Memory) GetArtifactRecord(name, version string) (*ArtifactRecord, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	rec, ok := m.artifacts[artifactKey(name, version)]
+	if !ok {
+		return nil, false
+	}
+	return CloneArtifactRecord(rec), true
 }
 
 func (m *Memory) ListArtifacts(name string) []*pb.ArtifactRef {
+	recs := m.ListArtifactRecords(name)
+	out := make([]*pb.ArtifactRef, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, r.Ref)
+	}
+	return out
+}
+
+func (m *Memory) ListArtifactRecords(name string) []*ArtifactRecord {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	out := make([]*pb.ArtifactRef, 0, len(m.artifacts))
-	for _, ref := range m.artifacts {
-		if name != "" && ref.GetName() != name {
+	out := make([]*ArtifactRecord, 0, len(m.artifacts))
+	for _, rec := range m.artifacts {
+		if name != "" && rec.Ref.GetName() != name {
 			continue
 		}
-		out = append(out, proto.Clone(ref).(*pb.ArtifactRef))
+		out = append(out, CloneArtifactRecord(rec))
 	}
-	sortArtifactsByNameThenNewest(out)
+	sortArtifactRecordsByNameThenNewest(out)
 	return out
+}
+
+func (m *Memory) SetArtifactState(name, version, state, reason string) error {
+	state, err := NormalizeArtifactState(state)
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rec, ok := m.artifacts[artifactKey(name, version)]
+	if !ok {
+		return fmt.Errorf("set artifact state: %s@%s not found", name, version)
+	}
+	rec.State = state
+	rec.StateReason = reason
+	return nil
+}
+
+func (m *Memory) FinalizeIngest(name, version, expectedDigest, newURI string) error {
+	if err := artifacturi.Validate(newURI); err != nil {
+		return fmt.Errorf("finalize ingest: %w", err)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	rec, ok := m.artifacts[artifactKey(name, version)]
+	if !ok {
+		return fmt.Errorf("finalize ingest: %s@%s not found", name, version)
+	}
+	if rec.State != ArtifactStatePending {
+		return fmt.Errorf("finalize ingest: %s@%s state is %s, want PENDING", name, version, rec.State)
+	}
+	if !strings.EqualFold(rec.Ref.GetDigest(), expectedDigest) {
+		return fmt.Errorf("finalize ingest: %s@%s digest changed during ingest", name, version)
+	}
+	rec.Ref.Uri = newURI
+	rec.State = ArtifactStateReady
+	rec.StateReason = ""
+	return nil
+}
+
+func (m *Memory) FailPendingArtifacts(reason string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	for _, rec := range m.artifacts {
+		if rec.State == ArtifactStatePending {
+			rec.State = ArtifactStateFailed
+			rec.StateReason = reason
+			n++
+		}
+	}
+	return n, nil
 }
 
 func (m *Memory) PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef, bool) {

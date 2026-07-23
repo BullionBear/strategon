@@ -1,11 +1,66 @@
 import type { ArtifactRef } from '$lib/gen/strategyplatform/v1/common_pb';
 import { ArtifactType } from '$lib/gen/strategyplatform/v1/common_pb';
+import type { ArtifactCatalogEntry } from '$lib/gen/strategyplatform/v1/control_service_pb';
+
+export type CatalogArtifact = {
+	ref: ArtifactRef;
+	state: string;
+	stateReason: string;
+};
 
 export type ArtifactGroup = {
 	name: string;
 	kind: 'binary' | 'config' | 'other';
 	versions: ArtifactRef[]; // newest first; [0] is latest
 };
+
+export type CatalogGroup = {
+	name: string;
+	kind: 'binary' | 'config' | 'other';
+	versions: CatalogArtifact[]; // newest first; [0] is latest
+};
+
+/** Normalize ListArtifacts entries (or legacy artifacts[]) into catalog rows. */
+export function catalogFromList(res: {
+	entries?: ArtifactCatalogEntry[];
+	artifacts?: ArtifactRef[];
+}): CatalogArtifact[] {
+	if (res.entries && res.entries.length > 0) {
+		return res.entries
+			.filter((e) => e.artifact)
+			.map((e) => ({
+				ref: e.artifact!,
+				state: e.state || 'READY',
+				stateReason: e.stateReason || ''
+			}));
+	}
+	return (res.artifacts ?? []).map((a) => ({
+		ref: a,
+		state: 'READY',
+		stateReason: ''
+	}));
+}
+
+/** Group catalog rows by name; within each group newest created_at first. */
+export function groupCatalog(artifacts: CatalogArtifact[]): CatalogGroup[] {
+	const byName = new Map<string, CatalogArtifact[]>();
+	for (const a of artifacts) {
+		const list = byName.get(a.ref.name) ?? [];
+		list.push(a);
+		byName.set(a.ref.name, list);
+	}
+	const groups: CatalogGroup[] = [];
+	for (const [name, versions] of byName) {
+		versions.sort((a, b) => createdAtMs(b.ref) - createdAtMs(a.ref));
+		groups.push({
+			name,
+			kind: artifactKind(name),
+			versions
+		});
+	}
+	groups.sort((a, b) => a.name.localeCompare(b.name));
+	return groups;
+}
 
 /** Group flat ListArtifacts by name; within each group newest created_at first. */
 export function groupArtifacts(artifacts: ArtifactRef[]): ArtifactGroup[] {
@@ -90,4 +145,8 @@ export function typeLabel(a: ArtifactRef, kind: ArtifactGroup['kind']): string {
 		default:
 			return 'artifact';
 	}
+}
+
+export function hasPending(artifacts: CatalogArtifact[]): boolean {
+	return artifacts.some((a) => a.state === 'PENDING');
 }

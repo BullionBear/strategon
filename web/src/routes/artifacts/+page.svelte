@@ -3,9 +3,16 @@
 	import { client } from '$lib/api';
 	import type { ArtifactRef } from '$lib/gen/strategyplatform/v1/common_pb';
 	import { ArtifactType } from '$lib/gen/strategyplatform/v1/common_pb';
-	import { groupArtifacts, relativeTime, truncateDigest, typeLabel } from '$lib/artifacts';
+	import {
+		catalogFromList,
+		groupCatalog,
+		relativeTime,
+		truncateDigest,
+		typeLabel,
+		type CatalogArtifact
+	} from '$lib/artifacts';
 
-	let artifacts = $state<ArtifactRef[]>([]);
+	let artifacts = $state<CatalogArtifact[]>([]);
 	let busy = $state(false);
 	let error = $state('');
 	let info = $state('');
@@ -19,15 +26,20 @@
 	let regKind = $state<'binary' | 'config'>('binary');
 	let showRegister = $state(false);
 
-	const groups = $derived(groupArtifacts(artifacts));
+	const groups = $derived(groupCatalog(artifacts));
 
-	onMount(async () => {
-		await loadArtifacts();
+	onMount(() => {
+		void loadArtifacts();
+		// Poll so PENDING → READY/FAILED updates without a manual refresh.
+		const poll = setInterval(() => {
+			void loadArtifacts();
+		}, 2000);
+		return () => clearInterval(poll);
 	});
 
 	async function loadArtifacts() {
 		const res = await client.listArtifacts({});
-		artifacts = res.artifacts;
+		artifacts = catalogFromList(res);
 	}
 
 	function digestKey(a: ArtifactRef): string {
@@ -153,7 +165,7 @@
 					<div class="group-head">
 						<div class="group-title">
 							<span class="name mono">{g.name}</span>
-							<span class="kind muted">({typeLabel(latest, g.kind)})</span>
+							<span class="kind muted">({typeLabel(latest.ref, g.kind)})</span>
 						</div>
 						<button
 							class="btn secondary"
@@ -168,7 +180,8 @@
 						</button>
 					</div>
 					<ul class="versions">
-						{#each g.versions as a, i}
+						{#each g.versions as row, i}
+							{@const a = row.ref}
 							{@const isLatest = i === 0}
 							{@const key = digestKey(a)}
 							{@const expanded = expandedDigests.has(key)}
@@ -181,6 +194,16 @@
 										title="當前最新註冊版本；部署會釘死此版本"
 										>latest</span
 									>
+								{/if}
+								{#if row.state === 'PENDING'}
+									<span class="pill pending" title="Ingesting into object store…">
+										<span class="spin" aria-hidden="true"></span>
+										PENDING
+									</span>
+								{:else if row.state === 'FAILED'}
+									<span class="pill bad" title={row.stateReason || 'ingest failed'}>FAILED</span>
+								{:else if row.state === 'READY'}
+									<span class="pill muted-pill" title="Ready to deploy">READY</span>
 								{/if}
 								<button
 									type="button"
@@ -302,5 +325,29 @@
 	.empty {
 		text-align: center;
 		padding: 2rem 1rem;
+	}
+	.pill.pending {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		background: rgba(180, 140, 40, 0.14);
+		color: #8a6a12;
+	}
+	.pill.muted-pill {
+		background: rgba(0, 0, 0, 0.05);
+		color: var(--ink-muted);
+	}
+	.spin {
+		width: 0.65rem;
+		height: 0.65rem;
+		border: 1.5px solid currentColor;
+		border-right-color: transparent;
+		border-radius: 50%;
+		animation: art-spin 0.7s linear infinite;
+	}
+	@keyframes art-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 </style>

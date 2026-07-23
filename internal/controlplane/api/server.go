@@ -19,6 +19,7 @@ import (
 	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
+	"github.com/bullionbear/strategon/internal/controlplane/ingest"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/sharedfile"
 	"google.golang.org/protobuf/proto"
@@ -46,6 +47,7 @@ type Server struct {
 	hub    *store.Hub
 	agents AgentNotifier
 	broker *filetransfer.Broker
+	ingest *ingest.Service
 	logger *slog.Logger
 }
 
@@ -60,6 +62,12 @@ func NewWithBroker(st store.Store, hub *store.Hub, agents AgentNotifier, broker 
 		logger = slog.Default()
 	}
 	return &Server{store: st, hub: hub, agents: agents, broker: broker, logger: logger}
+}
+
+// WithIngest attaches the registration-time ingest service (optional).
+func (s *Server) WithIngest(svc *ingest.Service) *Server {
+	s.ingest = svc
+	return s
 }
 
 func (s *Server) ListMachines(_ context.Context, req *connect.Request[pb.ListMachinesRequest]) (*connect.Response[pb.ListMachinesResponse], error) {
@@ -186,6 +194,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 	if err != nil {
 		return nil, nil, "", err
 	}
+	if err := s.requireArtifactReady(art.GetName(), art.GetVersion()); err != nil {
+		return nil, nil, "", err
+	}
 
 	spec := defaultOrCloneSpec(existing, strategy)
 	fromVersion := spec.GetArtifact().GetVersion()
@@ -194,6 +205,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 	if configVersion != "" {
 		cfg, err := s.resolveArtifact(art.GetName()+"-config", strategy+"-config", configVersion)
 		if err != nil {
+			return nil, nil, "", err
+		}
+		if err := s.requireArtifactReady(cfg.GetName(), cfg.GetVersion()); err != nil {
 			return nil, nil, "", err
 		}
 		spec.Config = cfg
@@ -495,6 +509,9 @@ func (s *Server) SetSharedFiles(ctx context.Context, req *connect.Request[pb.Set
 			return nil, connect.NewError(connect.CodeNotFound,
 				fmt.Errorf("artifact %q version %q not registered", artName, f.GetArtifactVersion()))
 		}
+		if err := s.requireArtifactReady(art.GetName(), art.GetVersion()); err != nil {
+			return nil, err
+		}
 		if err := requireSHA256Digest(art.GetDigest()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument,
 				fmt.Errorf("shared file %q: %w", f.GetName(), err))
@@ -663,10 +680,47 @@ func (s *Server) ListAudit(_ context.Context, req *connect.Request[pb.ListAuditR
 
 func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.RegisterArtifactRequest]) (*connect.Response[pb.RegisterArtifactResponse], error) {
 	art := req.Msg.GetArtifact()
+	if art == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("artifact is required"))
+	}
 	// Digest algorithm is not enforced here: binary/config verify still requires
 	// a matching sha256: digest at the agent, and empty digests remain allowed
 	// for optional config refs. Shared-file digests are checked in SetSharedFiles.
-	if err := s.store.RegisterArtifact(art); err != nil {
+
+	needsIngest := s.ingest != nil && s.ingest.NeedsIngest(art.GetUri())
+	if needsIngest {
+		if err := s.ingest.ValidateSource(art.GetUri()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		if existing, ok := s.store.GetArtifactRecord(art.GetName(), art.GetVersion()); ok {
+			if existing.State == store.ArtifactStateReady &&
+				strings.EqualFold(existing.Ref.GetDigest(), art.GetDigest()) {
+				// Idempotent: already ingested with the same digest.
+				return connect.NewResponse(&pb.RegisterArtifactResponse{}), nil
+			}
+		}
+		if err := s.store.RegisterArtifactRecord(&store.ArtifactRecord{
+			Ref:   art,
+			State: store.ArtifactStatePending,
+		}); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		_ = s.store.AppendAudit(&pb.AuditEntry{
+			Timestamp: timestamppb.Now(),
+			Actor:     auth.ActorFromContext(ctx),
+			Action:    "RegisterArtifact",
+			Strategy:  art.GetName(),
+			ToVersion: art.GetVersion(),
+			Detail:    "state=PENDING",
+		})
+		s.ingest.Start(proto.Clone(art).(*pb.ArtifactRef))
+		return connect.NewResponse(&pb.RegisterArtifactResponse{}), nil
+	}
+
+	if err := s.store.RegisterArtifactRecord(&store.ArtifactRecord{
+		Ref:   art,
+		State: store.ArtifactStateReady,
+	}); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{
@@ -680,8 +734,36 @@ func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.R
 }
 
 func (s *Server) ListArtifacts(_ context.Context, req *connect.Request[pb.ListArtifactsRequest]) (*connect.Response[pb.ListArtifactsResponse], error) {
-	arts := s.store.ListArtifacts(req.Msg.GetName())
-	return connect.NewResponse(&pb.ListArtifactsResponse{Artifacts: arts}), nil
+	recs := s.store.ListArtifactRecords(req.Msg.GetName())
+	arts := make([]*pb.ArtifactRef, 0, len(recs))
+	entries := make([]*pb.ArtifactCatalogEntry, 0, len(recs))
+	for _, r := range recs {
+		arts = append(arts, r.Ref)
+		entries = append(entries, &pb.ArtifactCatalogEntry{
+			Artifact:    r.Ref,
+			State:       r.State,
+			StateReason: r.StateReason,
+		})
+	}
+	return connect.NewResponse(&pb.ListArtifactsResponse{Artifacts: arts, Entries: entries}), nil
+}
+
+// requireArtifactReady blocks Deploy/SetDeployment/SetSharedFiles until ingest
+// has finished successfully for the named version.
+func (s *Server) requireArtifactReady(name, version string) error {
+	rec, ok := s.store.GetArtifactRecord(name, version)
+	if !ok {
+		return connect.NewError(connect.CodeNotFound,
+			fmt.Errorf("artifact %q version %q not registered", name, version))
+	}
+	if rec.State != store.ArtifactStateReady {
+		msg := fmt.Sprintf("artifact %s@%s is %s", name, version, rec.State)
+		if rec.StateReason != "" {
+			msg += ": " + rec.StateReason
+		}
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New(msg))
+	}
+	return nil
 }
 
 // requireSHA256Digest enforces the only digest algorithm the shared-file store

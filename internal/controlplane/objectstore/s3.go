@@ -8,12 +8,25 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
+
+// ObjectKey returns the content-addressed key layout used by registration-time
+// ingest: artifacts/<name>/<version>/<sha256-hex>.
+func ObjectKey(name, version, digest string) string {
+	hex := strings.TrimPrefix(strings.ToLower(strings.TrimSpace(digest)), "sha256:")
+	return fmt.Sprintf("artifacts/%s/%s/%s", name, version, hex)
+}
+
+// ObjectURI builds s3://<bucket>/<ObjectKey(...)>.
+func ObjectURI(bucket, name, version, digest string) string {
+	return fmt.Sprintf("s3://%s/%s", bucket, ObjectKey(name, version, digest))
+}
 
 // DefaultPresignTTL is the lifetime of URLs handed to agents. The agent's
 // download timeout is 10 minutes; TTL only constrains when the GET may start.

@@ -26,6 +26,7 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/api"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/grpcstream"
+	"github.com/bullionbear/strategon/internal/controlplane/ingest"
 	cpLease "github.com/bullionbear/strategon/internal/controlplane/lease"
 	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
@@ -63,6 +64,8 @@ func run(logger *slog.Logger) error {
 	s3Region := flag.String("s3-region", "us-east-1", "S3 region (SeaweedFS accepts any value)")
 	s3AccessKey := flag.String("s3-access-key", "", "S3 access key (default: $STRATEGON_S3_ACCESS_KEY)")
 	s3SecretKey := flag.String("s3-secret-key", "", "S3 secret key (default: $STRATEGON_S3_SECRET_KEY); prefer the env var so the secret is not visible in process listings")
+	artifactCreds := flag.String("artifact-credentials", "", "path to credentials.yaml for registration-time artifact ingest (per-host tokens via env vars)")
+	ingestModeFlag := flag.String("ingest-mode", "credentialed-only", "artifact ingest mode: credentialed-only|always")
 
 	authMode := flag.String("auth-mode", "none", "human API auth: none|mock|discord (default none for local/CI)")
 	sessionSecret := flag.String("auth-session-secret", "", "HMAC secret for session cookies; random if empty")
@@ -135,8 +138,10 @@ func run(logger *slog.Logger) error {
 	}
 	s3AK := firstNonEmpty(*s3AccessKey, os.Getenv("STRATEGON_S3_ACCESS_KEY"))
 	s3SK := firstNonEmpty(*s3SecretKey, os.Getenv("STRATEGON_S3_SECRET_KEY"))
+	var objs objectstore.Store
 	if *s3Endpoint != "" || s3AK != "" || s3SK != "" {
-		objs, err := objectstore.New(objectstore.Config{
+		var err error
+		objs, err = objectstore.New(objectstore.Config{
 			Endpoint:  *s3Endpoint,
 			Bucket:    *s3Bucket,
 			Region:    *s3Region,
@@ -152,6 +157,23 @@ func run(logger *slog.Logger) error {
 	agentSrv := grpcstream.New(st, agentOpts...)
 	leaseSrv := cpLease.New(st, logger)
 	humanSrv := api.NewWithBroker(st, hub, agentSrv, broker, logger)
+
+	ingestMode, err := ingest.ParseMode(*ingestModeFlag)
+	if err != nil {
+		return err
+	}
+	creds, err := ingest.LoadCredentials(*artifactCreds)
+	if err != nil {
+		return err
+	}
+	if objs != nil {
+		ingestSvc := ingest.New(st, objs, creds, ingestMode, logger)
+		ingestSvc.FailInterrupted()
+		humanSrv.WithIngest(ingestSvc)
+		logger.Info("artifact ingest enabled", "mode", ingestMode, "credentials", *artifactCreds != "")
+	} else if *artifactCreds != "" {
+		logger.Warn("artifact-credentials set but s3 object store is not configured; ingest disabled")
+	}
 
 	agentMux := http.NewServeMux()
 	agentPath, agentHandler := strategyplatformv1connect.NewAgentServiceHandler(agentSrv)
