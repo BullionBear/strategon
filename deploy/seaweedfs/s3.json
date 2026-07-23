@@ -1,0 +1,14 @@
+{
+  "identities": [
+    {
+      "name": "strategon",
+      "credentials": [
+        {
+          "accessKey": "strategon",
+          "secretKey": "strategonsecret"
+        }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

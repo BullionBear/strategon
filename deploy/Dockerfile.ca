@@ -1,0 +1,14 @@
+# Offline CA helper for the local test stack (compose *-init services).
+FROM golang:1.25-alpine AS builder
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH:-amd64} go build \
+    -ldflags "-s -w" \
+    -o /out/strategon-ca ./cmd/strategon-ca
+
+FROM alpine:3.22
+COPY --from=builder /out/strategon-ca /usr/local/bin/strategon-ca
+ENTRYPOINT ["/usr/local/bin/strategon-ca"]

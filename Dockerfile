@@ -20,7 +20,7 @@ RUN test -f static/openapi.json \
 RUN pnpm build
 
 # --- stage 2: go build (embeds the SPA) ---
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -40,7 +40,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
       -X github.com/bullionbear/strategon/internal/buildinfo.BuildTime=${BUILD_TIME}" \
     -o /out/controlplane ./cmd/controlplane
 
-# --- stage 3: runtime ---
+# --- stage 3: runtime filesystem bits (scratch has no /tmp) ---
+FROM alpine:3.22 AS runtime-fs
+RUN mkdir -p /tmp && chmod 1777 /tmp
+
+# --- stage 4: runtime ---
 FROM scratch
 # Links the GHCR package to this repository, which is what lets a workflow's
 # GITHUB_TOKEN push to it. Without the link, pushes are 403 regardless of the
@@ -52,6 +56,8 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 # Postgres DSN parsing and OAuth state both want a real clock/zone table.
 COPY --from=builder /usr/local/go/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip
 ENV ZONEINFO=/usr/local/go/lib/time/zoneinfo.zip
+# Ingest (and any other os.CreateTemp) need a writable /tmp in scratch.
+COPY --from=runtime-fs /tmp /tmp
 COPY --from=builder /out/controlplane /controlplane
 # 8080 agents (mTLS), 8081 humans (behind Traefik).
 EXPOSE 8080 8081
