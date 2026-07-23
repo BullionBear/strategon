@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
@@ -46,6 +47,34 @@ func TestHTTPFetcherNon200(t *testing.T) {
 	err := NewHTTPFetcher().Fetch(context.Background(), &pb.ArtifactRef{Uri: srv.URL + "/missing"}, dest)
 	if err == nil {
 		t.Fatal("expected error on 404")
+	}
+	if !strings.Contains(err.Error(), "not found (404)") {
+		t.Fatalf("error = %v, want readable 404 classification", err)
+	}
+}
+
+func TestHTTPFetcherStatusClassification(t *testing.T) {
+	cases := []struct {
+		code int
+		want string
+	}{
+		{http.StatusUnauthorized, "unauthorized (401)"},
+		{http.StatusForbidden, "forbidden (403)"},
+		{http.StatusNotFound, "not found (404)"},
+		{http.StatusBadGateway, "unexpected status"},
+	}
+	for _, tc := range cases {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(tc.code)
+		}))
+		err := NewHTTPFetcher().Fetch(context.Background(), &pb.ArtifactRef{Uri: srv.URL}, filepath.Join(t.TempDir(), "bin"))
+		srv.Close()
+		if err == nil {
+			t.Fatalf("status %d: expected error", tc.code)
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("status %d: error = %v, want substring %q", tc.code, err, tc.want)
+		}
 	}
 }
 

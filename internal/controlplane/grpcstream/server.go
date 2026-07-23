@@ -18,6 +18,7 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/clock"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
+	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/mtls"
 )
@@ -31,11 +32,12 @@ type session struct {
 
 // Server implements strategyplatformv1connect.AgentServiceHandler.
 type Server struct {
-	store  store.Store
-	clock  clock.Clock
-	resync time.Duration
-	logger *slog.Logger
-	broker *filetransfer.Broker
+	store   store.Store
+	clock   clock.Clock
+	resync  time.Duration
+	logger  *slog.Logger
+	broker  *filetransfer.Broker
+	objects objectstore.Store
 
 	mu       sync.Mutex
 	sessions map[string]*session // machineID -> session
@@ -55,6 +57,9 @@ func WithLogger(l *slog.Logger) Option { return func(s *Server) { s.logger = l }
 
 // WithBroker attaches the file-transfer correlation broker.
 func WithBroker(b *filetransfer.Broker) Option { return func(s *Server) { s.broker = b } }
+
+// WithObjectStore attaches the S3-compatible store used by ResolveArtifactSource.
+func WithObjectStore(o objectstore.Store) Option { return func(s *Server) { s.objects = o } }
 
 // New constructs a Server backed by st.
 func New(st store.Store, opts ...Option) *Server {

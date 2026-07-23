@@ -39,6 +39,9 @@ const (
 	AgentServiceEnrollProcedure = "/strategyplatform.v1.AgentService/Enroll"
 	// AgentServiceConnectProcedure is the fully-qualified name of the AgentService's Connect RPC.
 	AgentServiceConnectProcedure = "/strategyplatform.v1.AgentService/Connect"
+	// AgentServiceResolveArtifactSourceProcedure is the fully-qualified name of the AgentService's
+	// ResolveArtifactSource RPC.
+	AgentServiceResolveArtifactSourceProcedure = "/strategyplatform.v1.AgentService/ResolveArtifactSource"
 	// LeaseServiceAcquireProcedure is the fully-qualified name of the LeaseService's Acquire RPC.
 	LeaseServiceAcquireProcedure = "/strategyplatform.v1.LeaseService/Acquire"
 	// LeaseServiceRenewProcedure is the fully-qualified name of the LeaseService's Renew RPC.
@@ -47,12 +50,13 @@ const (
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	agentServiceServiceDescriptor       = v1.File_strategyplatform_v1_agent_service_proto.Services().ByName("AgentService")
-	agentServiceEnrollMethodDescriptor  = agentServiceServiceDescriptor.Methods().ByName("Enroll")
-	agentServiceConnectMethodDescriptor = agentServiceServiceDescriptor.Methods().ByName("Connect")
-	leaseServiceServiceDescriptor       = v1.File_strategyplatform_v1_agent_service_proto.Services().ByName("LeaseService")
-	leaseServiceAcquireMethodDescriptor = leaseServiceServiceDescriptor.Methods().ByName("Acquire")
-	leaseServiceRenewMethodDescriptor   = leaseServiceServiceDescriptor.Methods().ByName("Renew")
+	agentServiceServiceDescriptor                     = v1.File_strategyplatform_v1_agent_service_proto.Services().ByName("AgentService")
+	agentServiceEnrollMethodDescriptor                = agentServiceServiceDescriptor.Methods().ByName("Enroll")
+	agentServiceConnectMethodDescriptor               = agentServiceServiceDescriptor.Methods().ByName("Connect")
+	agentServiceResolveArtifactSourceMethodDescriptor = agentServiceServiceDescriptor.Methods().ByName("ResolveArtifactSource")
+	leaseServiceServiceDescriptor                     = v1.File_strategyplatform_v1_agent_service_proto.Services().ByName("LeaseService")
+	leaseServiceAcquireMethodDescriptor               = leaseServiceServiceDescriptor.Methods().ByName("Acquire")
+	leaseServiceRenewMethodDescriptor                 = leaseServiceServiceDescriptor.Methods().ByName("Renew")
 )
 
 // AgentServiceClient is a client for the strategyplatform.v1.AgentService service.
@@ -64,6 +68,11 @@ type AgentServiceClient interface {
 	// southbound commands are pushed back over this stream; the control plane
 	// never initiates an inbound connection to the agent.
 	Connect(context.Context) *connect.BidiStreamForClient[v1.AgentMessage, v1.ControlMessage]
+	// ResolveArtifactSource exchanges an s3:// catalog URI for a short-lived
+	// presigned HTTPS URL. Unary (not on the bidi ControlMessage stream) so the
+	// agent can correlate request/response without stream demux. Requires mTLS;
+	// the caller must have the artifact in its desired state.
+	ResolveArtifactSource(context.Context, *connect.Request[v1.ResolveArtifactSourceRequest]) (*connect.Response[v1.ResolveArtifactSourceResponse], error)
 }
 
 // NewAgentServiceClient constructs a client for the strategyplatform.v1.AgentService service. By
@@ -88,13 +97,20 @@ func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(agentServiceConnectMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		resolveArtifactSource: connect.NewClient[v1.ResolveArtifactSourceRequest, v1.ResolveArtifactSourceResponse](
+			httpClient,
+			baseURL+AgentServiceResolveArtifactSourceProcedure,
+			connect.WithSchema(agentServiceResolveArtifactSourceMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // agentServiceClient implements AgentServiceClient.
 type agentServiceClient struct {
-	enroll  *connect.Client[v1.EnrollRequest, v1.EnrollResponse]
-	connect *connect.Client[v1.AgentMessage, v1.ControlMessage]
+	enroll                *connect.Client[v1.EnrollRequest, v1.EnrollResponse]
+	connect               *connect.Client[v1.AgentMessage, v1.ControlMessage]
+	resolveArtifactSource *connect.Client[v1.ResolveArtifactSourceRequest, v1.ResolveArtifactSourceResponse]
 }
 
 // Enroll calls strategyplatform.v1.AgentService.Enroll.
@@ -107,6 +123,11 @@ func (c *agentServiceClient) Connect(ctx context.Context) *connect.BidiStreamFor
 	return c.connect.CallBidiStream(ctx)
 }
 
+// ResolveArtifactSource calls strategyplatform.v1.AgentService.ResolveArtifactSource.
+func (c *agentServiceClient) ResolveArtifactSource(ctx context.Context, req *connect.Request[v1.ResolveArtifactSourceRequest]) (*connect.Response[v1.ResolveArtifactSourceResponse], error) {
+	return c.resolveArtifactSource.CallUnary(ctx, req)
+}
+
 // AgentServiceHandler is an implementation of the strategyplatform.v1.AgentService service.
 type AgentServiceHandler interface {
 	// Bootstrap channel: token for cert. This RPC does not require an mTLS client
@@ -116,6 +137,11 @@ type AgentServiceHandler interface {
 	// southbound commands are pushed back over this stream; the control plane
 	// never initiates an inbound connection to the agent.
 	Connect(context.Context, *connect.BidiStream[v1.AgentMessage, v1.ControlMessage]) error
+	// ResolveArtifactSource exchanges an s3:// catalog URI for a short-lived
+	// presigned HTTPS URL. Unary (not on the bidi ControlMessage stream) so the
+	// agent can correlate request/response without stream demux. Requires mTLS;
+	// the caller must have the artifact in its desired state.
+	ResolveArtifactSource(context.Context, *connect.Request[v1.ResolveArtifactSourceRequest]) (*connect.Response[v1.ResolveArtifactSourceResponse], error)
 }
 
 // NewAgentServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -136,12 +162,20 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(agentServiceConnectMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentServiceResolveArtifactSourceHandler := connect.NewUnaryHandler(
+		AgentServiceResolveArtifactSourceProcedure,
+		svc.ResolveArtifactSource,
+		connect.WithSchema(agentServiceResolveArtifactSourceMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/strategyplatform.v1.AgentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AgentServiceEnrollProcedure:
 			agentServiceEnrollHandler.ServeHTTP(w, r)
 		case AgentServiceConnectProcedure:
 			agentServiceConnectHandler.ServeHTTP(w, r)
+		case AgentServiceResolveArtifactSourceProcedure:
+			agentServiceResolveArtifactSourceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -157,6 +191,10 @@ func (UnimplementedAgentServiceHandler) Enroll(context.Context, *connect.Request
 
 func (UnimplementedAgentServiceHandler) Connect(context.Context, *connect.BidiStream[v1.AgentMessage, v1.ControlMessage]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.AgentService.Connect is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) ResolveArtifactSource(context.Context, *connect.Request[v1.ResolveArtifactSourceRequest]) (*connect.Response[v1.ResolveArtifactSourceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.AgentService.ResolveArtifactSource is not implemented"))
 }
 
 // LeaseServiceClient is a client for the strategyplatform.v1.LeaseService service.

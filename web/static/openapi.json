@@ -1164,7 +1164,7 @@
           "action": {
             "type": "string",
             "title": "action",
-            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"SetSharedFiles\""
+            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"SetSharedFiles\" | \"ResolveArtifactSource\""
           },
           "machineId": {
             "type": "string",
