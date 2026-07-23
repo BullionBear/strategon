@@ -1,0 +1,80 @@
+# Weekly cleanup: keeps the KEEP most recent tagged releases and deletes
+# everything older — the GitHub Release, its git tag, and the matching
+# versioned image in GHCR (ghcr.io/bullionbear/strategon:vX.Y.Z).
+#
+# Deliberately does not touch:
+#   - preview images (main-<sha>, latest-dev) from every push to main — a
+#     separate, unbounded stream, not "releases"
+#   - the untagged per-arch manifests a multi-platform build leaves behind
+#     (linux/amd64, linux/arm64, attestations) — deleting one could break a
+#     still-kept manifest list that references it by digest; cleaning those
+#     up safely needs walking the manifest graph, which this job doesn't do
+name: prune-releases
+
+on:
+  schedule:
+    # Sunday 03:00 UTC — quiet hours, well clear of any deploy.
+    - cron: '0 3 * * 0'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  KEEP: 10
+  ORG: BullionBear
+  IMAGE_PACKAGE: strategon
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine releases to prune
+        id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Newest first (gh release list default order), published only.
+          mapfile -t TAGS < <(gh release list --repo "${{ github.repository }}" \
+            --limit 1000 --json tagName,isDraft --jq '.[] | select(.isDraft==false) | .tagName')
+          TOTAL=${#TAGS[@]}
+          echo "found $TOTAL published release(s), keeping newest $KEEP"
+          if (( TOTAL <= KEEP )); then
+            echo "nothing to prune"
+            : > /tmp/prune-tags.txt
+          else
+            printf '%s\n' "${TAGS[@]:$KEEP}" > /tmp/prune-tags.txt
+          fi
+          echo "--- pruning ---"
+          cat /tmp/prune-tags.txt
+
+      - name: Delete old GitHub Releases and their git tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "deleting release + tag: $tag"
+            gh release delete "$tag" --repo "${{ github.repository }}" --yes --cleanup-tag
+          done < /tmp/prune-tags.txt
+
+      - name: Delete matching GHCR image versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            id="$(gh api "orgs/${ORG}/packages/container/${IMAGE_PACKAGE}/versions" \
+              --paginate --jq ".[] | select(.metadata.container.tags[]? == \"${tag}\") | .id" \
+              | head -1)"
+            if [ -z "$id" ]; then
+              echo "no ghcr.io image version tagged $tag (already gone?) — skipping"
+              continue
+            fi
+            echo "deleting ghcr.io image version $id (tag: $tag)"
+            gh api -X DELETE "orgs/${ORG}/packages/container/${IMAGE_PACKAGE}/versions/${id}"
+          done < /tmp/prune-tags.txt
