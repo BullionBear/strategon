@@ -58,6 +58,10 @@ type Service struct {
 	Client  *http.Client
 	Logger  *slog.Logger
 	TempDir string
+
+	// GitHubAPIBase overrides https://api.github.com (tests).
+	GitHubAPIBase string
+	ghCache       *assetIDCache
 }
 
 // New constructs a Service with sensible defaults.
@@ -75,6 +79,7 @@ func New(cat Catalog, objs objectstore.Store, creds *Credentials, mode Mode, log
 		Mode:    mode,
 		Client:  &http.Client{Timeout: 30 * time.Minute},
 		Logger:  logger,
+		ghCache: newAssetIDCache(githubAssetCacheTTL),
 	}
 }
 
@@ -90,8 +95,15 @@ func (s *Service) NeedsIngest(uri string) bool {
 	case ModeAlways:
 		return true
 	default: // credentialed-only
-		_, ok := s.Creds.Lookup(uri)
-		return ok
+		if _, ok := s.Creds.Lookup(uri); ok {
+			return true
+		}
+		// Browser-form GitHub release URLs authenticate via api.github.com.
+		if _, ok := ParseGitHubReleaseURL(uri); ok {
+			_, ok = s.Creds.LookupHost(githubAPIHost)
+			return ok
+		}
+		return false
 	}
 }
 
@@ -104,13 +116,25 @@ func (s *Service) ValidateSource(uri string) error {
 	if err != nil {
 		return err
 	}
-	if _, ok := s.Creds.Lookup(uri); ok && u.Scheme != "https" {
+	if _, hasCred := s.credentialFor(uri); hasCred && u.Scheme != "https" {
 		return fmt.Errorf("ingest: credentialed sources require https:// (got %s)", u.Scheme)
 	}
 	if s.Objects == nil || s.Objects.Bucket() == "" {
 		return fmt.Errorf("ingest: s3 object store with --s3-bucket is required")
 	}
 	return nil
+}
+
+// credentialFor returns the host credential used for uri, including the
+// api.github.com bearer used for GitHub release browser URLs.
+func (s *Service) credentialFor(uri string) (HostCredential, bool) {
+	if cred, ok := s.Creds.Lookup(uri); ok {
+		return cred, true
+	}
+	if _, ok := ParseGitHubReleaseURL(uri); ok {
+		return s.Creds.LookupHost(githubAPIHost)
+	}
+	return HostCredential{}, false
 }
 
 // Start runs ingest in a background goroutine. Safe to call after writing PENDING.
@@ -215,6 +239,14 @@ func (s *Service) FailInterrupted() {
 }
 
 func (s *Service) download(ctx context.Context, rawURL string, dest *os.File) error {
+	// Private GitHub release assets need the API path; public browser URLs
+	// without api.github.com credentials fall through to a plain GET.
+	if ref, ok := ParseGitHubReleaseURL(rawURL); ok {
+		if cred, ok := s.Creds.LookupHost(githubAPIHost); ok {
+			return s.downloadGitHubRelease(ctx, ref, cred, dest)
+		}
+	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return err
