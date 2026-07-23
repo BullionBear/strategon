@@ -486,33 +486,43 @@ func (s *Server) SetSharedFiles(ctx context.Context, req *connect.Request[pb.Set
 				fmt.Errorf("duplicate shared file name %q", f.GetName()))
 		}
 		seen[f.GetName()] = struct{}{}
-		art, ok := s.store.GetArtifact(f.GetName(), f.GetArtifactVersion())
+		artName := f.GetArtifactName()
+		if artName == "" {
+			artName = f.GetName()
+		}
+		art, ok := s.store.GetArtifact(artName, f.GetArtifactVersion())
 		if !ok {
 			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("artifact %q version %q not registered", f.GetName(), f.GetArtifactVersion()))
+				fmt.Errorf("artifact %q version %q not registered", artName, f.GetArtifactVersion()))
+		}
+		if err := requireSHA256Digest(art.GetDigest()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("shared file %q: %w", f.GetName(), err))
 		}
 		specs = append(specs, &pb.SharedFileSpec{
 			Name:     f.GetName(),
 			Artifact: art,
 		})
 	}
-	sharedGen, _, err := s.store.SetSharedFiles(msg.GetMachineId(), specs)
+	sharedGen, _, changed, err := s.store.SetSharedFiles(msg.GetMachineId(), specs)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	names := make([]string, 0, len(specs))
-	for _, sp := range specs {
-		names = append(names, sp.GetName())
-	}
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp: timestamppb.Now(),
-		Actor:     auth.ActorFromContext(ctx),
-		Action:    "SetSharedFiles",
-		MachineId: msg.GetMachineId(),
-		Detail:    strings.Join(names, ","),
-	})
-	if s.agents != nil {
-		s.agents.Notify(msg.GetMachineId())
+	if changed {
+		names := make([]string, 0, len(specs))
+		for _, sp := range specs {
+			names = append(names, sp.GetName())
+		}
+		_ = s.store.AppendAudit(&pb.AuditEntry{
+			Timestamp: timestamppb.Now(),
+			Actor:     auth.ActorFromContext(ctx),
+			Action:    "SetSharedFiles",
+			MachineId: msg.GetMachineId(),
+			Detail:    strings.Join(names, ","),
+		})
+		if s.agents != nil {
+			s.agents.Notify(msg.GetMachineId())
+		}
 	}
 	return connect.NewResponse(&pb.SetSharedFilesResponse{Generation: sharedGen}), nil
 }
@@ -532,8 +542,17 @@ func (s *Server) ListSharedFiles(_ context.Context, req *connect.Request[pb.List
 			running[f.GetName()] = f
 		}
 	}
-	names := make([]string, 0, len(rec.SharedFiles))
+	// Union desired + status so agent-reported removal failures stay visible.
+	names := make([]string, 0, len(rec.SharedFiles)+len(running))
+	seen := map[string]struct{}{}
 	for n := range rec.SharedFiles {
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	for n := range running {
+		if _, ok := seen[n]; ok {
+			continue
+		}
 		names = append(names, n)
 	}
 	sort.Strings(names)
@@ -641,6 +660,9 @@ func (s *Server) ListAudit(_ context.Context, req *connect.Request[pb.ListAuditR
 
 func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.RegisterArtifactRequest]) (*connect.Response[pb.RegisterArtifactResponse], error) {
 	art := req.Msg.GetArtifact()
+	if err := requireSHA256Digest(art.GetDigest()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	if err := s.store.RegisterArtifact(art); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -657,6 +679,30 @@ func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.R
 func (s *Server) ListArtifacts(_ context.Context, req *connect.Request[pb.ListArtifactsRequest]) (*connect.Response[pb.ListArtifactsResponse], error) {
 	arts := s.store.ListArtifacts(req.Msg.GetName())
 	return connect.NewResponse(&pb.ListArtifactsResponse{Artifacts: arts}), nil
+}
+
+// requireSHA256Digest enforces the only digest algorithm the agent store
+// round-trips today (sha256: + hex). Other prefixes would disagree between
+// digestDirName and RunningSharedDigest.
+func requireSHA256Digest(digest string) error {
+	d := strings.TrimSpace(digest)
+	if d == "" {
+		return errors.New("digest is required")
+	}
+	lower := strings.ToLower(d)
+	if !strings.HasPrefix(lower, "sha256:") {
+		return fmt.Errorf("digest must use sha256: prefix, got %q", digest)
+	}
+	hexPart := d[len("sha256:"):]
+	if hexPart == "" {
+		return errors.New("sha256 digest is empty")
+	}
+	for _, c := range hexPart {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return fmt.Errorf("sha256 digest has non-hex character")
+		}
+	}
+	return nil
 }
 
 func defaultOrCloneSpec(existing *pb.StrategyAssignmentSpec, strategy string) *pb.StrategyAssignmentSpec {

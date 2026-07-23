@@ -149,12 +149,12 @@ func (m *Manager) LinkReleaseShared(strategy, version string) error {
 }
 
 // GCShared retains the currently-linked store entry plus the last retention-1
-// previous entries per shared-file name. Never deletes the live symlink target.
-// retention <= 0 means keep everything.
-func (m *Manager) GCShared(retention int) error {
-	if retention <= 0 {
-		return nil
-	}
+// previous entries per shared-file name that is still desired (keepNames).
+// Names absent from keepNames have all store entries removed (orphaned after
+// desired removal). Never deletes the live symlink target of a kept name.
+// retention <= 0 means keep everything for desired names (orphans still swept).
+// keepNames may be nil (treated as empty — sweep all store names).
+func (m *Manager) GCShared(retention int, keepNames map[string]struct{}) error {
 	storeDir := m.SharedStoreDir()
 	entries, err := os.ReadDir(storeDir)
 	if err != nil {
@@ -198,6 +198,17 @@ func (m *Manager) GCShared(retention int) error {
 		}
 	}
 	for name, list := range byName {
+		if _, desired := keepNames[name]; !desired {
+			// Name no longer desired: reclaim all store bytes (§3.2).
+			for _, e := range list {
+				_ = os.Remove(filepath.Join(storeDir, e.digestDir, name))
+				_ = os.Remove(filepath.Join(storeDir, e.digestDir))
+			}
+			continue
+		}
+		if retention <= 0 {
+			continue
+		}
 		live := digestDirName(m.RunningSharedDigest(name))
 		sort.Slice(list, func(i, j int) bool {
 			return list[i].modTime.After(list[j].modTime)

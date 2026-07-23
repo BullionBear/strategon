@@ -1,9 +1,11 @@
 // Package reconciler implements the agent's level-triggered convergence loop.
 // A single goroutine owns all mutable state and serializes
-// four event sources — new DesiredState, process exits, deploy-worker events,
-// and a unified tick — each of which runs the same path: update local state,
-// call reconcile(), diff desired vs actual, and act. There are no per-command
-// handlers; events are just "something changed, recompute" triggers.
+// event sources — new DesiredState, process exits, deploy-worker events,
+// shared-file fetch workers, health results, and a unified tick — each of
+// which runs the same path: update local state, call reconcile(), diff desired
+// vs actual, and act. There are no per-command handlers; events are just
+// "something changed, recompute" triggers. Shared-file HTTP fetches never run
+// on the main loop (same non-blocking invariant as deploy downloads).
 package reconciler
 
 import (
@@ -86,6 +88,7 @@ type Reconciler struct {
 	desiredCh chan *pb.DesiredState
 	exitCh    chan processExit
 	workerCh  chan workerEvent
+	sharedCh  chan sharedWorkerEvent
 	healthCh  chan healthResult
 
 	deps         Deps
@@ -125,9 +128,10 @@ func New(deps Deps) *Reconciler {
 		actual:        map[string]*strategyState{},
 		desiredShared: map[string]*pb.SharedFileSpec{},
 		sharedActual:  map[string]*sharedFileState{},
-		desiredCh:     make(chan *pb.DesiredState, 8),
-		exitCh:        make(chan processExit, 16),
-		workerCh:      make(chan workerEvent, 32),
+		desiredCh:    make(chan *pb.DesiredState, 8),
+		exitCh:       make(chan processExit, 16),
+		workerCh:     make(chan workerEvent, 32),
+		sharedCh:     make(chan sharedWorkerEvent, 32),
 		healthCh:     make(chan healthResult, 32),
 		deps:         deps,
 		tickInterval: tick,
@@ -189,6 +193,8 @@ func (r *Reconciler) Run(ctx context.Context) {
 			r.handleExit(ex)
 		case ev := <-r.workerCh:
 			r.applyWorkerEvent(ev)
+		case ev := <-r.sharedCh:
+			r.applySharedWorkerEvent(ev)
 		case hr := <-r.healthCh:
 			r.applyHealthResult(hr)
 		case now := <-tick.C():

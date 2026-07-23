@@ -120,7 +120,7 @@ func TestGCSharedRetainsLiveAndN(t *testing.T) {
 			t.Fatalf("switch %d: %v", i, err)
 		}
 	}
-	if err := mgr.GCShared(2); err != nil {
+	if err := mgr.GCShared(2, map[string]struct{}{name: {}}); err != nil {
 		t.Fatal(err)
 	}
 	// Live (last) must remain.

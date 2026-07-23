@@ -57,14 +57,14 @@ func TestSetSharedFilesGenerationAndDesired(t *testing.T) {
 		t.Fatal(err)
 	}
 	art, _ := s.GetArtifact("instruments.json", "v1")
-	sg1, dg1, err := s.SetSharedFiles("m1", []*pb.SharedFileSpec{
+	sg1, dg1, changed, err := s.SetSharedFiles("m1", []*pb.SharedFileSpec{
 		{Name: "instruments.json", Artifact: art},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sg1 != 1 || dg1 != 1 {
-		t.Fatalf("sharedGen=%d desiredGen=%d, want 1,1", sg1, dg1)
+	if !changed || sg1 != 1 || dg1 != 1 {
+		t.Fatalf("sharedGen=%d desiredGen=%d changed=%v, want 1,1,true", sg1, dg1, changed)
 	}
 	ds, _ := s.DesiredState("m1")
 	if ds.GetShared() == nil || ds.GetShared().GetGeneration() != 1 {
@@ -73,13 +73,23 @@ func TestSetSharedFilesGenerationAndDesired(t *testing.T) {
 	if len(ds.GetShared().GetFiles()) != 1 || ds.GetShared().GetFiles()[0].GetArtifact().GetDigest() != "sha256:aaa" {
 		t.Fatalf("files = %+v", ds.GetShared().GetFiles())
 	}
-	// Full replace to empty bumps generations again.
-	sg2, dg2, err := s.SetSharedFiles("m1", nil)
+	// Identical re-push is a no-op (no generation bump).
+	sgNoop, dgNoop, changed, err := s.SetSharedFiles("m1", []*pb.SharedFileSpec{
+		{Name: "instruments.json", Artifact: art},
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sg2 != 2 || dg2 != 2 {
-		t.Fatalf("after clear sharedGen=%d desiredGen=%d", sg2, dg2)
+	if changed || sgNoop != 1 || dgNoop != 1 {
+		t.Fatalf("noop should not bump: sharedGen=%d desiredGen=%d changed=%v", sgNoop, dgNoop, changed)
+	}
+	// Full replace to empty bumps generations again.
+	sg2, dg2, changed, err := s.SetSharedFiles("m1", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || sg2 != 2 || dg2 != 2 {
+		t.Fatalf("after clear sharedGen=%d desiredGen=%d changed=%v", sg2, dg2, changed)
 	}
 	ds, _ = s.DesiredState("m1")
 	if len(ds.GetShared().GetFiles()) != 0 {

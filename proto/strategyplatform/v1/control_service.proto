@@ -258,16 +258,22 @@ message GetMachineMetricsResponse {
 }
 
 // SetSharedFiles sets the full set of machine-level shared files (full overwrite,
-// mirroring SetSchedule semantics). Each entry references a registered artifact
-// whose catalog name equals the on-disk basename.
+// mirroring SetSchedule semantics). Each entry references a registered artifact.
 message SetSharedFilesRequest {
   string machine_id = 1;
   repeated SharedFileRef files = 2; // full replace
 }
 
 message SharedFileRef {
-  string name = 1;              // basename on disk, e.g. "instruments.json"
-  string artifact_version = 2;  // references registered artifact (name, version)
+  // On-disk basename under <base>/shared/, e.g. "instruments.json".
+  string name = 1;
+  // Version of the registered artifact to materialize.
+  string artifact_version = 2;
+  // Catalog name of the registered artifact. Empty means use `name` (the
+  // on-disk basename). Set explicitly when the catalog name differs from the
+  // landing basename (e.g. future archives: artifact "instruments.tar.gz"
+  // landing as "instruments").
+  string artifact_name = 3;
 }
 
 message SetSharedFilesResponse {

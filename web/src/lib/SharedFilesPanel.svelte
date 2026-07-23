@@ -15,13 +15,15 @@
 	let error = $state('');
 	let busy = $state(false);
 	let editing = $state(false);
-	let draftName = $state('');
+	let draftName = $state(''); // on-disk basename
+	let draftArtifactName = $state(''); // catalog name (empty => use draftName)
 	let draftVersion = $state('');
-	let draftRows = $state<{ name: string; version: string }[]>([]);
+	let draftRows = $state<{ name: string; version: string; artifactName?: string }[]>([]);
 
+	const catalogName = $derived(draftArtifactName || draftName);
 	const versionsForName = $derived(
 		artifacts
-			.filter((a) => a.name === draftName)
+			.filter((a) => a.name === catalogName)
 			.map((a) => a.version)
 			.filter((v, i, arr) => arr.indexOf(v) === i)
 	);
@@ -58,22 +60,32 @@
 	function beginEdit() {
 		draftRows = files.map((f) => ({ name: f.name, version: f.desiredVersion }));
 		draftName = '';
+		draftArtifactName = '';
 		draftVersion = '';
 		editing = true;
 		error = '';
 	}
 
 	function addRow() {
-		if (!draftName || !draftVersion) {
-			error = 'Name and version are required';
+		const art = draftArtifactName || draftName;
+		if (!draftName || !art || !draftVersion) {
+			error = 'On-disk name, artifact, and version are required';
 			return;
 		}
 		if (draftRows.some((r) => r.name === draftName)) {
 			error = `Duplicate name ${draftName}`;
 			return;
 		}
-		draftRows = [...draftRows, { name: draftName, version: draftVersion }];
+		draftRows = [
+			...draftRows,
+			{
+				name: draftName,
+				version: draftVersion,
+				artifactName: art !== draftName ? art : undefined
+			}
+		];
 		draftName = '';
+		draftArtifactName = '';
 		draftVersion = '';
 		error = '';
 	}
@@ -88,7 +100,11 @@
 		try {
 			await client.setSharedFiles({
 				machineId,
-				files: draftRows.map((r) => ({ name: r.name, artifactVersion: r.version }))
+				files: draftRows.map((r) => ({
+					name: r.name,
+					artifactVersion: r.version,
+					artifactName: r.artifactName ?? ''
+				}))
 			});
 			editing = false;
 			await load();
@@ -125,6 +141,9 @@
 					{#each draftRows as row (row.name)}
 						<li>
 							<span class="mono">{row.name}</span>
+							{#if row.artifactName}
+								<span class="muted mono">← {row.artifactName}</span>
+							{/if}
 							<span class="muted mono">@ {row.version}</span>
 							<button class="btn danger" type="button" onclick={() => removeRow(row.name)}>
 								Remove
@@ -135,9 +154,13 @@
 			{/if}
 			<div class="add">
 				<label>
-					<span class="lbl">Name</span>
-					<select bind:value={draftName}>
-						<option value="">— artifact name —</option>
+					<span class="lbl">On-disk name</span>
+					<input class="mono" bind:value={draftName} placeholder="instruments.json" />
+				</label>
+				<label>
+					<span class="lbl">Artifact</span>
+					<select bind:value={draftArtifactName}>
+						<option value="">— same as on-disk —</option>
 						{#each artifactNames as n}
 							<option value={n}>{n}</option>
 						{/each}
@@ -145,7 +168,7 @@
 				</label>
 				<label>
 					<span class="lbl">Version</span>
-					<select bind:value={draftVersion} disabled={!draftName}>
+					<select bind:value={draftVersion} disabled={!catalogName}>
 						<option value="">— version —</option>
 						{#each versionsForName as v}
 							<option value={v}>{v}</option>

@@ -188,12 +188,12 @@ func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	return nil
 }
 
-func (m *Memory) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, err error) {
+func (m *Memory) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error) {
 	m.mu.Lock()
 	rec, ok := m.machines[machineID]
 	if !ok {
 		m.mu.Unlock()
-		return 0, 0, fmt.Errorf("set shared files: unknown machine %s", machineID)
+		return 0, 0, false, fmt.Errorf("set shared files: unknown machine %s", machineID)
 	}
 	next := make(map[string]*pb.SharedFileSpec, len(files))
 	for _, f := range files {
@@ -202,6 +202,12 @@ func (m *Memory) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (s
 		}
 		next[f.GetName()] = proto.Clone(f).(*pb.SharedFileSpec)
 	}
+	if sharedFilesEqual(rec.SharedFiles, next) {
+		sharedGen = rec.SharedGeneration
+		desiredGen = rec.Generation
+		m.mu.Unlock()
+		return sharedGen, desiredGen, false, nil
+	}
 	rec.SharedFiles = next
 	rec.SharedGeneration++
 	rec.Generation++
@@ -209,7 +215,32 @@ func (m *Memory) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (s
 	desiredGen = rec.Generation
 	m.mu.Unlock()
 	m.notify(machineID)
-	return sharedGen, desiredGen, nil
+	return sharedGen, desiredGen, true, nil
+}
+
+// sharedFilesEqual compares name → artifact digest maps (version/uri ignored
+// for equality — digest is the content identity the agent converges on).
+func sharedFilesEqual(a, b map[string]*pb.SharedFileSpec) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name, sa := range a {
+		sb, ok := b[name]
+		if !ok {
+			return false
+		}
+		da, db := "", ""
+		if sa != nil && sa.GetArtifact() != nil {
+			da = sa.GetArtifact().GetDigest()
+		}
+		if sb != nil && sb.GetArtifact() != nil {
+			db = sb.GetArtifact().GetDigest()
+		}
+		if da != db {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Memory) ApplyHeartbeat(machineID string, hb *pb.Heartbeat, atUnix int64) error {

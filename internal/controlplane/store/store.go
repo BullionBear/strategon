@@ -83,10 +83,11 @@ type Store interface {
 	// bumps the machine generation. Returns the new generation.
 	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error)
 
-	// SetSharedFiles replaces the full set of machine-level shared files and
-	// bumps both shared_generation and machines.generation. files must carry
-	// resolved ArtifactRefs (digest + uri). Returns (sharedGen, desiredGen).
-	SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, err error)
+	// SetSharedFiles replaces the full set of machine-level shared files.
+	// When the desired set is unchanged (same names → digests), it is a no-op:
+	// generations are not bumped and notify is not fired. files must carry
+	// resolved ArtifactRefs (digest + uri). Returns (sharedGen, desiredGen, changed).
+	SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error)
 
 	// ApplyStatus records an agent-reported StatusReport. The report's
 	// Assignments are a full snapshot of strategies the agent still tracks;

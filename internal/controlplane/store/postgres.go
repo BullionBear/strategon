@@ -397,10 +397,27 @@ func (p *Postgres) SetAssignment(machineID, strategy string, spec *pb.StrategyAs
 	return gen, nil
 }
 
-func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, err error) {
+func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error) {
 	ctx, cancel := opCtx()
 	defer cancel()
 	now := time.Now().Unix()
+
+	// Diff against current desired set before opening a write transaction.
+	rec, ok := p.GetMachine(machineID)
+	if !ok {
+		return 0, 0, false, fmt.Errorf("set shared files: unknown machine %s", machineID)
+	}
+	next := make(map[string]*pb.SharedFileSpec, len(files))
+	for _, f := range files {
+		if f == nil || f.GetName() == "" {
+			continue
+		}
+		next[f.GetName()] = f
+	}
+	if sharedFilesEqual(rec.SharedFiles, next) {
+		return rec.SharedGeneration, rec.Generation, false, nil
+	}
+
 	err = p.inTx(ctx, func(tx pgx.Tx) error {
 		if err := requireMachine(ctx, tx, machineID, "set shared files"); err != nil {
 			return err
@@ -432,10 +449,10 @@ func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) 
 			machineID).Scan(&sharedGen, &desiredGen)
 	})
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, false, err
 	}
 	p.notify(machineID)
-	return sharedGen, desiredGen, nil
+	return sharedGen, desiredGen, true, nil
 }
 
 func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error {

@@ -2160,7 +2160,7 @@
         },
         "title": "SetSharedFilesRequest",
         "additionalProperties": false,
-        "description": "SetSharedFiles sets the full set of machine-level shared files (full overwrite,\n mirroring SetSchedule semantics). Each entry references a registered artifact\n whose catalog name equals the on-disk basename."
+        "description": "SetSharedFiles sets the full set of machine-level shared files (full overwrite,\n mirroring SetSchedule semantics). Each entry references a registered artifact."
       },
       "strategyplatform.v1.SetSharedFilesResponse": {
         "type": "object",
@@ -2184,12 +2184,17 @@
           "name": {
             "type": "string",
             "title": "name",
-            "description": "basename on disk, e.g. \"instruments.json\""
+            "description": "On-disk basename under \u003cbase\u003e/shared/, e.g. \"instruments.json\"."
           },
           "artifactVersion": {
             "type": "string",
             "title": "artifact_version",
-            "description": "references registered artifact (name, version)"
+            "description": "Version of the registered artifact to materialize."
+          },
+          "artifactName": {
+            "type": "string",
+            "title": "artifact_name",
+            "description": "Catalog name of the registered artifact. Empty means use `name` (the\n on-disk basename). Set explicitly when the catalog name differs from the\n landing basename (e.g. future archives: artifact \"instruments.tar.gz\"\n landing as \"instruments\")."
           }
         },
         "title": "SharedFileRef",

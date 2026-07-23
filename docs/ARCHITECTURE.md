@@ -155,13 +155,28 @@ independent of assignment generations. Operators set them via
 <base>/<strategy>/releases/<v>/shared -> ../../../shared
 ```
 
-Configs can reference `./shared/instruments.json` relative to the config
-file. For seq, set:
+Process `WorkDir` is `StrategyDir` = `<base>/<strategy>`, while the shared
+tree is reached via `releases/<v>/shared`. So a path like
+`./shared/instruments.json` resolves **only** for binaries that resolve
+relative paths against the **config file's directory** (not cwd). `seq`
+does this (`filepath.Join(filepath.Dir(path), cfg.Catalog.Instruments)`).
+A binary resolving relative to cwd would look under
+`<base>/<strategy>/shared/…` and miss. **Shared paths in config must be
+written relative to the config file, and the consuming binary must resolve
+them that way.**
+
+For seq, set:
 
 ```yaml
 catalog:
   instruments: ./shared/instruments.json
 ```
+
+`SharedFileRef.artifact_name` selects the catalog artifact; when empty it
+defaults to the on-disk `name`. Digests must use the `sha256:` prefix.
+Identical re-pushes of the same name→digest set are no-ops (no generation
+bump, no audit). Shared-file fetch runs off the reconciler loop (worker
+goroutine) so a slow URI cannot stall heartbeats or deploys.
 
 **Update semantics are next-start:** re-pointing the shared symlink does not
 reload running processes; the new content is seen on the next deploy,
@@ -176,18 +191,19 @@ plus `MachineSharedStatus` (per-file running digest / last_error).
 ### ArtifactRef
 
 Content-addressed binary (and optional config / shared file): `name`,
-`version`, `digest` (`sha256:…`), `uri`, `type`. Humans call
+`version`, `digest` (`sha256:…` only), `uri`, `type`. Humans call
 `RegisterArtifact`; `Deploy` / `SetSharedFiles` resolve a version to a
 concrete ref. The agent fetches the URI and verifies the digest. Supported
 URIs today: `http(s)`, `file://`, absolute path. For shared files the
-catalog **name** equals the on-disk basename (e.g. `instruments.json`).
+catalog name defaults to the on-disk basename but may differ via
+`SharedFileRef.artifact_name`.
 
 ### Generation and convergence
 
 - Every mutating assignment write bumps a monotonic **machine generation**.
 - `SetSharedFiles` bumps `shared_generation` and also `machines.generation`
-  so the southbound snapshot advances; `MachineSharedSpec.generation` is
-  reported independently in status.
+  only when the desired name→digest set actually changes; identical re-pushes
+  are no-ops. `MachineSharedSpec.generation` is reported independently in status.
 - `DesiredState.generation` is the whole southbound snapshot version.
 - Per-strategy `observed_generation` advances when that strategy matches
   desired digests and is `HEALTHY`.

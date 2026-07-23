@@ -411,7 +411,7 @@ func TestSetDeploymentSetsArgsEnvAndConfig(t *testing.T) {
 		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
 	}))
 	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
-		Artifact: &pb.ArtifactRef{Name: "s-config", Version: "c17", Digest: "sha256:cfg", Uri: "file:///c.yml"},
+		Artifact: &pb.ArtifactRef{Name: "s-config", Version: "c17", Digest: "sha256:c17", Uri: "file:///c.yml"},
 	}))
 
 	resp, err := client.SetDeployment(ctx, connect.NewRequest(&pb.SetDeploymentRequest{
@@ -631,6 +631,46 @@ func TestSetAndListSharedFiles(t *testing.T) {
 	if !list.Msg.GetFiles()[0].GetConverged() {
 		t.Fatal("expected converged after matching status")
 	}
+	// Identical re-push: no Notify, generation unchanged.
+	n1 := agents.n
+	resp2, err := client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files:     []*pb.SharedFileRef{{Name: "instruments.json", ArtifactVersion: "v1"}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp2.Msg.GetGeneration() != 1 || agents.n != n1 {
+		t.Fatalf("noop should not notify/bump: gen=%d notify=%d", resp2.Msg.GetGeneration(), agents.n-n1)
+	}
+	// artifact_name can differ from on-disk basename.
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "catalog-blob", Version: "v1", Digest: "sha256:bbb", Uri: "file:///tmp/blob.json",
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp3, err := client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
+		MachineId: "m1",
+		Files: []*pb.SharedFileRef{{
+			Name: "instruments.json", ArtifactVersion: "v1", ArtifactName: "catalog-blob",
+		}},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp3.Msg.GetGeneration() != 2 {
+		t.Fatalf("expected bump after catalog rename, gen=%d", resp3.Msg.GetGeneration())
+	}
+	list, err = client.ListSharedFiles(ctx, connect.NewRequest(&pb.ListSharedFilesRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Msg.GetFiles()[0].GetDesiredDigest() != "sha256:bbb" {
+		t.Fatalf("expected digest from artifact_name, got %+v", list.Msg.GetFiles()[0])
+	}
 	// Reject path separators.
 	_, err = client.SetSharedFiles(ctx, connect.NewRequest(&pb.SetSharedFilesRequest{
 		MachineId: "m1",
@@ -638,6 +678,15 @@ func TestSetAndListSharedFiles(t *testing.T) {
 	}))
 	if err == nil {
 		t.Fatal("expected invalid name")
+	}
+	// Reject non-sha256 digests at RegisterArtifact.
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "bad", Version: "v1", Digest: "md5:abc", Uri: "file:///tmp/x",
+		},
+	}))
+	if err == nil {
+		t.Fatal("expected reject non-sha256 digest")
 	}
 }
 

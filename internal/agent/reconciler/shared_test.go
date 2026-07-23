@@ -26,6 +26,18 @@ func sharedRef(t *testing.T, srcDir, name, body string) *pb.ArtifactRef {
 	}
 }
 
+// waitSharedWorker drains one shared fetch event and applies it on the main
+// path (unit tests call reconcile() without Run).
+func waitSharedWorker(t *testing.T, r *Reconciler) {
+	t.Helper()
+	select {
+	case ev := <-r.sharedCh:
+		r.applySharedWorkerEvent(ev)
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for shared worker event")
+	}
+}
+
 func TestReconcileSharedBeforeAssignments(t *testing.T) {
 	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
 	src := t.TempDir()
@@ -48,6 +60,7 @@ func TestReconcileSharedBeforeAssignments(t *testing.T) {
 	_ = mgr.SwitchTo("s", "v1")
 
 	r.reconcile()
+	waitSharedWorker(t, r)
 
 	if got := mgr.RunningSharedDigest("instruments.json"); got != ref.Digest {
 		t.Fatalf("shared not converged: got %q want %q", got, ref.Digest)
@@ -83,6 +96,7 @@ func TestReconcileSharedStaleDigestAndRemoval(t *testing.T) {
 		},
 	})
 	r.reconcile()
+	waitSharedWorker(t, r)
 	if mgr.RunningSharedDigest("instruments.json") != ref1.Digest {
 		t.Fatal("expected v1")
 	}
@@ -95,6 +109,7 @@ func TestReconcileSharedStaleDigestAndRemoval(t *testing.T) {
 		},
 	})
 	r.reconcile()
+	waitSharedWorker(t, r)
 	if got := mgr.RunningSharedDigest("instruments.json"); got != ref2.Digest {
 		t.Fatalf("stale re-converge: got %q want %q", got, ref2.Digest)
 	}
@@ -130,11 +145,61 @@ func TestReconcileSharedDigestMismatch(t *testing.T) {
 		},
 	})
 	r.reconcile()
+	waitSharedWorker(t, r)
 	if mgr.RunningSharedDigest("bad.json") != "" {
 		t.Fatal("must not switch on digest mismatch")
 	}
 	st := r.sharedActual["bad.json"]
 	if st == nil || st.lastError == "" {
 		t.Fatalf("expected last_error, got %+v", st)
+	}
+}
+
+func TestBuildSharedStatusReportsRemovalFailure(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	src := t.TempDir()
+	ref := sharedRef(t, src, "instruments.json", `x`)
+	r.applyDesired(&pb.DesiredState{
+		Generation: 1,
+		Shared: &pb.MachineSharedSpec{
+			Generation: 1,
+			Files:      []*pb.SharedFileSpec{{Name: "instruments.json", Artifact: ref}},
+		},
+	})
+	r.reconcile()
+	waitSharedWorker(t, r)
+
+	// Simulate a stuck removal: leave actual state with an error and no desired.
+	r.applyDesired(&pb.DesiredState{
+		Generation: 2,
+		Shared:     &pb.MachineSharedSpec{Generation: 2, Files: nil},
+	})
+	st := r.sharedActual["instruments.json"]
+	if st == nil {
+		t.Fatal("expected actual state")
+	}
+	// Make RemoveSharedLink fail by replacing the symlink with a non-empty dir
+	// of the same name (Remove returns EISDIR / not empty on some systems).
+	link := mgr.SharedLink("instruments.json")
+	_ = os.Remove(link)
+	if err := os.Mkdir(link, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(link, "blocker"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.reconcile()
+	status := r.buildSharedStatus()
+	if status == nil {
+		t.Fatal("expected status")
+	}
+	found := false
+	for _, f := range status.GetFiles() {
+		if f.GetName() == "instruments.json" && f.GetLastError() != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("removal failure must appear in status: %+v", status.GetFiles())
 	}
 }
