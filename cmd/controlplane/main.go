@@ -61,8 +61,8 @@ func run(logger *slog.Logger) error {
 	s3Endpoint := flag.String("s3-endpoint", "", "S3-compatible endpoint for artifact store (e.g. http://127.0.0.1:8333); empty disables ResolveArtifactSource")
 	s3Bucket := flag.String("s3-bucket", "", "default S3 bucket for artifact ingest (optional for ST-1 manual PutObject)")
 	s3Region := flag.String("s3-region", "us-east-1", "S3 region (SeaweedFS accepts any value)")
-	s3AccessKey := flag.String("s3-access-key", "", "S3 access key (pair with --s3-secret-key)")
-	s3SecretKey := flag.String("s3-secret-key", "", "S3 secret key")
+	s3AccessKey := flag.String("s3-access-key", "", "S3 access key (default: $STRATEGON_S3_ACCESS_KEY)")
+	s3SecretKey := flag.String("s3-secret-key", "", "S3 secret key (default: $STRATEGON_S3_SECRET_KEY); prefer the env var so the secret is not visible in process listings")
 
 	authMode := flag.String("auth-mode", "none", "human API auth: none|mock|discord (default none for local/CI)")
 	sessionSecret := flag.String("auth-session-secret", "", "HMAC secret for session cookies; random if empty")
@@ -133,13 +133,15 @@ func run(logger *slog.Logger) error {
 		grpcstream.WithLogger(logger),
 		grpcstream.WithBroker(broker),
 	}
-	if *s3Endpoint != "" || *s3AccessKey != "" || *s3SecretKey != "" {
+	s3AK := firstNonEmpty(*s3AccessKey, os.Getenv("STRATEGON_S3_ACCESS_KEY"))
+	s3SK := firstNonEmpty(*s3SecretKey, os.Getenv("STRATEGON_S3_SECRET_KEY"))
+	if *s3Endpoint != "" || s3AK != "" || s3SK != "" {
 		objs, err := objectstore.New(objectstore.Config{
 			Endpoint:  *s3Endpoint,
 			Bucket:    *s3Bucket,
 			Region:    *s3Region,
-			AccessKey: *s3AccessKey,
-			SecretKey: *s3SecretKey,
+			AccessKey: s3AK,
+			SecretKey: s3SK,
 		})
 		if err != nil {
 			return fmt.Errorf("s3 object store: %w", err)
@@ -263,6 +265,15 @@ func listenAgent(srv *http.Server, mtlsEnabled bool) error {
 		return srv.ListenAndServeTLS("", "")
 	}
 	return srv.ListenAndServe()
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // withCORS allows the local SvelteKit dev server to call the human API

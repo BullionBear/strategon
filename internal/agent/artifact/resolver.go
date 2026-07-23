@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/artifacturi"
+	"google.golang.org/protobuf/proto"
 )
 
 // ArtifactSourceClient is the ResolveArtifactSource RPC surface. Satisfied by
@@ -109,7 +110,9 @@ func (f ResolvingFetcher) Fetch(ctx context.Context, ref *pb.ArtifactRef, dest s
 	if err != nil {
 		return err
 	}
-	resolved := *ref
+	// proto.Clone — ArtifactRef embeds MessageState (sync.Mutex); a value
+	// copy fails go vet copylocks.
+	resolved := proto.Clone(ref).(*pb.ArtifactRef)
 	resolved.Uri = src.URL
-	return f.Inner.Fetch(ctx, &resolved, dest)
+	return f.Inner.Fetch(ctx, resolved, dest)
 }
