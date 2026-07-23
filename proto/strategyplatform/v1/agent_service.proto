@@ -163,6 +163,24 @@ message ControlMessage {
   }
 }
 
+// ResolveArtifactSourceRequest asks the control plane for a short-lived fetch
+// URL for a catalog artifact (name+version). Used when the catalog URI is
+// s3:// — the CP checks the caller's desired state and returns a presigned
+// HTTPS URL. Machine identity comes from the mTLS client certificate CN.
+message ResolveArtifactSourceRequest {
+  string name = 1;
+  string version = 2;
+}
+
+message ResolveArtifactSourceResponse {
+  string url = 1; // https presigned URL
+  google.protobuf.Timestamp expires_at = 2;
+  // Field 3 reserved for future per-fetch headers (HeaderSpec). Do not reuse.
+  // See design: Authenticated Artifact Sources §1.1 C-weak / §3.6.
+  reserved 3;
+  reserved "headers";
+}
+
 service AgentService {
   // Bootstrap channel: token for cert. This RPC does not require an mTLS client
   // certificate.
@@ -172,6 +190,13 @@ service AgentService {
   // southbound commands are pushed back over this stream; the control plane
   // never initiates an inbound connection to the agent.
   rpc Connect(stream AgentMessage) returns (stream ControlMessage);
+
+  // ResolveArtifactSource exchanges an s3:// catalog URI for a short-lived
+  // presigned HTTPS URL. Unary (not on the bidi ControlMessage stream) so the
+  // agent can correlate request/response without stream demux. Requires mTLS;
+  // the caller must have the artifact in its desired state.
+  rpc ResolveArtifactSource(ResolveArtifactSourceRequest)
+      returns (ResolveArtifactSourceResponse);
 }
 
 // LeaseService is the fencing-lease authority.

@@ -44,7 +44,7 @@ func (f HTTPFetcher) Fetch(ctx context.Context, ref *pb.ArtifactRef, dest string
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("http fetcher: get %q: unexpected status %s", ref.GetUri(), resp.Status)
+		return fmt.Errorf("http fetcher: get %q: %s", ref.GetUri(), httpStatusError(resp.StatusCode, resp.Status))
 	}
 	out, err := os.Create(dest)
 	if err != nil {
@@ -55,4 +55,19 @@ func (f HTTPFetcher) Fetch(ctx context.Context, ref *pb.ArtifactRef, dest string
 		return fmt.Errorf("http fetcher: copy %q -> %s: %w", ref.GetUri(), dest, err)
 	}
 	return nil
+}
+
+// httpStatusError turns common download failures into readable last_error text
+// so operators can tell credential / expired-URL problems from a bad URI.
+func httpStatusError(code int, status string) string {
+	switch code {
+	case http.StatusUnauthorized:
+		return "unauthorized (401) — credential rejected or missing"
+	case http.StatusForbidden:
+		return "forbidden (403) — access denied (expired URL or not permitted)"
+	case http.StatusNotFound:
+		return "not found (404) — URI missing or wrong"
+	default:
+		return "unexpected status " + status
+	}
 }

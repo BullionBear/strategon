@@ -114,14 +114,35 @@ type Store interface {
 	// ListAudit returns audit entries, newest first (optionally filtered).
 	ListAudit(machineID, strategy string) []*pb.AuditEntry
 
-	// RegisterArtifact upserts an artifact into the catalog (keyed by name+version).
+	// RegisterArtifact upserts an artifact into the catalog (keyed by name+version)
+	// with state READY. Prefer RegisterArtifactRecord when setting PENDING/FAILED.
 	RegisterArtifact(ref *pb.ArtifactRef) error
+
+	// RegisterArtifactRecord upserts a catalog row including ingest state.
+	RegisterArtifactRecord(rec *ArtifactRecord) error
 
 	// GetArtifact looks up a registered artifact by name and version.
 	GetArtifact(name, version string) (*pb.ArtifactRef, bool)
 
+	// GetArtifactRecord looks up a catalog row including ingest state.
+	GetArtifactRecord(name, version string) (*ArtifactRecord, bool)
+
 	// ListArtifacts returns registered artifacts, optionally filtered by name.
 	ListArtifacts(name string) []*pb.ArtifactRef
+
+	// ListArtifactRecords returns catalog rows (ref + state), newest-first per name.
+	ListArtifactRecords(name string) []*ArtifactRecord
+
+	// SetArtifactState updates ingest state/reason without changing the ArtifactRef.
+	SetArtifactState(name, version, state, reason string) error
+
+	// FinalizeIngest rewrites uri to newURI and marks READY when the row is still
+	// PENDING with the expected digest (guards against superseded re-registers).
+	FinalizeIngest(name, version, expectedDigest, newURI string) error
+
+	// FailPendingArtifacts marks every PENDING row FAILED with reason
+	// (used on control-plane restart; ingest is not resumed).
+	FailPendingArtifacts(reason string) (int, error)
 
 	// PreviousArtifact returns the artifact that was replaced by the last Deploy
 	// for the given machine/strategy (for empty-target Rollback).

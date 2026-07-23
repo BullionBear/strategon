@@ -11,16 +11,35 @@ import (
 // SchemeFetcher routes a Fetch to a concrete fetcher by the ArtifactRef URI
 // scheme: http(s) -> HTTP, file:// or a bare absolute path -> Local. This lets a
 // single agent pull binaries from GitHub Releases and from local paths without
-// the reconciler knowing which transport is in play.
+// the reconciler knowing which transport is in play. s3:// must be resolved to
+// https:// (see ResolvingFetcher / CPResolver) before reaching SchemeFetcher.
 type SchemeFetcher struct {
 	Local Fetcher
 	HTTP  Fetcher
 }
 
-// NewDefaultFetcher returns a SchemeFetcher wired with the production fetchers:
-// a local-filesystem copier and an http(s) downloader.
-func NewDefaultFetcher() SchemeFetcher {
+// NewSchemeFetcher returns a SchemeFetcher with the production local + HTTP
+// fetchers (no URI resolution).
+func NewSchemeFetcher() SchemeFetcher {
 	return SchemeFetcher{Local: LocalFetcher{}, HTTP: NewHTTPFetcher()}
+}
+
+// NewDefaultFetcher returns a ResolvingFetcher with PassthroughResolver over
+// the production SchemeFetcher. Production agents should prefer
+// NewResolvingFetcher(NewCPResolver(client)) so s3:// catalog URIs resolve.
+func NewDefaultFetcher() Fetcher {
+	return ResolvingFetcher{
+		Resolver: PassthroughResolver{},
+		Inner:    NewSchemeFetcher(),
+	}
+}
+
+// NewResolvingFetcher wraps the production SchemeFetcher with resolver.
+func NewResolvingFetcher(resolver SourceResolver) Fetcher {
+	if resolver == nil {
+		resolver = PassthroughResolver{}
+	}
+	return ResolvingFetcher{Resolver: resolver, Inner: NewSchemeFetcher()}
 }
 
 // Fetch dispatches by URI scheme.

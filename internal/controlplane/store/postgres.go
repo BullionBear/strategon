@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -718,6 +719,14 @@ func (p *Postgres) ListAudit(machineID, strategy string) []*pb.AuditEntry {
 // --- artifacts ---
 
 func (p *Postgres) RegisterArtifact(ref *pb.ArtifactRef) error {
+	return p.RegisterArtifactRecord(&ArtifactRecord{Ref: ref, State: ArtifactStateReady})
+}
+
+func (p *Postgres) RegisterArtifactRecord(rec *ArtifactRecord) error {
+	if rec == nil || rec.Ref == nil {
+		return fmt.Errorf("register artifact: record is required")
+	}
+	ref := rec.Ref
 	if ref.GetName() == "" || ref.GetVersion() == "" || ref.GetDigest() == "" {
 		return fmt.Errorf("register artifact: name, version, and digest are required")
 	}
@@ -727,6 +736,10 @@ func (p *Postgres) RegisterArtifact(ref *pb.ArtifactRef) error {
 	if err := artifacturi.Validate(ref.GetUri()); err != nil {
 		return fmt.Errorf("register artifact: %w", err)
 	}
+	state, err := NormalizeArtifactState(rec.State)
+	if err != nil {
+		return fmt.Errorf("register artifact: %w", err)
+	}
 	ctx, cancel := opCtx()
 	defer cancel()
 
@@ -734,7 +747,7 @@ func (p *Postgres) RegisterArtifact(ref *pb.ArtifactRef) error {
 	now := time.Now().UTC()
 	// Preserve created_at on re-register of the same name+version.
 	var existingAt time.Time
-	err := p.pool.QueryRow(ctx,
+	err = p.pool.QueryRow(ctx,
 		`SELECT created_at FROM artifacts WHERE name=$1 AND version=$2`,
 		ref.GetName(), ref.GetVersion()).Scan(&existingAt)
 	if err == nil && !existingAt.IsZero() {
@@ -748,19 +761,33 @@ func (p *Postgres) RegisterArtifact(ref *pb.ArtifactRef) error {
 	if err != nil {
 		return err
 	}
-	_, err = p.pool.Exec(ctx, `INSERT INTO artifacts (name, version, ref, created_at) VALUES ($1,$2,$3,$4)
-		ON CONFLICT (name, version) DO UPDATE SET ref=EXCLUDED.ref`,
-		cloned.GetName(), cloned.GetVersion(), b, now)
+	_, err = p.pool.Exec(ctx, `INSERT INTO artifacts (name, version, ref, created_at, state, state_reason)
+		VALUES ($1,$2,$3,$4,$5,$6)
+		ON CONFLICT (name, version) DO UPDATE SET
+			ref=EXCLUDED.ref,
+			state=EXCLUDED.state,
+			state_reason=EXCLUDED.state_reason`,
+		cloned.GetName(), cloned.GetVersion(), b, now, state, rec.StateReason)
 	return err
 }
 
 func (p *Postgres) GetArtifact(name, version string) (*pb.ArtifactRef, bool) {
+	rec, ok := p.GetArtifactRecord(name, version)
+	if !ok {
+		return nil, false
+	}
+	return rec.Ref, true
+}
+
+func (p *Postgres) GetArtifactRecord(name, version string) (*ArtifactRecord, bool) {
 	ctx, cancel := opCtx()
 	defer cancel()
 	var b []byte
 	var createdAt time.Time
-	err := p.pool.QueryRow(ctx, `SELECT ref, created_at FROM artifacts WHERE name=$1 AND version=$2`,
-		name, version).Scan(&b, &createdAt)
+	var state, reason string
+	err := p.pool.QueryRow(ctx,
+		`SELECT ref, created_at, state, state_reason FROM artifacts WHERE name=$1 AND version=$2`,
+		name, version).Scan(&b, &createdAt, &state, &reason)
 	if err != nil {
 		return nil, false
 	}
@@ -771,23 +798,37 @@ func (p *Postgres) GetArtifact(name, version string) (*pb.ArtifactRef, bool) {
 	if ref.GetCreatedAt() == nil && !createdAt.IsZero() {
 		ref.CreatedAt = timestamppb.New(createdAt)
 	}
-	return ref, true
+	if state == "" {
+		state = ArtifactStateReady
+	}
+	return &ArtifactRecord{Ref: ref, State: state, StateReason: reason}, true
 }
 
 func (p *Postgres) ListArtifacts(name string) []*pb.ArtifactRef {
+	recs := p.ListArtifactRecords(name)
+	out := make([]*pb.ArtifactRef, 0, len(recs))
+	for _, r := range recs {
+		out = append(out, r.Ref)
+	}
+	return out
+}
+
+func (p *Postgres) ListArtifactRecords(name string) []*ArtifactRecord {
 	ctx, cancel := opCtx()
 	defer cancel()
-	rows, err := p.pool.Query(ctx, `SELECT ref, created_at FROM artifacts WHERE ($1='' OR name=$1)
+	rows, err := p.pool.Query(ctx, `SELECT ref, created_at, state, state_reason FROM artifacts
+		WHERE ($1='' OR name=$1)
 		ORDER BY name ASC, created_at DESC, version ASC`, name)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
-	var out []*pb.ArtifactRef
+	var out []*ArtifactRecord
 	for rows.Next() {
 		var b []byte
 		var createdAt time.Time
-		if err := rows.Scan(&b, &createdAt); err != nil {
+		var state, reason string
+		if err := rows.Scan(&b, &createdAt, &state, &reason); err != nil {
 			return out
 		}
 		ref := &pb.ArtifactRef{}
@@ -797,9 +838,87 @@ func (p *Postgres) ListArtifacts(name string) []*pb.ArtifactRef {
 		if ref.GetCreatedAt() == nil && !createdAt.IsZero() {
 			ref.CreatedAt = timestamppb.New(createdAt)
 		}
-		out = append(out, ref)
+		if state == "" {
+			state = ArtifactStateReady
+		}
+		out = append(out, &ArtifactRecord{Ref: ref, State: state, StateReason: reason})
 	}
 	return out
+}
+
+func (p *Postgres) SetArtifactState(name, version, state, reason string) error {
+	state, err := NormalizeArtifactState(state)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+	tag, err := p.pool.Exec(ctx,
+		`UPDATE artifacts SET state=$3, state_reason=$4 WHERE name=$1 AND version=$2`,
+		name, version, state, reason)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("set artifact state: %s@%s not found", name, version)
+	}
+	return nil
+}
+
+func (p *Postgres) FinalizeIngest(name, version, expectedDigest, newURI string) error {
+	if err := artifacturi.Validate(newURI); err != nil {
+		return fmt.Errorf("finalize ingest: %w", err)
+	}
+	ctx, cancel := opCtx()
+	defer cancel()
+
+	tx, err := p.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var b []byte
+	var state string
+	err = tx.QueryRow(ctx,
+		`SELECT ref, state FROM artifacts WHERE name=$1 AND version=$2 FOR UPDATE`,
+		name, version).Scan(&b, &state)
+	if err != nil {
+		return fmt.Errorf("finalize ingest: %s@%s not found", name, version)
+	}
+	if state != ArtifactStatePending {
+		return fmt.Errorf("%w: %s@%s state is %s, want PENDING", ErrIngestSuperseded, name, version, state)
+	}
+	ref := &pb.ArtifactRef{}
+	if err := proto.Unmarshal(b, ref); err != nil {
+		return err
+	}
+	if !strings.EqualFold(ref.GetDigest(), expectedDigest) {
+		return fmt.Errorf("%w: %s@%s digest changed during ingest", ErrIngestSuperseded, name, version)
+	}
+	ref.Uri = newURI
+	nb, err := proto.Marshal(ref)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE artifacts SET ref=$3, state=$4, state_reason='' WHERE name=$1 AND version=$2`,
+		name, version, nb, ArtifactStateReady); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func (p *Postgres) FailPendingArtifacts(reason string) (int, error) {
+	ctx, cancel := opCtx()
+	defer cancel()
+	tag, err := p.pool.Exec(ctx,
+		`UPDATE artifacts SET state=$1, state_reason=$2 WHERE state=$3`,
+		ArtifactStateFailed, reason, ArtifactStatePending)
+	if err != nil {
+		return 0, err
+	}
+	return int(tag.RowsAffected()), nil
 }
 
 func (p *Postgres) PreviousArtifact(machineID, strategy string) (*pb.ArtifactRef, bool) {

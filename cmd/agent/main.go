@@ -81,7 +81,8 @@ func main() {
 	defer stop()
 
 	out := make(chan *pb.AgentMessage, 128)
-	artifacts := artifact.NewManager(*base, artifact.NewDefaultFetcher())
+	agentClient := strategyplatformv1connect.NewAgentServiceClient(httpClient, *controlURL, connect.WithGRPC())
+	artifacts := artifact.NewManager(*base, artifact.NewResolvingFetcher(artifact.NewCPResolver(agentClient)))
 	rec := reconciler.New(reconciler.Deps{
 		Driver:          driver.NewExecDriver(*cgroupRoot),
 		Artifacts:       artifacts,
@@ -127,7 +128,7 @@ func main() {
 			AgentBuildVersion: buildinfo.Version,
 			Spec:              hostSpec(*region, *zone),
 		},
-		Client:      strategyplatformv1connect.NewAgentServiceClient(httpClient, *controlURL, connect.WithGRPC()),
+		Client:      agentClient,
 		Out:         out,
 		Submit:      rec.SubmitDesired,
 		ObservedGen: rec.ObservedGeneration,

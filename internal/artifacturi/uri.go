@@ -1,9 +1,10 @@
 // Package artifacturi resolves and validates artifact URIs used by
 // RegisterArtifact and the agent fetchers. Supported sources: http(s) URLs
-// (e.g. a GitHub Releases asset), file:///abs/path, or a bare absolute path.
-// Integrity is enforced separately by the agent, which re-hashes the fetched
-// bytes against ref.digest before switching, so the transport is untrusted.
-// S3/MinIO URIs are a deferred follow-up.
+// (e.g. a GitHub Releases asset), s3://bucket/key (resolved by the control
+// plane to a short-lived presigned HTTPS URL), file:///abs/path, or a bare
+// absolute path. Integrity is enforced separately by the agent, which
+// re-hashes the fetched bytes against ref.digest before switching, so the
+// transport is untrusted.
 package artifacturi
 
 import (
@@ -18,9 +19,45 @@ func IsHTTP(uri string) bool {
 	return strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://")
 }
 
+// IsS3 reports whether uri is an s3://bucket/key object reference.
+func IsS3(uri string) bool {
+	return strings.HasPrefix(uri, "s3://")
+}
+
+// S3Object is the bucket + key parsed from an s3:// URI.
+type S3Object struct {
+	Bucket string
+	Key    string
+}
+
+// ParseS3 splits an s3://bucket/key URI into bucket and object key.
+// The key may contain slashes; a trailing slash-only key is rejected.
+func ParseS3(uri string) (S3Object, error) {
+	if !IsS3(uri) {
+		return S3Object{}, fmt.Errorf("not an s3 uri: %q", uri)
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return S3Object{}, fmt.Errorf("parse uri %q: %w", uri, err)
+	}
+	bucket := u.Host
+	if bucket == "" {
+		return S3Object{}, fmt.Errorf("uri %q has no bucket", uri)
+	}
+	key := strings.TrimPrefix(u.Path, "/")
+	if key == "" {
+		return S3Object{}, fmt.Errorf("uri %q has no object key", uri)
+	}
+	if strings.Contains(key, "//") || strings.HasPrefix(key, "/") {
+		return S3Object{}, fmt.Errorf("uri %q has invalid object key", uri)
+	}
+	return S3Object{Bucket: bucket, Key: key}, nil
+}
+
 // Validate checks that uri is a supported artifact source without fetching it:
-// an http(s) URL with a host, a file URL with an absolute path, or a bare
-// absolute path. Used by RegisterArtifact to reject bad URIs at catalog time.
+// an http(s) URL with a host, an s3://bucket/key, a file URL with an absolute
+// path, or a bare absolute path. Used by RegisterArtifact to reject bad URIs
+// at catalog time.
 func Validate(uri string) error {
 	if uri == "" {
 		return fmt.Errorf("empty uri")
@@ -34,6 +71,10 @@ func Validate(uri string) error {
 			return fmt.Errorf("uri %q has no host", uri)
 		}
 		return nil
+	}
+	if IsS3(uri) {
+		_, err := ParseS3(uri)
+		return err
 	}
 	_, err := ResolveLocal(uri)
 	return err

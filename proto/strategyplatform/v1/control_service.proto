@@ -161,7 +161,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "SetSharedFiles"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "SetSharedFiles" | "ResolveArtifactSource"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -225,8 +225,20 @@ message ListArtifactsRequest {
   string name = 1; // optional filter; empty = all
 }
 
+// ArtifactCatalogEntry is the catalog-layer view of a registered artifact.
+// Ingest state lives here — not on ArtifactRef — so PENDING/FAILED never
+// flow into DesiredState / assignment status.
+message ArtifactCatalogEntry {
+  ArtifactRef artifact = 1;
+  // PENDING | READY | FAILED
+  string state = 2;
+  string state_reason = 3;
+}
+
 message ListArtifactsResponse {
+  // Refs only (no ingest state). Prefer entries for UI; kept for older clients.
   repeated ArtifactRef artifacts = 1;
+  repeated ArtifactCatalogEntry entries = 2;
 }
 
 // Control-plane binary build metadata (display only; not stored).

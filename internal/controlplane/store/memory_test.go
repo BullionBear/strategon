@@ -130,6 +130,12 @@ func TestRegisterArtifactRejectsRelativeFileURI(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("https URI should be accepted: %v", err)
 	}
+	if err := s.RegisterArtifact(&pb.ArtifactRef{
+		Name: "s", Version: "v3", Digest: "sha256:ccc",
+		Uri: "s3://artifacts/s/v3/ccc",
+	}); err != nil {
+		t.Fatalf("s3 URI should be accepted: %v", err)
+	}
 }
 
 func TestRegisterArtifactSetsCreatedAtAndListsNewestFirst(t *testing.T) {

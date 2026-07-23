@@ -26,7 +26,9 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/api"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/grpcstream"
+	"github.com/bullionbear/strategon/internal/controlplane/ingest"
 	cpLease "github.com/bullionbear/strategon/internal/controlplane/lease"
+	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/mtls"
 	"github.com/bullionbear/strategon/internal/webassets"
@@ -56,6 +58,14 @@ func run(logger *slog.Logger) error {
 	tlsKey := flag.String("tls-key", "", "AgentService TLS private key (PEM)")
 	clientCA := flag.String("client-ca", "", "CA PEM used to verify agent client certificates")
 	leaseMarginCP := flag.Duration("lease-margin-cp", store.DefaultLeaseMarginCP, "control-plane lease expiry margin")
+
+	s3Endpoint := flag.String("s3-endpoint", "", "S3-compatible endpoint for artifact store (e.g. http://127.0.0.1:8333); empty disables ResolveArtifactSource")
+	s3Bucket := flag.String("s3-bucket", "", "default S3 bucket for artifact ingest (optional for ST-1 manual PutObject)")
+	s3Region := flag.String("s3-region", "us-east-1", "S3 region (SeaweedFS accepts any value)")
+	s3AccessKey := flag.String("s3-access-key", "", "S3 access key (default: $STRATEGON_S3_ACCESS_KEY)")
+	s3SecretKey := flag.String("s3-secret-key", "", "S3 secret key (default: $STRATEGON_S3_SECRET_KEY); prefer the env var so the secret is not visible in process listings")
+	artifactCreds := flag.String("artifact-credentials", "", "path to credentials.yaml for registration-time artifact ingest (per-host tokens via env vars)")
+	ingestModeFlag := flag.String("ingest-mode", "credentialed-only", "artifact ingest mode: credentialed-only|always")
 
 	authMode := flag.String("auth-mode", "none", "human API auth: none|mock|discord (default none for local/CI)")
 	sessionSecret := flag.String("auth-session-secret", "", "HMAC secret for session cookies; random if empty")
@@ -121,9 +131,49 @@ func run(logger *slog.Logger) error {
 	go authSvc.RunTokenFlusher(ctx, auth.DefaultTokenFlushInterval)
 
 	broker := filetransfer.New()
-	agentSrv := grpcstream.New(st, grpcstream.WithResync(*resync), grpcstream.WithLogger(logger), grpcstream.WithBroker(broker))
+	agentOpts := []grpcstream.Option{
+		grpcstream.WithResync(*resync),
+		grpcstream.WithLogger(logger),
+		grpcstream.WithBroker(broker),
+	}
+	s3AK := firstNonEmpty(*s3AccessKey, os.Getenv("STRATEGON_S3_ACCESS_KEY"))
+	s3SK := firstNonEmpty(*s3SecretKey, os.Getenv("STRATEGON_S3_SECRET_KEY"))
+	var objs objectstore.Store
+	if *s3Endpoint != "" || s3AK != "" || s3SK != "" {
+		var err error
+		objs, err = objectstore.New(objectstore.Config{
+			Endpoint:  *s3Endpoint,
+			Bucket:    *s3Bucket,
+			Region:    *s3Region,
+			AccessKey: s3AK,
+			SecretKey: s3SK,
+		})
+		if err != nil {
+			return fmt.Errorf("s3 object store: %w", err)
+		}
+		agentOpts = append(agentOpts, grpcstream.WithObjectStore(objs))
+		logger.Info("s3 object store enabled", "endpoint", *s3Endpoint, "bucket", *s3Bucket, "region", *s3Region)
+	}
+	agentSrv := grpcstream.New(st, agentOpts...)
 	leaseSrv := cpLease.New(st, logger)
 	humanSrv := api.NewWithBroker(st, hub, agentSrv, broker, logger)
+
+	ingestMode, err := ingest.ParseMode(*ingestModeFlag)
+	if err != nil {
+		return err
+	}
+	creds, err := ingest.LoadCredentials(*artifactCreds)
+	if err != nil {
+		return err
+	}
+	if objs != nil {
+		ingestSvc := ingest.New(st, objs, creds, ingestMode, logger)
+		ingestSvc.FailInterrupted()
+		humanSrv.WithIngest(ingestSvc)
+		logger.Info("artifact ingest enabled", "mode", ingestMode, "credentials", *artifactCreds != "")
+	} else if *artifactCreds != "" {
+		logger.Warn("artifact-credentials set but s3 object store is not configured; ingest disabled")
+	}
 
 	agentMux := http.NewServeMux()
 	agentPath, agentHandler := strategyplatformv1connect.NewAgentServiceHandler(agentSrv)
@@ -237,6 +287,15 @@ func listenAgent(srv *http.Server, mtlsEnabled bool) error {
 		return srv.ListenAndServeTLS("", "")
 	}
 	return srv.ListenAndServe()
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // withCORS allows the local SvelteKit dev server to call the human API
