@@ -134,6 +134,26 @@ func TestGCSharedRetainsLiveAndN(t *testing.T) {
 	}
 }
 
+func TestGCSharedSweepsOrphanPartial(t *testing.T) {
+	base := t.TempDir()
+	mgr := NewManager(base, LocalFetcher{})
+	digestDir := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	sub := filepath.Join(mgr.SharedStoreDir(), digestDir)
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	partial := filepath.Join(sub, "instruments.json.partial")
+	if err := os.WriteFile(partial, []byte("truncated"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.GCShared(2, map[string]struct{}{"instruments.json": {}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(partial); !os.IsNotExist(err) {
+		t.Fatalf("orphan .partial should be swept, err=%v", err)
+	}
+}
+
 func TestGCSharedPrefersFetchedAtOverMtime(t *testing.T) {
 	src := t.TempDir()
 	base := t.TempDir()

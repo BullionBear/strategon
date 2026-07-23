@@ -241,7 +241,8 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 // reconcile is the sole convergence entry point.
 func (r *Reconciler) reconcile() {
 	// Initiate shared convergence first; assignment start/deploy is gated on
-	// sharedConverged so a fresh machine does not start before the catalog lands.
+	// sharedPresent (absent only) so a fresh machine does not start before the
+	// catalog lands — stale digests do not freeze the machine.
 	r.reconcileShared()
 	for name, spec := range r.desired {
 		st := r.actual[name]

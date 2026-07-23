@@ -191,11 +191,12 @@ finishes and orders retention by recorded install time (not mtime).
 reload running processes; the new content is seen on the next deploy,
 restart, or crash-recovery start. The reconciler *initiates* shared
 convergence before walking assignments, and **gates** `beginDeploy` /
-`startProcess` until every desired shared file is live at its desired
-digest (`WaitingForShared`). That restores first-boot ordering after the
-async-fetch change: a fresh machine will not start a strategy whose config
-points at a not-yet-fetched catalog. Crash-loop remains a backstop for
-runtime open failures, not the primary first-boot path.
+`startProcess` only while a desired shared file is still **absent**
+(`WaitingForShared` — never landed). A stale digest (old live copy while a
+new version is fetching or failing) does **not** block starts: keeping the
+previous copy is exactly next-start semantics, and blocking on stale would
+freeze every strategy on the machine when one bad shared URI fails. Crash-loop
+remains a backstop for runtime open failures.
 
 **Status** (`status.proto` / `StatusReport`) is what the agent reports:
 `DeployPhase`, running artifacts, conditions, pid, `observed_generation`,

@@ -64,21 +64,21 @@ func TestReconcileSharedBeforeAssignments(t *testing.T) {
 
 	// First pass: fetch is initiated but not yet applied — assignment must not start.
 	r.reconcile()
-	if r.sharedConverged() {
-		t.Fatal("shared should not be converged before worker completes")
+	if r.sharedPresent() {
+		t.Fatal("shared should be absent before worker completes")
 	}
 	if fd.starts() != 0 {
-		t.Fatalf("assignment started before shared converged: %d starts", fd.starts())
+		t.Fatalf("assignment started before shared present: %d starts", fd.starts())
 	}
 
 	waitSharedWorker(t, r)
 	r.reconcile()
 
 	if got := mgr.RunningSharedDigest("instruments.json"); got != ref.Digest {
-		t.Fatalf("shared not converged: got %q want %q", got, ref.Digest)
+		t.Fatalf("shared not present: got %q want %q", got, ref.Digest)
 	}
 	if fd.starts() == 0 {
-		t.Fatal("expected assignment start after shared converged")
+		t.Fatal("expected assignment start after shared present")
 	}
 	st := r.buildSharedStatus()
 	if st == nil || st.GetObservedGeneration() != 1 || len(st.GetFiles()) != 1 {
@@ -86,6 +86,71 @@ func TestReconcileSharedBeforeAssignments(t *testing.T) {
 	}
 	if st.GetFiles()[0].GetRunningDigest() != ref.Digest || st.GetFiles()[0].GetLastError() != "" {
 		t.Fatalf("file status = %+v", st.GetFiles()[0])
+	}
+}
+
+func TestSharedGateAllowsStaleDigest(t *testing.T) {
+	r, fd, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	src := t.TempDir()
+	ref1 := sharedRef(t, src, "instruments.json", `v1`)
+	path2 := filepath.Join(src, "instruments-v2.json")
+	if err := os.WriteFile(path2, []byte(`v2`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Bad digest so the v2 fetch fails and stays stale forever.
+	ref2 := &pb.ArtifactRef{
+		Name: "instruments.json", Version: "v2",
+		Digest: "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+		Uri:    "file://" + path2,
+	}
+
+	r.applyDesired(&pb.DesiredState{
+		Generation: 1,
+		Shared: &pb.MachineSharedSpec{
+			Generation: 1,
+			Files:      []*pb.SharedFileSpec{{Name: "instruments.json", Artifact: ref1}},
+		},
+		Assignments: []*pb.StrategyAssignmentSpec{
+			assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5}),
+		},
+	})
+	seedRelease(t, mgr, "s", "v1")
+	_ = mgr.SwitchTo("s", "v1")
+	ast := newStrategyState("s")
+	ast.runningArtifact = artRef("v1", "sha256:aaa")
+	r.actual["s"] = ast
+
+	r.reconcile()
+	waitSharedWorker(t, r)
+	r.reconcile()
+	startsAfterV1 := fd.starts()
+	if startsAfterV1 == 0 {
+		t.Fatal("expected start once v1 is present")
+	}
+
+	// Push a broken v2: running stays v1 (stale). Starts must still be allowed.
+	r.applyDesired(&pb.DesiredState{
+		Generation: 2,
+		Shared: &pb.MachineSharedSpec{
+			Generation: 2,
+			Files:      []*pb.SharedFileSpec{{Name: "instruments.json", Artifact: ref2}},
+		},
+		Assignments: []*pb.StrategyAssignmentSpec{
+			assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5}),
+		},
+	})
+	// Simulate crash: process gone, same desired version → startProcess path.
+	ast.proc = nil
+	ast.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	r.reconcile()
+	waitSharedWorker(t, r) // digest mismatch failure
+	if !r.sharedPresent() {
+		t.Fatal("stale v1 must count as present")
+	}
+	r.reconcile()
+	if fd.starts() <= startsAfterV1 {
+		t.Fatalf("stale shared must not block crash restart; starts before=%d after=%d",
+			startsAfterV1, fd.starts())
 	}
 }
 

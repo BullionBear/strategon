@@ -299,7 +299,46 @@ func (m *Manager) GCShared(retention int, keepNames map[string]struct{}) error {
 			removeSharedStoreEntry(storeDir, e.digestDir, name)
 		}
 	}
+	// Reclaim cancel leftovers: .partial (and orphan .fetched_at) that never
+	// got a final blob, so byName never saw the name.
+	sweepSharedPartials(storeDir)
 	return nil
+}
+
+// sweepSharedPartials removes leftover .partial files and orphan .fetched_at
+// sidecars under every digest dir, then drops empty digest dirs.
+func sweepSharedPartials(storeDir string) {
+	entries, err := os.ReadDir(storeDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		sub := filepath.Join(storeDir, e.Name())
+		files, err := os.ReadDir(sub)
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			if f.IsDir() {
+				continue
+			}
+			name := f.Name()
+			path := filepath.Join(sub, name)
+			switch {
+			case strings.HasSuffix(name, ".partial"):
+				_ = os.Remove(path)
+			case strings.HasSuffix(name, fetchedAtSuffix):
+				base := strings.TrimSuffix(name, fetchedAtSuffix)
+				if _, err := os.Stat(filepath.Join(sub, base)); os.IsNotExist(err) {
+					_ = os.Remove(path)
+				}
+			}
+		}
+		_ = os.Remove(sub) // only if empty
+	}
 }
 
 func removeSharedStoreEntry(storeDir, digestDir, name string) {

@@ -77,7 +77,7 @@ const maxSharedFetches = 4
 // reconcileShared initiates machine-level shared-file convergence.
 // Fetch/verify runs in a worker goroutine (same non-blocking pattern as deploy)
 // so a hung artifact endpoint cannot stall the reconciler loop. Assignment
-// starts/deploys are gated separately via sharedConverged until digests are live.
+// starts/deploys are gated separately via sharedPresent (absent only, not stale).
 func (r *Reconciler) reconcileShared() {
 	if r.deps.Artifacts == nil {
 		return
@@ -166,29 +166,24 @@ func (r *Reconciler) reconcileShared() {
 	_ = r.deps.Artifacts.GCShared(retention, keep)
 }
 
-// sharedConverged reports whether every desired shared file is live at its
-// desired digest with no in-flight fetch. Empty desired set is trivially ready.
-// Used to gate beginDeploy / startProcess so a fresh machine does not start a
-// strategy whose config points at a not-yet-fetched shared file.
-func (r *Reconciler) sharedConverged() bool {
+// sharedPresent reports whether every desired shared file has *some* live
+// symlink (any digest). Used to gate beginDeploy / startProcess on a fresh
+// machine so a strategy does not start against a not-yet-fetched catalog.
+//
+// Stale digests (running != want) do NOT block: next-start semantics already
+// allow processes to keep using the previous copy, and blocking on stale would
+// freeze the whole machine when one bad SetSharedFiles URI fails to land.
+// Empty desired digests are ignored here (surfaced via shared status/backoff);
+// they must not permanently freeze starts.
+func (r *Reconciler) sharedPresent() bool {
 	if len(r.desiredShared) == 0 {
 		return true
 	}
 	if r.deps.Artifacts == nil {
 		return false
 	}
-	for name, spec := range r.desiredShared {
-		want := ""
-		if spec.GetArtifact() != nil {
-			want = spec.GetArtifact().GetDigest()
-		}
-		if want == "" {
-			return false
-		}
+	for name := range r.desiredShared {
 		st := r.sharedActual[name]
-		if st != nil && st.inflight != nil {
-			return false
-		}
 		running := ""
 		if st != nil {
 			running = st.runningDigest
@@ -196,8 +191,8 @@ func (r *Reconciler) sharedConverged() bool {
 		if running == "" {
 			running = r.deps.Artifacts.RunningSharedDigest(name)
 		}
-		if !digestsEqual(running, want) {
-			return false
+		if running == "" {
+			return false // never landed
 		}
 	}
 	return true
@@ -206,13 +201,13 @@ func (r *Reconciler) sharedConverged() bool {
 // awaitSharedReady returns true when starts/deploys may proceed. When false it
 // emits a one-shot WaitingForShared warning per shared generation.
 func (r *Reconciler) awaitSharedReady(st *strategyState) bool {
-	if r.sharedConverged() {
+	if r.sharedPresent() {
 		return true
 	}
 	if st.warnedWaitingShared != r.sharedGeneration {
 		st.warnedWaitingShared = r.sharedGeneration
 		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_WARNING, "WaitingForShared",
-			"deferring start until machine shared files converge")
+			"deferring start until machine shared files are present on disk")
 	}
 	return false
 }
