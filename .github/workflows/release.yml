@@ -107,6 +107,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - uses: actions/checkout@v4
       - name: Add deploy key
         run: |
           mkdir -p ~/.ssh
@@ -122,6 +123,15 @@ jobs:
         run: |
           echo "$TOKEN" | ssh -o BatchMode=yes "root@${HOST}" \
             "docker login ghcr.io -u ${{ github.actor }} --password-stdin"
+      # repo is the source of truth for the compose file itself; only secrets
+      # (.env) are host-owned state. No credentials live in this file, so
+      # overwriting it outright is safe.
+      - name: Sync docker-compose.yml
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          scp -o BatchMode=yes deploy/docker-compose.yml \
+            "root@${HOST}:/opt/strategon/deploy/docker-compose.yml"
       - name: Pull and restart
         env:
           HOST: ${{ secrets.DEPLOY_HOST }}
