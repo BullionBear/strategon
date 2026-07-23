@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -86,6 +88,105 @@ func TestListArtifactsIncludesState(t *testing.T) {
 	}
 	if len(resp.Msg.GetArtifacts()) != 1 {
 		t.Fatal("artifacts field should still be populated")
+	}
+}
+
+func TestRollbackTargetVersionRequiresReady(t *testing.T) {
+	st := store.NewMemory(nil)
+	_, _ = st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	_ = st.RegisterArtifactRecord(&store.ArtifactRecord{
+		Ref: &pb.ArtifactRef{
+			Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a",
+		},
+		State: store.ArtifactStateReady,
+	})
+	_ = st.RegisterArtifactRecord(&store.ArtifactRecord{
+		Ref: &pb.ArtifactRef{
+			Name: "s", Version: "v2", Digest: "sha256:bbb", Uri: "https://example.com/b",
+		},
+		State: store.ArtifactStatePending,
+	})
+	srv := New(st, nil, nil, nil)
+	_, _ = srv.Deploy(context.Background(), connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	_, err := srv.Rollback(context.Background(), connect.NewRequest(&pb.RollbackRequest{
+		MachineId: "m1", Strategy: "s", TargetVersion: "v2",
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("err=%v, want FailedPrecondition", err)
+	}
+	if !strings.Contains(err.Error(), "PENDING") {
+		t.Fatalf("error = %v, want PENDING", err)
+	}
+}
+
+func TestRegisterArtifactPendingSameDigestNoOp(t *testing.T) {
+	const body = "same-digest-body"
+	sum := sha256.Sum256([]byte(body))
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+
+	// Hang the first download so PENDING stays long enough for a second register.
+	block := make(chan struct{})
+	hs := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-block
+		_, _ = w.Write([]byte(body))
+	}))
+	defer hs.Close()
+	defer close(block)
+
+	st := store.NewMemory(nil)
+	objs := &memObjects{bucket: "artifacts"}
+	creds, _ := ingest.LoadCredentials("")
+	svc := ingest.New(st, objs, creds, ingest.ModeAlways, nil)
+	srv := New(st, nil, nil, nil).WithIngest(svc)
+
+	art := &pb.ArtifactRef{Name: "s", Version: "v1", Digest: digest, Uri: hs.URL + "/bin"}
+	_, err := srv.RegisterArtifact(context.Background(), connect.NewRequest(&pb.RegisterArtifactRequest{Artifact: art}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = srv.RegisterArtifact(context.Background(), connect.NewRequest(&pb.RegisterArtifactRequest{Artifact: art}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending := 0
+	for _, e := range st.ListAudit("", "") {
+		if e.GetAction() == "RegisterArtifact" && e.GetDetail() == "state=PENDING" {
+			pending++
+		}
+	}
+	if pending != 1 {
+		t.Fatalf("PENDING audits = %d, want 1 (second register no-op)", pending)
+	}
+}
+
+func TestRegisterArtifactRejectsCredentialedWithoutS3(t *testing.T) {
+	t.Setenv("TOK", "x")
+	path := filepath.Join(t.TempDir(), "c.yaml")
+	if err := os.WriteFile(path, []byte(`
+artifact_credentials:
+  example.com:
+    type: bearer
+    token_env: TOK
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	creds, err := ingest.LoadCredentials(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := store.NewMemory(nil)
+	svc := ingest.New(st, nil, creds, ingest.ModeCredentialedOnly, nil)
+	srv := New(st, nil, nil, nil).WithIngest(svc)
+	_, err = srv.RegisterArtifact(context.Background(), connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "s", Version: "v1", Digest: "sha256:aaa",
+			Uri: "https://example.com/bin",
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("err=%v, want FailedPrecondition", err)
 	}
 }
 

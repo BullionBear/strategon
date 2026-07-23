@@ -159,7 +159,8 @@ func (s *Service) downloadGitHubRelease(ctx context.Context, ref GitHubReleaseRe
 	}
 	req.Header.Set("Accept", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+cred.Token)
-	// Default CheckRedirect: follow 302 and strip Authorization cross-host.
+	// CheckRedirect (see stripCredentialsOnCrossHostRedirect) follows 302 and
+	// drops Authorization / custom credential headers on cross-host redirects.
 
 	resp, err := s.Client.Do(req)
 	if err != nil {

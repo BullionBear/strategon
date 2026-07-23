@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -77,18 +78,68 @@ func New(cat Catalog, objs objectstore.Store, creds *Credentials, mode Mode, log
 		Objects: objs,
 		Creds:   creds,
 		Mode:    mode,
-		Client:  &http.Client{Timeout: 30 * time.Minute},
+		Client:  newHTTPClient(),
 		Logger:  logger,
 		ghCache: newAssetIDCache(githubAssetCacheTTL),
 	}
 }
 
-// NeedsIngest reports whether RegisterArtifact should run the async ingest path.
-func (s *Service) NeedsIngest(uri string) bool {
-	if s == nil || s.Objects == nil {
-		return false
+func newHTTPClient() *http.Client {
+	return &http.Client{
+		Timeout:       30 * time.Minute,
+		CheckRedirect: stripCredentialsOnCrossHostRedirect,
 	}
-	if !artifacturi.IsHTTP(uri) {
+}
+
+// stripCredentialsOnCrossHostRedirect follows redirects like net/http's default
+// but also drops custom credential headers (CredHeader / X-API-Key, etc.).
+// Go only strips Authorization/Cookie/Proxy-Authorization on host change.
+func stripCredentialsOnCrossHostRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 10 {
+		return errors.New("stopped after 10 redirects")
+	}
+	if len(via) == 0 {
+		return nil
+	}
+	prev := via[len(via)-1].URL
+	if prev == nil || req.URL == nil {
+		return nil
+	}
+	if strings.EqualFold(prev.Hostname(), req.URL.Hostname()) && portOrDefault(prev) == portOrDefault(req.URL) {
+		return nil
+	}
+	// Cross-host: keep only headers safe to forward to an unrelated origin.
+	safe := map[string]bool{
+		"Accept":          true,
+		"Accept-Encoding": true,
+		"User-Agent":      true,
+		"Range":           true,
+	}
+	for k := range req.Header {
+		if !safe[http.CanonicalHeaderKey(k)] {
+			req.Header.Del(k)
+		}
+	}
+	return nil
+}
+
+func portOrDefault(u *url.URL) string {
+	if p := u.Port(); p != "" {
+		return p
+	}
+	switch u.Scheme {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	default:
+		return ""
+	}
+}
+
+// sourceNeedsIngest is the policy check without requiring an object store.
+func (s *Service) sourceNeedsIngest(uri string) bool {
+	if s == nil || !artifacturi.IsHTTP(uri) {
 		return false
 	}
 	switch s.Mode {
@@ -105,6 +156,27 @@ func (s *Service) NeedsIngest(uri string) bool {
 		}
 		return false
 	}
+}
+
+// NeedsIngest reports whether RegisterArtifact should run the async ingest path.
+func (s *Service) NeedsIngest(uri string) bool {
+	if s == nil || s.Objects == nil {
+		return false
+	}
+	return s.sourceNeedsIngest(uri)
+}
+
+// CheckIngestConfig fails fast when uri would be ingested but S3 is not
+// configured — otherwise RegisterArtifact would silently store READY and the
+// agent would later GET a credentialed URL with no auth.
+func (s *Service) CheckIngestConfig(uri string) error {
+	if s == nil || !s.sourceNeedsIngest(uri) {
+		return nil
+	}
+	if s.Objects == nil || s.Objects.Bucket() == "" {
+		return fmt.Errorf("ingest requires --s3-endpoint and --s3-bucket (credentialed or always-mode http(s) source)")
+	}
+	return nil
 }
 
 // ValidateSource enforces https-only when a credential will be attached.
@@ -138,6 +210,11 @@ func (s *Service) credentialFor(uri string) (HostCredential, bool) {
 }
 
 // Start runs ingest in a background goroutine. Safe to call after writing PENDING.
+//
+// Uses context.Background() on purpose: ingest is not tied to the CP request or
+// shutdown context. On graceful stop the process may kill in-flight downloads;
+// restart then marks leftover PENDING via FailInterrupted, and content-addressed
+// PutObject is idempotent for a retry after re-register.
 func (s *Service) Start(ref *pb.ArtifactRef) {
 	go func() {
 		ctx := context.Background()
@@ -214,6 +291,13 @@ func (s *Service) Run(ctx context.Context, ref *pb.ArtifactRef) error {
 
 	newURI := objectstore.ObjectURI(bucket, name, version, digest)
 	if err := s.Catalog.FinalizeIngest(name, version, digest, newURI); err != nil {
+		// Lost the fence race — another ingest won or digest was replaced.
+		// Do not overwrite the winner's READY/PENDING with FAILED.
+		if errors.Is(err, store.ErrIngestSuperseded) {
+			s.Logger.Info("artifact ingest superseded",
+				"name", name, "version", version, "err", err)
+			return nil
+		}
 		reason := fmt.Sprintf("finalize: %v", err)
 		_ = s.Catalog.SetArtifactState(name, version, store.ArtifactStateFailed, reason)
 		return fmt.Errorf("ingest: %s", reason)

@@ -318,12 +318,18 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackR
 		if !ok {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("artifact version %q not registered", tv))
 		}
+		// Named rollback is deploy-by-version: same READY guard as Deploy.
+		if err := s.requireArtifactReady(name, tv); err != nil {
+			return nil, err
+		}
 		target = art
 	} else {
 		prev, ok := s.store.PreviousArtifact(msg.GetMachineId(), msg.GetStrategy())
 		if !ok {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("no previous version to roll back to"))
 		}
+		// PreviousArtifact is a frozen snapshot from a prior deploy; content-
+		// addressed object remains valid even if the catalog row was re-registered.
 		target = prev
 	}
 
@@ -687,15 +693,21 @@ func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.R
 	// a matching sha256: digest at the agent, and empty digests remain allowed
 	// for optional config refs. Shared-file digests are checked in SetSharedFiles.
 
+	if s.ingest != nil {
+		if err := s.ingest.CheckIngestConfig(art.GetUri()); err != nil {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
+	}
 	needsIngest := s.ingest != nil && s.ingest.NeedsIngest(art.GetUri())
 	if needsIngest {
 		if err := s.ingest.ValidateSource(art.GetUri()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 		if existing, ok := s.store.GetArtifactRecord(art.GetName(), art.GetVersion()); ok {
-			if existing.State == store.ArtifactStateReady &&
-				strings.EqualFold(existing.Ref.GetDigest(), art.GetDigest()) {
-				// Idempotent: already ingested with the same digest.
+			sameDigest := strings.EqualFold(existing.Ref.GetDigest(), art.GetDigest())
+			if sameDigest && (existing.State == store.ArtifactStateReady ||
+				existing.State == store.ArtifactStatePending) {
+				// Idempotent: already READY, or PENDING ingest already in flight.
 				return connect.NewResponse(&pb.RegisterArtifactResponse{}), nil
 			}
 		}
@@ -748,8 +760,9 @@ func (s *Server) ListArtifacts(_ context.Context, req *connect.Request[pb.ListAr
 	return connect.NewResponse(&pb.ListArtifactsResponse{Artifacts: arts, Entries: entries}), nil
 }
 
-// requireArtifactReady blocks Deploy/SetDeployment/SetSharedFiles until ingest
-// has finished successfully for the named version.
+// requireArtifactReady blocks Deploy/SetDeployment/SetSharedFiles and
+// Rollback(target_version) until ingest has finished successfully for the
+// named version.
 func (s *Server) requireArtifactReady(name, version string) error {
 	rec, ok := s.store.GetArtifactRecord(name, version)
 	if !ok {

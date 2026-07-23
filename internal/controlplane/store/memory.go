@@ -488,10 +488,10 @@ func (m *Memory) FinalizeIngest(name, version, expectedDigest, newURI string) er
 		return fmt.Errorf("finalize ingest: %s@%s not found", name, version)
 	}
 	if rec.State != ArtifactStatePending {
-		return fmt.Errorf("finalize ingest: %s@%s state is %s, want PENDING", name, version, rec.State)
+		return fmt.Errorf("%w: %s@%s state is %s, want PENDING", ErrIngestSuperseded, name, version, rec.State)
 	}
 	if !strings.EqualFold(rec.Ref.GetDigest(), expectedDigest) {
-		return fmt.Errorf("finalize ingest: %s@%s digest changed during ingest", name, version)
+		return fmt.Errorf("%w: %s@%s digest changed during ingest", ErrIngestSuperseded, name, version)
 	}
 	rec.Ref.Uri = newURI
 	rec.State = ArtifactStateReady

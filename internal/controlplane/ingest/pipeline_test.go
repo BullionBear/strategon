@@ -81,8 +81,9 @@ func TestIngestHappyPathWithBasicAuth(t *testing.T) {
 	objs := newMemObjects("artifacts")
 	svc := New(st, objs, creds, ModeCredentialedOnly, nil)
 	svc.Client = &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec // test-only
+		Timeout:       30 * time.Second,
+		CheckRedirect: stripCredentialsOnCrossHostRedirect,
+		Transport:     &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec // test-only
 	}
 
 	ref := &pb.ArtifactRef{Name: "s", Version: "v1", Digest: digest, Uri: srv.URL + "/bin"}
@@ -191,6 +192,119 @@ func TestFailInterrupted(t *testing.T) {
 	rec2, _ := st.GetArtifactRecord("s", "v2")
 	if rec2.State != store.ArtifactStateReady {
 		t.Fatalf("ready should stay ready: %+v", rec2)
+	}
+}
+
+func TestRunSupersededDoesNotMarkReadyFailed(t *testing.T) {
+	const body = "winner-bytes"
+	digest := sha256Of(body)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(body))
+	}))
+	defer srv.Close()
+
+	st := store.NewMemory(nil)
+	objs := newMemObjects("artifacts")
+	svc := New(st, objs, mustEmptyCreds(t), ModeAlways, nil)
+	ref := &pb.ArtifactRef{Name: "s", Version: "v1", Digest: digest, Uri: srv.URL + "/bin"}
+	_ = st.RegisterArtifactRecord(&store.ArtifactRecord{Ref: ref, State: store.ArtifactStatePending})
+	if err := svc.Run(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	// Second Run loses the PENDING fence; must leave READY alone.
+	if err := svc.Run(context.Background(), ref); err != nil {
+		t.Fatalf("superseded Run should return nil, got %v", err)
+	}
+	rec, _ := st.GetArtifactRecord("s", "v1")
+	if rec.State != store.ArtifactStateReady {
+		t.Fatalf("state=%s reason=%q, want READY preserved", rec.State, rec.StateReason)
+	}
+}
+
+func TestRunSupersededByDigestChangeLeavesNewPending(t *testing.T) {
+	const bodyA = "bytes-a"
+	digestA := sha256Of(bodyA)
+	digestB := sha256Of("bytes-b")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(bodyA))
+	}))
+	defer srv.Close()
+
+	st := store.NewMemory(nil)
+	objs := newMemObjects("artifacts")
+	svc := New(st, objs, mustEmptyCreds(t), ModeAlways, nil)
+	refA := &pb.ArtifactRef{Name: "s", Version: "v1", Digest: digestA, Uri: srv.URL + "/bin"}
+	_ = st.RegisterArtifactRecord(&store.ArtifactRecord{Ref: refA, State: store.ArtifactStatePending})
+	// Re-register with a new digest while old worker still holds refA.
+	refB := &pb.ArtifactRef{Name: "s", Version: "v1", Digest: digestB, Uri: srv.URL + "/bin"}
+	_ = st.RegisterArtifactRecord(&store.ArtifactRecord{Ref: refB, State: store.ArtifactStatePending})
+
+	if err := svc.Run(context.Background(), refA); err != nil {
+		t.Fatalf("old worker should return nil on supersede, got %v", err)
+	}
+	rec, _ := st.GetArtifactRecord("s", "v1")
+	if rec.State != store.ArtifactStatePending || !strings.EqualFold(rec.Ref.GetDigest(), digestB) {
+		t.Fatalf("want PENDING digest B, got state=%s digest=%s reason=%q",
+			rec.State, rec.Ref.GetDigest(), rec.StateReason)
+	}
+}
+
+func TestCredHeaderStrippedOnCrossHostRedirect(t *testing.T) {
+	var sawAPIKey bool
+	final := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-API-Key") != "" {
+			sawAPIKey = true
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer final.Close()
+
+	origin := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, final.URL+"/payload", http.StatusFound)
+	}))
+	defer origin.Close()
+
+	creds := &Credentials{byHost: map[string]HostCredential{
+		"127.0.0.1": {Type: CredHeader, Header: "X-API-Key", Value: "secret"},
+	}}
+	st := store.NewMemory(nil)
+	objs := newMemObjects("artifacts")
+	svc := New(st, objs, creds, ModeCredentialedOnly, nil)
+	svc.Client = &http.Client{
+		Timeout:       30 * time.Second,
+		CheckRedirect: stripCredentialsOnCrossHostRedirect,
+		Transport:     &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}, //nolint:gosec // test-only
+	}
+	digest := sha256Of("ok")
+	ref := &pb.ArtifactRef{Name: "s", Version: "v1", Digest: digest, Uri: origin.URL + "/bin"}
+	_ = st.RegisterArtifactRecord(&store.ArtifactRecord{Ref: ref, State: store.ArtifactStatePending})
+	if err := svc.Run(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	if sawAPIKey {
+		t.Fatal("X-API-Key must not follow cross-host redirect")
+	}
+}
+
+func TestCheckIngestConfigRequiresObjectStore(t *testing.T) {
+	t.Setenv("GH_PAT", "x")
+	path := filepath.Join(t.TempDir(), "c.yaml")
+	_ = os.WriteFile(path, []byte(`
+artifact_credentials:
+  example.com:
+    type: bearer
+    token_env: GH_PAT
+`), 0o600)
+	creds, err := LoadCredentials(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := New(store.NewMemory(nil), nil, creds, ModeCredentialedOnly, nil)
+	if err := svc.CheckIngestConfig("https://example.com/bin"); err == nil {
+		t.Fatal("expected error when Objects is nil")
+	}
+	if svc.NeedsIngest("https://example.com/bin") {
+		t.Fatal("NeedsIngest should stay false without Objects")
 	}
 }
 

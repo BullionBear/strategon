@@ -887,14 +887,14 @@ func (p *Postgres) FinalizeIngest(name, version, expectedDigest, newURI string) 
 		return fmt.Errorf("finalize ingest: %s@%s not found", name, version)
 	}
 	if state != ArtifactStatePending {
-		return fmt.Errorf("finalize ingest: %s@%s state is %s, want PENDING", name, version, state)
+		return fmt.Errorf("%w: %s@%s state is %s, want PENDING", ErrIngestSuperseded, name, version, state)
 	}
 	ref := &pb.ArtifactRef{}
 	if err := proto.Unmarshal(b, ref); err != nil {
 		return err
 	}
 	if !strings.EqualFold(ref.GetDigest(), expectedDigest) {
-		return fmt.Errorf("finalize ingest: %s@%s digest changed during ingest", name, version)
+		return fmt.Errorf("%w: %s@%s digest changed during ingest", ErrIngestSuperseded, name, version)
 	}
 	ref.Uri = newURI
 	nb, err := proto.Marshal(ref)

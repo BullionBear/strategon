@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -15,6 +16,11 @@ const (
 	ArtifactStatePending = "PENDING"
 	ArtifactStateFailed  = "FAILED"
 )
+
+// ErrIngestSuperseded is returned by FinalizeIngest when this worker lost the
+// race: the row is no longer PENDING for the expected digest (another ingest
+// won, or a re-register replaced the digest). Callers must not mark FAILED.
+var ErrIngestSuperseded = errors.New("ingest superseded")
 
 // ArtifactRecord is one catalog row: the wire ArtifactRef plus ingest state.
 type ArtifactRecord struct {

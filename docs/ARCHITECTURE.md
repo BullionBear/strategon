@@ -206,13 +206,16 @@ plus `MachineSharedStatus` (per-file running digest / last_error).
 
 Content-addressed binary (and optional config / shared file): `name`,
 `version`, `digest`, `uri`, `type`. Humans call `RegisterArtifact`;
-`Deploy` / `SetSharedFiles` resolve a version to a concrete ref. The agent
-fetches the URI and verifies the digest (`sha256:…` for binaries at verify
-time). **`SetSharedFiles` requires a `sha256:` digest** at API ingress
-(shared store round-trips that prefix); `RegisterArtifact` does not enforce
-the prefix so existing binary/config CI is unchanged. Supported URIs today:
-`http(s)`, `file://`, absolute path. For shared files the catalog name
-defaults to the on-disk basename but may differ via
+`Deploy` / `SetDeployment` / `SetSharedFiles` / `Rollback(target_version)`
+resolve a version to a concrete ref and require catalog state **READY**
+(ingest finished). Empty-target `Rollback` uses the frozen
+`PreviousArtifact` snapshot and skips that guard. The agent fetches the URI
+and verifies the digest (`sha256:…` for binaries at verify time).
+**`SetSharedFiles` requires a `sha256:` digest** at API ingress (shared store
+round-trips that prefix); `RegisterArtifact` does not enforce the prefix so
+existing binary/config CI is unchanged. Supported URIs today: `http(s)`,
+`file://`, `s3://` (via CP `ResolveArtifactSource`), absolute path. For shared
+files the catalog name defaults to the on-disk basename but may differ via
 `SharedFileRef.artifact_name`.
 
 ### Generation and convergence
