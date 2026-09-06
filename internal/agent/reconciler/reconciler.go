@@ -510,8 +510,13 @@ func envPairs(env map[string]string) []string {
 	return out
 }
 
+// mergeEnv overlays spec env onto the image env. The result is never nil: a
+// nil Env means "inherit the parent's environment" to exec.Cmd, which would
+// hand the agent's own environment (control-plane URL, object-store
+// credentials) to the strategy container.
 func mergeEnv(image []string, spec map[string]string) []string {
-	out := append([]string(nil), image...)
+	out := make([]string, 0, len(image)+len(spec))
+	out = append(out, image...)
 	for k, v := range spec {
 		prefix := k + "="
 		found := false

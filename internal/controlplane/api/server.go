@@ -338,6 +338,13 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackR
 
 	next := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	next.Artifact = target
+	// Same gate as Deploy: rolling back across BINARY↔OCI must re-derive the
+	// driver from the target artifact and re-check the machine's capability,
+	// otherwise a named rollback is a way around requireOCISupported and the
+	// stored spec.Driver goes stale.
+	if err := applyDriverFromArtifact(next, target, rec); err != nil {
+		return nil, err
+	}
 	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), next)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

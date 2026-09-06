@@ -170,6 +170,7 @@ func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, co
 	if err := m.LinkReleaseShared(strategy, artifactRef.GetVersion()); err != nil {
 		return err
 	}
+	stampRelease(dir)
 	return nil
 }
 

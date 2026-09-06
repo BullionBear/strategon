@@ -30,8 +30,13 @@ jobs:
       # which would skip every OCI userns test. Unblock so --oci-init is
       # actually exercised (failure is red, not skip).
       - name: Enable unprivileged user namespaces
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # STRATEGON_REQUIRE_USERNS turns the local "userns unavailable" skips into
+      # failures, so a runner image that re-blocks user namespaces goes red
+      # instead of silently dropping the OCI coverage.
       - name: OCI / userns driver tests
+        env:
+          STRATEGON_REQUIRE_USERNS: '1'
         run: go test -count=1 ./internal/agent/driver/ ./internal/agent/artifact/
       # Guards the CGO_ENABLED=0 premise the whole pipeline rests on:
       # a cgo dependency would break cross-compilation and the scratch runtime.

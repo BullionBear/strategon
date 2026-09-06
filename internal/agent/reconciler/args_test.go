@@ -123,3 +123,29 @@ func TestBuildStartSpecUsesLaunchTypeNotSpecDriver(t *testing.T) {
 		t.Fatalf("driver = %v, want EXEC from launch type", sp.Driver)
 	}
 }
+
+// A nil Env means "inherit the parent's environment" to exec.Cmd, which would
+// hand the agent's own env (control-plane URL, object-store credentials) to the
+// strategy container. mergeEnv must return an empty slice instead.
+func TestMergeEnvNeverNil(t *testing.T) {
+	got := mergeEnv(nil, nil)
+	if got == nil {
+		t.Fatal("mergeEnv(nil, nil) = nil; the container would inherit the agent env")
+	}
+	if len(got) != 0 {
+		t.Fatalf("mergeEnv(nil, nil) = %#v, want empty", got)
+	}
+	if got := mergeEnv(nil, map[string]string{}); got == nil {
+		t.Fatal("mergeEnv with an empty spec env = nil")
+	}
+	// Overlay still works: spec wins over the image value.
+	merged := mergeEnv([]string{"A=1", "B=2"}, map[string]string{"B": "3"})
+	if len(merged) != 2 {
+		t.Fatalf("merged = %#v", merged)
+	}
+	for _, e := range merged {
+		if e == "B=2" {
+			t.Fatalf("spec env did not override image env: %#v", merged)
+		}
+	}
+}

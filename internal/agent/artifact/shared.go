@@ -94,13 +94,21 @@ func (m *Manager) EnsureSharedFile(ctx context.Context, name string, ref *pb.Art
 }
 
 func writeFetchedAt(dest string) error {
-	return os.WriteFile(dest+fetchedAtSuffix, []byte(strconv.FormatInt(time.Now().UnixNano(), 10)), 0o644)
+	return writeFetchedAtPath(dest + fetchedAtSuffix)
+}
+
+func writeFetchedAtPath(path string) error {
+	return os.WriteFile(path, []byte(strconv.FormatInt(time.Now().UnixNano(), 10)), 0o644)
 }
 
 // readFetchedAt returns the recorded install time for a store entry, or the
 // zero time when the sidecar is missing/unreadable (GC falls back to mtime).
 func readFetchedAt(dest string) time.Time {
-	b, err := os.ReadFile(dest + fetchedAtSuffix)
+	return readFetchedAtPath(dest + fetchedAtSuffix)
+}
+
+func readFetchedAtPath(path string) time.Time {
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return time.Time{}
 	}

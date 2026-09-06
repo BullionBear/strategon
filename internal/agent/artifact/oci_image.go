@@ -16,13 +16,18 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/layout"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/google/go-containerregistry/pkg/v1/types"
 )
 
 func unpackOCIImage(ctx context.Context, tarPath, destRootfs string, wantDigest string) (*OCIMeta, error) {
-	img, plat, err := loadImage(ctx, tarPath)
+	img, plat, releaseImage, err := loadImage(ctx, tarPath)
 	if err != nil {
 		return nil, err
 	}
+	// An OCI-layout image reads its manifests, config and layer blobs lazily
+	// from the staging directory, so that directory must outlive every read
+	// below — extraction included.
+	defer releaseImage()
 	if err := ensureUnpackSpace(destRootfs, img); err != nil {
 		return nil, err
 	}
@@ -68,20 +73,25 @@ func unpackOCIImage(ctx context.Context, tarPath, destRootfs string, wantDigest 
 	return meta, nil
 }
 
-func loadImage(ctx context.Context, tarPath string) (v1.Image, v1.Platform, error) {
+// loadImage returns the image, its platform, and a release func the caller
+// must call once it is done reading the image (it drops any staging dir).
+func loadImage(ctx context.Context, tarPath string) (v1.Image, v1.Platform, func(), error) {
+	noop := func() {}
 	if err := ctx.Err(); err != nil {
-		return nil, v1.Platform{}, err
+		return nil, v1.Platform{}, noop, err
 	}
 	kind, err := peekArchiveKind(tarPath)
 	if err != nil {
-		return nil, v1.Platform{}, err
+		return nil, v1.Platform{}, noop, err
 	}
 	want := v1.Platform{OS: "linux", Architecture: runtime.GOARCH}
 	switch kind {
 	case "oci":
 		return loadOCILayoutTar(ctx, tarPath, want)
 	default:
-		return loadDockerTar(tarPath, want)
+		// A docker archive is read straight out of the tar: nothing to stage.
+		img, plat, err := loadDockerTar(tarPath, want)
+		return img, plat, noop, err
 	}
 }
 
@@ -185,29 +195,36 @@ func dockerRepoTags(path string) ([]string, error) {
 	}
 }
 
-func loadOCILayoutTar(ctx context.Context, tarPath string, want v1.Platform) (v1.Image, v1.Platform, error) {
+// loadOCILayoutTar stages the layout on disk and returns it together with the
+// func that drops the staging dir. The returned image reads blobs lazily, so
+// the caller must not release until extraction is complete.
+func loadOCILayoutTar(ctx context.Context, tarPath string, want v1.Platform) (v1.Image, v1.Platform, func(), error) {
 	tmp, err := os.MkdirTemp(filepath.Dir(tarPath), "oci-layout-*")
 	if err != nil {
-		return nil, v1.Platform{}, err
+		return nil, v1.Platform{}, func() {}, err
 	}
-	defer os.RemoveAll(tmp)
+	release := func() { _ = os.RemoveAll(tmp) }
+	fail := func(err error) (v1.Image, v1.Platform, func(), error) {
+		release()
+		return nil, v1.Platform{}, func() {}, err
+	}
 	f, err := os.Open(tarPath)
 	if err != nil {
-		return nil, v1.Platform{}, err
+		return fail(err)
 	}
 	if err := extractFlattened(ctx, f, tmp); err != nil {
 		f.Close()
-		return nil, v1.Platform{}, fmt.Errorf("extract oci layout: %w", err)
+		return fail(fmt.Errorf("extract oci layout: %w", err))
 	}
 	f.Close()
 
 	idx, err := layout.ImageIndexFromPath(tmp)
 	if err != nil {
-		return nil, v1.Platform{}, fmt.Errorf("oci layout: %w", err)
+		return fail(fmt.Errorf("oci layout: %w", err))
 	}
 	mf, err := idx.IndexManifest()
 	if err != nil {
-		return nil, v1.Platform{}, err
+		return fail(err)
 	}
 	var seen []string
 	for _, d := range mf.Manifests {
@@ -224,11 +241,11 @@ func loadOCILayoutTar(ctx context.Context, tarPath string, want v1.Platform) (v1
 		}
 		img, err := idx.Image(d.Digest)
 		if err != nil {
-			return nil, v1.Platform{}, err
+			return fail(err)
 		}
-		return img, p, nil
+		return img, p, release, nil
 	}
-	return nil, v1.Platform{}, fmt.Errorf("oci layout: no image for linux/%s (have %s)", want.Architecture, strings.Join(seen, ", "))
+	return fail(fmt.Errorf("oci layout: no image for linux/%s (have %s)", want.Architecture, strings.Join(seen, ", ")))
 }
 
 func imagePlatform(img v1.Image) (v1.Platform, error) {
@@ -278,37 +295,36 @@ func ensureUnpackSpace(dest string, img v1.Image) error {
 	return nil
 }
 
+// estimateUnpackBytes sizes the rootfs from layer metadata only. It must not
+// read the layers: mutate.Extract decompresses them again right after, and for
+// the multi-GB archives this driver targets a pre-pass would double the deploy
+// cost. docker-save layers are stored uncompressed, so their size is exact;
+// gzipped layers get the usual 2–4x expansion, taken as 3x plus slack.
 func estimateUnpackBytes(img v1.Image) (int64, error) {
 	layers, err := img.Layers()
 	if err != nil {
 		return 0, err
 	}
-	var compressed int64
+	var need int64
 	for _, l := range layers {
 		n, err := l.Size()
 		if err != nil {
 			return 0, err
 		}
-		compressed += n
-	}
-	// gzip typically 2–4x; 3x plus slack. Prefer uncompressed when cheap.
-	var uncompressed int64
-	for _, l := range layers {
-		r, err := l.Uncompressed()
-		if err != nil {
-			return compressed*3 + 64<<20, nil
+		mt, err := l.MediaType()
+		if err != nil || compressedLayer(mt) {
+			n *= 3
 		}
-		n, err := io.Copy(io.Discard, r)
-		r.Close()
-		if err != nil {
-			return compressed*3 + 64<<20, nil
-		}
-		uncompressed += n
+		need += n
 	}
-	if uncompressed > 0 {
-		return uncompressed + 64<<20, nil
-	}
-	return compressed*3 + 64<<20, nil
+	return need + 64<<20, nil
+}
+
+// compressedLayer reports whether a layer media type carries a compressed tar
+// (…tar.gzip / …tar+gzip / …tar+zstd). Docker-save layers are plain tars.
+func compressedLayer(mt types.MediaType) bool {
+	s := string(mt)
+	return strings.HasSuffix(s, "gzip") || strings.HasSuffix(s, "zstd")
 }
 
 func availableBytes(path string) (uint64, error) {

@@ -37,7 +37,12 @@ func (d *OCIDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 	}
 
 	cmd := exec.Command("/proc/self/exe", BuildInitArgs(spec)...)
+	// Never leave Env nil: exec.Cmd reads that as "inherit", which would leak
+	// the agent's environment into the container.
 	cmd.Env = spec.Env
+	if cmd.Env == nil {
+		cmd.Env = []string{}
+	}
 	cmd.Dir = spec.WorkDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUTS,

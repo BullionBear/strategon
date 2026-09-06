@@ -42,11 +42,11 @@ func extractFlattened(ctx context.Context, r io.Reader, dest string) error {
 		}
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := mkdirAllRoot(root, dest, rel, 0o755); err != nil {
+			if err := mkdirAllRoot(root, rel, 0o755); err != nil {
 				return err
 			}
 		case tar.TypeReg, tar.TypeRegA:
-			if err := mkdirAllRoot(root, dest, path.Dir(rel), 0o755); err != nil {
+			if err := mkdirAllRoot(root, path.Dir(rel), 0o755); err != nil {
 				return err
 			}
 			mode := hdr.FileInfo().Mode() & 0o777
@@ -57,16 +57,15 @@ func extractFlattened(ctx context.Context, r io.Reader, dest string) error {
 			if err := checkSymlinkTarget(rel, hdr.Linkname); err != nil {
 				return err
 			}
-			if err := mkdirAllRoot(root, dest, path.Dir(rel), 0o755); err != nil {
+			if err := mkdirAllRoot(root, path.Dir(rel), 0o755); err != nil {
 				return err
 			}
-			target := filepath.Join(dest, filepath.FromSlash(rel))
-			_ = os.Remove(target)
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
+			_ = root.Remove(rel)
+			if err := root.Symlink(hdr.Linkname, rel); err != nil {
 				return fmt.Errorf("symlink %s: %w", rel, err)
 			}
 		case tar.TypeLink:
-			if err := mkdirAllRoot(root, dest, path.Dir(rel), 0o755); err != nil {
+			if err := mkdirAllRoot(root, path.Dir(rel), 0o755); err != nil {
 				return err
 			}
 			srcRel, err := safeTarName(hdr.Linkname)
@@ -121,17 +120,16 @@ func checkSymlinkTarget(rel, linkname string) error {
 	return nil
 }
 
-func mkdirAllRoot(root *os.Root, dest, rel string, perm os.FileMode) error {
+// mkdirAllRoot creates rel under root. It must never fall back to a plain
+// os.MkdirAll(dest/rel): that resolves symlinks, so an image carrying
+// "esc -> /etc" followed by the directory "esc/evil" would write outside dest.
+// os.Root refuses to traverse a link that leaves the root, which is the whole
+// point of extracting through it.
+func mkdirAllRoot(root *os.Root, rel string, perm os.FileMode) error {
 	if rel == "" || rel == "." {
 		return nil
 	}
-	if err := root.MkdirAll(rel, perm); err != nil {
-		// Fallback if MkdirAll is unavailable: use dest join after safeTarName.
-		if err := os.MkdirAll(filepath.Join(dest, filepath.FromSlash(rel)), perm); err != nil {
-			return err
-		}
-	}
-	return nil
+	return root.MkdirAll(rel, perm)
 }
 
 func writeFileRoot(root *os.Root, rel string, r io.Reader, mode os.FileMode) error {

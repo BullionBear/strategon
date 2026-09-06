@@ -18,16 +18,26 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func TestUserNSAvailableOrSkip(t *testing.T) {
-	if !UserNSAvailable() {
-		t.Skip("unprivileged user namespaces unavailable")
+// requireUserNS skips locally (a dev box may block user namespaces) but fails
+// where STRATEGON_REQUIRE_USERNS is set, so CI cannot go green by skipping the
+// only tests that exercise --oci-init.
+func requireUserNS(t *testing.T) {
+	t.Helper()
+	if UserNSAvailable() {
+		return
 	}
+	if os.Getenv("STRATEGON_REQUIRE_USERNS") != "" {
+		t.Fatal("unprivileged user namespaces unavailable but STRATEGON_REQUIRE_USERNS is set")
+	}
+	t.Skip("unprivileged user namespaces unavailable")
+}
+
+func TestUserNSAvailableOrSkip(t *testing.T) {
+	requireUserNS(t)
 }
 
 func TestOCIDriverStartSignalWatch(t *testing.T) {
-	if !UserNSAvailable() {
-		t.Skip("unprivileged user namespaces unavailable")
-	}
+	requireUserNS(t)
 	sleep, err := exec.LookPath("sleep")
 	if err != nil {
 		t.Skip("sleep not available")
