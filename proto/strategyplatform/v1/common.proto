@@ -36,8 +36,8 @@ enum ConditionStatus {
 
 enum ArtifactType {
   ARTIFACT_TYPE_UNSPECIFIED = 0;
-  ARTIFACT_TYPE_BINARY = 1; // Go static binary tarball
-  ARTIFACT_TYPE_OCI_IMAGE = 2; // reserved for Python/ML strategies
+  ARTIFACT_TYPE_BINARY = 1; // single executable file (not a tarball)
+  ARTIFACT_TYPE_OCI_IMAGE = 2; // docker-save or OCI layout archive
 }
 
 // ArtifactRef is content-addressed: config is also an ArtifactRef, so a config
@@ -56,7 +56,7 @@ message ArtifactRef {
 enum ExecutionDriver {
   EXECUTION_DRIVER_UNSPECIFIED = 0;
   EXECUTION_DRIVER_EXEC = 1; // bare process + cgroup v2 (default)
-  EXECUTION_DRIVER_OCI = 2; // containerd/podman, host network
+  EXECUTION_DRIVER_OCI = 2; // in-process rootless userns, host network
 }
 
 message ResourceLimits {

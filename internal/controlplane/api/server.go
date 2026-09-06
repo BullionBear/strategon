@@ -201,6 +201,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 	spec := defaultOrCloneSpec(existing, strategy)
 	fromVersion := spec.GetArtifact().GetVersion()
 	spec.Artifact = art
+	if err := applyDriverFromArtifact(spec, art, rec); err != nil {
+		return nil, nil, "", err
+	}
 
 	if configVersion != "" {
 		cfg, err := s.resolveArtifact(art.GetName()+"-config", strategy+"-config", configVersion)
@@ -335,6 +338,13 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackR
 
 	next := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	next.Artifact = target
+	// Same gate as Deploy: rolling back across BINARY↔OCI must re-derive the
+	// driver from the target artifact and re-check the machine's capability,
+	// otherwise a named rollback is a way around requireOCISupported and the
+	// stored spec.Driver goes stale.
+	if err := applyDriverFromArtifact(next, target, rec); err != nil {
+		return nil, err
+	}
 	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), next)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -802,6 +812,32 @@ func requireSHA256Digest(digest string) error {
 		}
 	}
 	return nil
+}
+
+func applyDriverFromArtifact(spec *pb.StrategyAssignmentSpec, art *pb.ArtifactRef, rec *store.MachineRecord) error {
+	if art.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
+		spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_OCI
+		return requireOCISupported(rec)
+	}
+	spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_EXEC
+	return nil
+}
+
+func requireOCISupported(rec *store.MachineRecord) error {
+	if rec == nil || rec.Register == nil || rec.Register.GetSpec() == nil {
+		return nil
+	}
+	drivers := rec.Register.GetSpec().GetSupportedDrivers()
+	if len(drivers) == 0 {
+		return nil
+	}
+	for _, d := range drivers {
+		if d == pb.ExecutionDriver_EXECUTION_DRIVER_OCI {
+			return nil
+		}
+	}
+	return connect.NewError(connect.CodeFailedPrecondition,
+		fmt.Errorf("machine %q does not advertise EXECUTION_DRIVER_OCI (unprivileged user namespaces blocked or old agent); fix the host and restart the agent", rec.MachineID))
 }
 
 func defaultOrCloneSpec(existing *pb.StrategyAssignmentSpec, strategy string) *pb.StrategyAssignmentSpec {

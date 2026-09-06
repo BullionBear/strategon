@@ -756,3 +756,148 @@ func TestGetMachineMetrics(t *testing.T) {
 		t.Fatalf("last_resources: %+v", m.Msg.GetLastResources())
 	}
 }
+
+func TestDeploySetsDriverFromArtifactType(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/img.tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["s"].GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_OCI {
+		t.Fatalf("driver = %v, want OCI", rec.Assignments["s"].GetDriver())
+	}
+
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "s", Version: "v2", Digest: "sha256:bbb", Uri: "file:///tmp/bin",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY,
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v2",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["s"].GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_EXEC {
+		t.Fatalf("driver = %v, want EXEC after binary deploy", rec.Assignments["s"].GetDriver())
+	}
+}
+
+func TestDeployOCIRejectedWhenMachineAdvertisesExecOnly(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{
+		MachineId: "m1",
+		Spec: &pb.MachineSpec{
+			SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/img.tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err == nil {
+		t.Fatal("expected FailedPrecondition")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v", connect.CodeOf(err))
+	}
+}
+
+// Rollback is deploy-by-version: it must re-derive the driver from the target
+// artifact and re-check the machine's capability, or a named rollback becomes a
+// way around the OCI gate and spec.Driver goes stale.
+func TestRollbackRederivesDriverAndEnforcesOCIGate(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	reg := func(version, uri string, typ pb.ArtifactType) {
+		t.Helper()
+		if _, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+			Artifact: &pb.ArtifactRef{
+				Name: "s", Version: version, Digest: "sha256:" + version, Uri: uri, Type: typ,
+			},
+		})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg("v1", "file:///tmp/img.tar", pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE)
+	reg("v2", "file:///tmp/bin", pb.ArtifactType_ARTIFACT_TYPE_BINARY)
+	for _, v := range []string{"v1", "v2"} {
+		if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+			MachineId: "m1", Strategy: "s", ArtifactVersion: v,
+		})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["s"].GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_EXEC {
+		t.Fatalf("driver = %v, want EXEC after the binary deploy", rec.Assignments["s"].GetDriver())
+	}
+	// Rolling back to the OCI version must flip the driver back.
+	if _, err := client.Rollback(ctx, connect.NewRequest(&pb.RollbackRequest{
+		MachineId: "m1", Strategy: "s", TargetVersion: "v1",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["s"].GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_OCI {
+		t.Fatalf("driver = %v, want OCI after rolling back to the image", rec.Assignments["s"].GetDriver())
+	}
+
+	// Same rollback on a machine that only advertises EXEC is refused, exactly
+	// as Deploy would be.
+	if _, err := st.UpsertMachine(&pb.Register{
+		MachineId: "m2",
+		Spec: &pb.MachineSpec{
+			SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m2", Strategy: "s", ArtifactVersion: "v2",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.Rollback(ctx, connect.NewRequest(&pb.RollbackRequest{
+		MachineId: "m2", Strategy: "s", TargetVersion: "v1",
+	}))
+	if err == nil {
+		t.Fatal("expected FailedPrecondition rolling back to an OCI image on an EXEC-only machine")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}

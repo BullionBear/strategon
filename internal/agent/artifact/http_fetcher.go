@@ -22,10 +22,10 @@ type HTTPFetcher struct {
 	Client *http.Client
 }
 
-// NewHTTPFetcher returns an HTTPFetcher with a 10-minute download timeout,
-// enough for large binaries on slow links while still bounding a hung transfer.
+// NewHTTPFetcher returns an HTTPFetcher with a 30-minute download timeout,
+// enough for multi-GB OCI archives on slow links while still bounding a hang.
 func NewHTTPFetcher() HTTPFetcher {
-	return HTTPFetcher{Client: &http.Client{Timeout: 10 * time.Minute}}
+	return HTTPFetcher{Client: &http.Client{Timeout: 30 * time.Minute}}
 }
 
 // Fetch GETs ref.uri and streams the body to dest.

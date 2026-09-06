@@ -34,6 +34,7 @@ type Strategy struct {
 	Phase              string    `json:"phase"`
 	RunningArtifact    *Artifact `json:"running_artifact,omitempty"`
 	RunningConfig      *Artifact `json:"running_config,omitempty"`
+	PrevArtifact       *Artifact `json:"prev_artifact,omitempty"`
 	ObservedGeneration int64     `json:"observed_generation"`
 	LastBadVersion     string    `json:"last_bad_version,omitempty"`
 }

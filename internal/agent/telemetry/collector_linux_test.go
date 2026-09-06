@@ -4,9 +4,23 @@ package telemetry
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/bullionbear/strategon/internal/agent/driver"
 )
+
+// MachineSpecFromHost probes for user namespaces, and the probe re-execs this
+// binary with --oci-probe. Answer that here or the re-exec would try to run the
+// test suite again with an unknown flag and the probe would report a false
+// negative.
+func TestMain(m *testing.M) {
+	if driver.MaybeRunOCIHelper() {
+		return
+	}
+	os.Exit(m.Run())
+}
 
 func TestSampleMachine(t *testing.T) {
 	res, cur, err := sampleMachine(nil)

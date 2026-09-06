@@ -78,8 +78,8 @@ type ArtifactType int32
 
 const (
 	ArtifactType_ARTIFACT_TYPE_UNSPECIFIED ArtifactType = 0
-	ArtifactType_ARTIFACT_TYPE_BINARY      ArtifactType = 1 // Go static binary tarball
-	ArtifactType_ARTIFACT_TYPE_OCI_IMAGE   ArtifactType = 2 // reserved for Python/ML strategies
+	ArtifactType_ARTIFACT_TYPE_BINARY      ArtifactType = 1 // single executable file (not a tarball)
+	ArtifactType_ARTIFACT_TYPE_OCI_IMAGE   ArtifactType = 2 // docker-save or OCI layout archive
 )
 
 // Enum value maps for ArtifactType.
@@ -128,7 +128,7 @@ type ExecutionDriver int32
 const (
 	ExecutionDriver_EXECUTION_DRIVER_UNSPECIFIED ExecutionDriver = 0
 	ExecutionDriver_EXECUTION_DRIVER_EXEC        ExecutionDriver = 1 // bare process + cgroup v2 (default)
-	ExecutionDriver_EXECUTION_DRIVER_OCI         ExecutionDriver = 2 // containerd/podman, host network
+	ExecutionDriver_EXECUTION_DRIVER_OCI         ExecutionDriver = 2 // in-process rootless userns, host network
 )
 
 // Enum value maps for ExecutionDriver.

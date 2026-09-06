@@ -194,6 +194,8 @@ RestartSec=5s
 
 # Cheap hardening. Not a substitute for cgroup confinement of the strategy
 # processes this agent spawns, which is configured separately.
+# OCI (rootless userns) is compatible with NoNewPrivileges and a single-UID
+# map; RestrictNamespaces= would block it, and newuidmap is not used.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full

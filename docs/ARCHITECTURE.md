@@ -234,6 +234,37 @@ files the catalog name defaults to the on-disk basename but may differ via
 Level-triggered: late or reconnecting agents always get a full snapshot; they
 do not replay an event log.
 
+### OCI execution
+
+`ARTIFACT_TYPE_OCI_IMAGE` is a docker-save or OCI-layout tar. The agent
+`Download` path is fetch → hash → unpack into `releases/<ver>/rootfs` +
+`oci.json`, then deletes the tar. `Verify` only reads the marker digest.
+
+The launch **driver is derived from the artifact being started**, not from
+`StrategyAssignmentSpec.driver`. That keeps auto-rollback correct when
+desired is OCI but `current` points at a previous BINARY release.
+`spec.driver` is the control plane's intent / capability gate only.
+
+`EXECUTION_DRIVER_OCI` is in-process rootless userns (single UID map, host
+network). The agent re-execs `/proc/self/exe --oci-init`, bind-mounts
+`work/`, `<base>/shared`, and the config file (host `current` is a symlink;
+the rootfs gets a real `current/` directory), then `pivot_root` and `exec`.
+WatchExit / Signal / Adopt stay on the exec driver (same host PID).
+
+Path contract (OCI ≠ EXEC):
+
+| | EXEC | OCI |
+|--|--|--|
+| cwd | `StrategyDir` | `<base>/<strategy>/work` |
+| placeholders | `${CONFIG}`, `${RELEASE_DIR}`, `${BINARY}` | `${CONFIG}` only |
+
+Known limits: payload is PID 1 (SIGTERM may be discarded); rootfs is
+writable and persists across restarts; no `/sys/fs/cgroup` in the
+container; release GC (`--release-retention`) makes
+`RollbackRequest.target_version` a re-fetch if that version was deleted.
+Unprivileged user ns is probed at Register; enabling it later requires an
+agent restart.
+
 ### Deploy phases
 
 Happy path on the agent:

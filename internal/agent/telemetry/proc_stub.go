@@ -33,6 +33,6 @@ func MachineSpecFromHost() *pb.MachineSpec {
 		Os:               runtime.GOOS,
 		Arch:             runtime.GOARCH,
 		NumCpus:          int32(runtime.NumCPU()),
-		SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC},
+		SupportedDrivers: supportedDrivers(),
 	}
 }

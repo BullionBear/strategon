@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/agent/artifact"
+	"github.com/bullionbear/strategon/internal/agent/driver"
 )
 
 func TestExpandPlaceholders(t *testing.T) {
@@ -64,7 +66,7 @@ func TestRenderArgsViaCurrentSymlink(t *testing.T) {
 		Config:   cfg,
 		Args:     []string{"-c", "${CONFIG}", "--dir", "${RELEASE_DIR}"},
 	}
-	args, err := r.renderArgs(spec)
+	args, err := r.renderArgs(spec, spec.Artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,5 +83,69 @@ func TestRenderArgsViaCurrentSymlink(t *testing.T) {
 	}
 	if filepath.Base(args[1]) != "config.yml" {
 		t.Fatalf("config basename = %q, want config.yml", filepath.Base(args[1]))
+	}
+}
+
+func TestRenderArgsOCIRejectsReleaseDirAndBinary(t *testing.T) {
+	r := &Reconciler{}
+	launch := &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE}
+	spec := &pb.StrategyAssignmentSpec{
+		Strategy: "s",
+		Artifact: launch,
+		Args:     []string{"--dir", "${RELEASE_DIR}"},
+	}
+	if _, err := r.renderArgs(spec, launch); err == nil {
+		t.Fatal("expected ${RELEASE_DIR} rejected for OCI")
+	}
+	spec.Args = []string{"${BINARY}"}
+	if _, err := r.renderArgs(spec, launch); err == nil {
+		t.Fatal("expected ${BINARY} rejected for OCI")
+	}
+}
+
+func TestBuildStartSpecUsesLaunchTypeNotSpecDriver(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	seedRelease(t, mgr, "s", "v1")
+	if err := mgr.SwitchTo("s", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	desired := &pb.StrategyAssignmentSpec{
+		Strategy: "s",
+		Artifact: &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Version: "v2"},
+		Driver:   pb.ExecutionDriver_EXECUTION_DRIVER_OCI,
+	}
+	launch := artRef("v1", "sha256:v1")
+	sp, err := r.buildStartSpec(desired, launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp.Driver != driver.KindExec {
+		t.Fatalf("driver = %v, want EXEC from launch type", sp.Driver)
+	}
+}
+
+// A nil Env means "inherit the parent's environment" to exec.Cmd, which would
+// hand the agent's own env (control-plane URL, object-store credentials) to the
+// strategy container. mergeEnv must return an empty slice instead.
+func TestMergeEnvNeverNil(t *testing.T) {
+	got := mergeEnv(nil, nil)
+	if got == nil {
+		t.Fatal("mergeEnv(nil, nil) = nil; the container would inherit the agent env")
+	}
+	if len(got) != 0 {
+		t.Fatalf("mergeEnv(nil, nil) = %#v, want empty", got)
+	}
+	if got := mergeEnv(nil, map[string]string{}); got == nil {
+		t.Fatal("mergeEnv with an empty spec env = nil")
+	}
+	// Overlay still works: spec wins over the image value.
+	merged := mergeEnv([]string{"A=1", "B=2"}, map[string]string{"B": "3"})
+	if len(merged) != 2 {
+		t.Fatalf("merged = %#v", merged)
+	}
+	for _, e := range merged {
+		if e == "B=2" {
+			t.Fatalf("spec env did not override image env: %#v", merged)
+		}
 	}
 }

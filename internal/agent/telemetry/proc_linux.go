@@ -275,7 +275,7 @@ func MachineSpecFromHost() *pb.MachineSpec {
 		Os:               "linux",
 		Arch:             runtime.GOARCH,
 		NumCpus:          int32(runtime.NumCPU()),
-		SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC},
+		SupportedDrivers: supportedDrivers(),
 	}
 	if _, total, err := readMemInfo(); err == nil {
 		spec.MemoryTotalBytes = total
