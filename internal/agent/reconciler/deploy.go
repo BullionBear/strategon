@@ -27,12 +27,12 @@ func (r *Reconciler) beginDeploy(spec *pb.StrategyAssignmentSpec, st *strategySt
 	oldProc := st.proc
 	r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_INFO, "DeployStarted",
 		fmt.Sprintf("deploying %s", spec.GetArtifact().GetVersion()))
-	go r.runDeploy(ctx, spec, oldProc)
+	go r.runDeploy(ctx, spec, oldProc, st.prevArtifact)
 }
 
 // runDeploy executes the download→verify→drain→switch→start pipeline, emitting
 // a workerEvent at each transition. It never mutates reconciler state directly.
-func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentSpec, oldProc *driver.Process) {
+func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentSpec, oldProc *driver.Process, prev *pb.ArtifactRef) {
 	strat := spec.GetStrategy()
 	art := spec.GetArtifact()
 	cfg := spec.GetConfig()
@@ -50,6 +50,16 @@ func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentS
 	if err := r.deps.Artifacts.Download(ctx, strat, art, cfg); err != nil {
 		send(pb.DeployPhase_DEPLOY_PHASE_FAILED, err, nil)
 		return
+	}
+	keep := []string{art.GetVersion()}
+	if prev != nil {
+		keep = append(keep, prev.GetVersion())
+	}
+	if cur := r.deps.Artifacts.CurrentVersion(strat); cur != "" {
+		keep = append(keep, cur)
+	}
+	if err := r.deps.Artifacts.GCReleases(strat, keep); err != nil && r.deps.Logger != nil {
+		r.deps.Logger.Warn("release gc", "strategy", strat, "err", err)
 	}
 
 	send(pb.DeployPhase_DEPLOY_PHASE_VERIFYING, nil, nil)
@@ -74,8 +84,9 @@ func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentS
 		return
 	}
 
-	// STARTING: fork/exec the new version.
-	sp, err := r.buildStartSpec(spec)
+	// STARTING: fork/exec the new version. Driver comes from the launch
+	// artifact (just switched in), not desired spec.Driver.
+	sp, err := r.buildStartSpec(spec, art)
 	if err != nil {
 		send(pb.DeployPhase_DEPLOY_PHASE_FAILED, err, nil)
 		return
@@ -177,7 +188,7 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 	st.runningArtifact = st.prevArtifact
 	st.runningConfig = st.prevConfig
 
-	sp, err := r.buildStartSpec(spec)
+	sp, err := r.buildStartSpec(spec, st.prevArtifact)
 	if err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
 		st.lastError = err.Error()

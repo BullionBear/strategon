@@ -40,6 +40,7 @@ func (r *Reconciler) rebuildActualState() {
 		st.phase = parsePhase(entry.Phase)
 		st.runningArtifact = artifactFromDTO(entry.RunningArtifact)
 		st.runningConfig = artifactFromDTO(entry.RunningConfig)
+		st.prevArtifact = artifactFromDTO(entry.PrevArtifact)
 		st.observedGen = entry.ObservedGeneration
 		st.lastBadVersion = entry.LastBadVersion
 		r.setCondition(st, conditionLive, pb.ConditionStatus_CONDITION_STATUS_TRUE, "Adopted", "")
@@ -80,6 +81,7 @@ func (r *Reconciler) persistSupervision() {
 			Phase:              st.phase.String(),
 			RunningArtifact:    artifactToDTO(st.runningArtifact),
 			RunningConfig:      artifactToDTO(st.runningConfig),
+			PrevArtifact:       artifactToDTO(st.prevArtifact),
 			ObservedGeneration: st.observedGen,
 			LastBadVersion:     st.lastBadVersion,
 		}

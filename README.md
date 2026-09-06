@@ -87,6 +87,33 @@ curl -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/GetM
   -d '{"machineId":"m1"}'
 ```
 
+## OCI images (rootless)
+
+The agent can run a `docker save` / OCI-layout archive without a Docker
+daemon. Register it as `ARTIFACT_TYPE_OCI_IMAGE`. The control plane sets
+`EXECUTION_DRIVER_OCI` from that type. The agent unpacks the archive, then
+starts it in an unprivileged user namespace (single UID map, host network).
+
+```bash
+docker save my/strategy:v1 > /tmp/strategy-v1.tar
+DIGEST="sha256:$(sha256sum /tmp/strategy-v1.tar | cut -d' ' -f1)"
+curl -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/RegisterArtifact \
+  -H 'Content-Type: application/json' \
+  -d "{\"artifact\":{\"name\":\"ml\",\"version\":\"v1\",\"digest\":\"$DIGEST\",\"uri\":\"file:///tmp/strategy-v1.tar\",\"type\":\"ARTIFACT_TYPE_OCI_IMAGE\"}}"
+```
+
+Requirements and limits:
+
+- Host must allow unprivileged user namespaces. After enabling, restart the agent
+  (capability is reported only at Register).
+- Payload is PID 1: SIGTERM is ignored unless the process installs a handler;
+  stop waits `stop_grace` then SIGKILL.
+- cwd is `<base>/<strategy>/work` (not StrategyDir). Only `${CONFIG}` is
+  valid in args; `${RELEASE_DIR}` and `${BINARY}` are rejected.
+- No registry pull, no `/sys/fs/cgroup` inside the container, no per-run
+  writable overlay. Old releases are GC'd (`--release-retention`, default 3);
+  `Rollback` to a GC'd `target_version` re-downloads.
+
 ## Status
 
 Under active development. APIs, storage, and ops paths will keep changing.

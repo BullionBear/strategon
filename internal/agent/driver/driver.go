@@ -1,15 +1,20 @@
-// Package driver abstracts how a strategy workload is executed. The default
-// (and only v1) driver is "exec": a bare process placed in its own session via
-// setsid, optionally confined by a cgroup v2 subtree, and monitored via a
-// Linux pidfd.
-//
-// The abstraction exists so an OCI driver can be added later without touching
-// the reconciler, which only depends on this interface.
+// Package driver abstracts how a strategy workload is executed. Exec is a bare
+// process (setsid + optional cgroup v2 + pidfd). OCI is a rootless user
+// namespace + pivot_root; WatchExit/Signal/Adopt stay on the exec path.
 package driver
 
 import (
 	"syscall"
 	"time"
+)
+
+// Kind selects how Start launches a workload. The reconciler derives this from
+// the launch artifact's type, not from desired spec.Driver.
+type Kind int
+
+const (
+	KindExec Kind = iota
+	KindOCI
 )
 
 // StartSpec describes a process to launch. It is intentionally decoupled from
@@ -26,6 +31,22 @@ type StartSpec struct {
 	CPUMillicores int64
 	MemoryBytes   int64
 	MaxOpenFiles  int32
+
+	Driver Kind
+
+	// OCI-only. Rootfs is the unpacked image. Argv is the full container
+	// argv (Argv[0] is an unresolved command name — PATH lookup happens after
+	// pivot_root). ImageEnv is the image Config.Env before spec overrides.
+	Rootfs       string
+	Argv         []string
+	ImageEnv     []string
+	ContainerUID int
+	ContainerGID int
+
+	// OCI binds (host paths, same path inside the container).
+	WorkBind   string
+	SharedBind string
+	ConfigBind string // host path of the config file; empty if none
 }
 
 // Process is a handle to a supervised process.

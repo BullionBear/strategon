@@ -26,6 +26,13 @@ jobs:
         run: touch internal/webassets/dist/.gitkeep
       - run: go vet ./...
       - run: go test ./...
+      # Ubuntu 24.04 defaults to apparmor_restrict_unprivileged_userns=1,
+      # which would skip every OCI userns test. Unblock so --oci-init is
+      # actually exercised (failure is red, not skip).
+      - name: Enable unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: OCI / userns driver tests
+        run: go test -count=1 ./internal/agent/driver/ ./internal/agent/artifact/
       # Guards the CGO_ENABLED=0 premise the whole pipeline rests on:
       # a cgo dependency would break cross-compilation and the scratch runtime.
       - name: Verify static cross-compilation

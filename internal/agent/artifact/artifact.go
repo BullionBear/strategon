@@ -1,9 +1,12 @@
 // Package artifact manages the on-disk, immutable release layout and atomic
 // version switching layout:
 //
-//	<base>/<strategy>/releases/<version>/bin           # the strategy binary
+//	<base>/<strategy>/releases/<version>/bin           # BINARY executable
+//	<base>/<strategy>/releases/<version>/rootfs        # OCI unpacked image
+//	<base>/<strategy>/releases/<version>/oci.json      # OCI marker (digest + config)
 //	<base>/<strategy>/releases/<version>/config[.ext]  # optional config (ext from URI)
 //	<base>/<strategy>/releases/<version>/shared -> ../../../shared
+//	<base>/<strategy>/work                             # OCI cwd (not under releases/)
 //	<base>/<strategy>/current -> releases/<version>    # atomic switch point
 //	<base>/shared/<name> -> store/<digest>/<name>      # machine-level shared files
 //	<base>/shared/store/<digest>/<name>                # content-addressed store
@@ -34,8 +37,9 @@ type Fetcher interface {
 
 // Manager owns the release layout for all strategies under Base.
 type Manager struct {
-	Base    string
-	Fetcher Fetcher
+	Base             string
+	Fetcher          Fetcher
+	ReleaseRetention int // versions to keep including current; default 3
 }
 
 // NewManager returns a Manager rooted at base using fetcher.
@@ -120,10 +124,21 @@ func uriPath(uri string) string {
 }
 
 // HasRelease reports whether a release version is already present locally
-// (enables O(1), no-download rollback).
+// (bin or oci.json). Digest is not checked; use HasVerifiedRelease for skip.
 func (m *Manager) HasRelease(strategy, version string) bool {
-	_, err := os.Stat(m.BinaryPath(strategy, version))
+	if _, err := os.Stat(m.BinaryPath(strategy, version)); err == nil {
+		return true
+	}
+	_, err := os.Stat(m.OCIMetaPath(strategy, version))
 	return err == nil
+}
+
+// HasVerifiedRelease is true when the on-disk release matches ref.digest.
+func (m *Manager) HasVerifiedRelease(strategy string, ref *pb.ArtifactRef) bool {
+	if ref == nil {
+		return false
+	}
+	return m.Verify(strategy, ref) == nil
 }
 
 // Download fetches the artifact (and optional config) into its release dir. It
@@ -133,12 +148,18 @@ func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, co
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir release: %w", err)
 	}
-	bin := m.BinaryPath(strategy, artifactRef.GetVersion())
-	if err := m.Fetcher.Fetch(ctx, artifactRef, bin); err != nil {
-		return fmt.Errorf("fetch binary: %w", err)
-	}
-	if err := os.Chmod(bin, 0o755); err != nil {
-		return fmt.Errorf("chmod binary: %w", err)
+	if isOCI(artifactRef) {
+		if err := m.downloadOCI(ctx, strategy, artifactRef); err != nil {
+			return err
+		}
+	} else if !m.HasVerifiedRelease(strategy, artifactRef) {
+		bin := m.BinaryPath(strategy, artifactRef.GetVersion())
+		if err := m.Fetcher.Fetch(ctx, artifactRef, bin); err != nil {
+			return fmt.Errorf("fetch binary: %w", err)
+		}
+		if err := os.Chmod(bin, 0o755); err != nil {
+			return fmt.Errorf("chmod binary: %w", err)
+		}
 	}
 	if configRef != nil && configRef.GetDigest() != "" {
 		cfg := m.ConfigPath(strategy, artifactRef.GetVersion(), configRef)
@@ -152,12 +173,61 @@ func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, co
 	return nil
 }
 
-// Verify checks the SHA256 of the downloaded binary against ref.digest
-// ("sha256:...").
+func (m *Manager) downloadOCI(ctx context.Context, strategy string, ref *pb.ArtifactRef) error {
+	if m.HasVerifiedRelease(strategy, ref) {
+		return nil
+	}
+	tarPath := m.ImageTarPath(strategy, ref.GetVersion())
+	if err := m.Fetcher.Fetch(ctx, ref, tarPath); err != nil {
+		return fmt.Errorf("fetch image: %w", err)
+	}
+	sum, err := fileSHA256(tarPath)
+	if err != nil {
+		_ = os.Remove(tarPath)
+		return err
+	}
+	got := "sha256:" + sum
+	want := ref.GetDigest()
+	if want != "" && !strings.EqualFold(got, want) {
+		_ = os.Remove(tarPath)
+		return fmt.Errorf("download %s: digest mismatch got %s want %s", ref.GetVersion(), got, want)
+	}
+	if want == "" {
+		want = got
+	}
+	rootfs := m.RootfsPath(strategy, ref.GetVersion())
+	meta, err := unpackOCIImage(ctx, tarPath, rootfs, want)
+	_ = os.Remove(tarPath)
+	if err != nil {
+		_ = os.RemoveAll(rootfs)
+		_ = os.RemoveAll(rootfs + ".tmp")
+		return err
+	}
+	if err := writeOCIMeta(m.OCIMetaPath(strategy, ref.GetVersion()), meta); err != nil {
+		return fmt.Errorf("write oci.json: %w", err)
+	}
+	return nil
+}
+
+// Verify checks the SHA256 of a BINARY against ref.digest, or reads oci.json
+// for OCI_IMAGE (the archive is deleted after unpack).
 func (m *Manager) Verify(strategy string, ref *pb.ArtifactRef) error {
 	want := ref.GetDigest()
 	if want == "" {
 		return fmt.Errorf("verify: empty digest for %s", ref.GetVersion())
+	}
+	if isOCI(ref) {
+		meta, err := m.readOCIMeta(strategy, ref.GetVersion())
+		if err != nil {
+			return fmt.Errorf("verify %s: %w", ref.GetVersion(), err)
+		}
+		if !strings.EqualFold(meta.Digest, want) {
+			return fmt.Errorf("verify %s: digest mismatch got %s want %s", ref.GetVersion(), meta.Digest, want)
+		}
+		if _, err := os.Stat(m.RootfsPath(strategy, ref.GetVersion())); err != nil {
+			return fmt.Errorf("verify %s: missing rootfs", ref.GetVersion())
+		}
+		return nil
 	}
 	sum, err := fileSHA256(m.BinaryPath(strategy, ref.GetVersion()))
 	if err != nil {

@@ -5,9 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/agent/artifact"
+	"github.com/bullionbear/strategon/internal/agent/driver"
 )
 
 func TestExpandPlaceholders(t *testing.T) {
@@ -64,7 +66,7 @@ func TestRenderArgsViaCurrentSymlink(t *testing.T) {
 		Config:   cfg,
 		Args:     []string{"-c", "${CONFIG}", "--dir", "${RELEASE_DIR}"},
 	}
-	args, err := r.renderArgs(spec)
+	args, err := r.renderArgs(spec, spec.Artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,5 +83,43 @@ func TestRenderArgsViaCurrentSymlink(t *testing.T) {
 	}
 	if filepath.Base(args[1]) != "config.yml" {
 		t.Fatalf("config basename = %q, want config.yml", filepath.Base(args[1]))
+	}
+}
+
+func TestRenderArgsOCIRejectsReleaseDirAndBinary(t *testing.T) {
+	r := &Reconciler{}
+	launch := &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE}
+	spec := &pb.StrategyAssignmentSpec{
+		Strategy: "s",
+		Artifact: launch,
+		Args:     []string{"--dir", "${RELEASE_DIR}"},
+	}
+	if _, err := r.renderArgs(spec, launch); err == nil {
+		t.Fatal("expected ${RELEASE_DIR} rejected for OCI")
+	}
+	spec.Args = []string{"${BINARY}"}
+	if _, err := r.renderArgs(spec, launch); err == nil {
+		t.Fatal("expected ${BINARY} rejected for OCI")
+	}
+}
+
+func TestBuildStartSpecUsesLaunchTypeNotSpecDriver(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	seedRelease(t, mgr, "s", "v1")
+	if err := mgr.SwitchTo("s", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	desired := &pb.StrategyAssignmentSpec{
+		Strategy: "s",
+		Artifact: &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Version: "v2"},
+		Driver:   pb.ExecutionDriver_EXECUTION_DRIVER_OCI,
+	}
+	launch := artRef("v1", "sha256:v1")
+	sp, err := r.buildStartSpec(desired, launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp.Driver != driver.KindExec {
+		t.Fatalf("driver = %v, want EXEC from launch type", sp.Driver)
 	}
 }

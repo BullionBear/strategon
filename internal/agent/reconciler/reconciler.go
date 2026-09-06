@@ -12,9 +12,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -71,6 +73,10 @@ type Deps struct {
 	// (including the live symlink target). Default 3 when <= 0.
 	SharedRetention int
 
+	// ReleaseRetention is how many release dirs to keep per strategy
+	// (including current). Default 3 when <= 0.
+	ReleaseRetention int
+
 	// Logger for adopt/persist diagnostics (optional).
 	Logger *slog.Logger
 }
@@ -123,18 +129,21 @@ func New(deps Deps) *Reconciler {
 	if tick <= 0 {
 		tick = time.Second
 	}
+	if deps.Artifacts != nil && deps.ReleaseRetention > 0 {
+		deps.Artifacts.ReleaseRetention = deps.ReleaseRetention
+	}
 	return &Reconciler{
 		desired:       map[string]*pb.StrategyAssignmentSpec{},
 		actual:        map[string]*strategyState{},
 		desiredShared: map[string]*pb.SharedFileSpec{},
 		sharedActual:  map[string]*sharedFileState{},
-		desiredCh:    make(chan *pb.DesiredState, 8),
-		exitCh:       make(chan processExit, 16),
-		workerCh:     make(chan workerEvent, 32),
-		sharedCh:     make(chan sharedWorkerEvent, 32),
-		healthCh:     make(chan healthResult, 32),
-		deps:         deps,
-		tickInterval: tick,
+		desiredCh:     make(chan *pb.DesiredState, 8),
+		exitCh:        make(chan processExit, 16),
+		workerCh:      make(chan workerEvent, 32),
+		sharedCh:      make(chan sharedWorkerEvent, 32),
+		healthCh:      make(chan healthResult, 32),
+		deps:          deps,
+		tickInterval:  tick,
 	}
 }
 
@@ -380,7 +389,11 @@ func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyS
 	if healthCheck {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
 	}
-	sp, err := r.buildStartSpec(spec)
+	launch := st.runningArtifact
+	if launch == nil {
+		launch = spec.GetArtifact()
+	}
+	sp, err := r.buildStartSpec(spec, launch)
 	if err != nil {
 		st.lastError = err.Error()
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
@@ -420,36 +433,118 @@ func (r *Reconciler) installProcess(spec *pb.StrategyAssignmentSpec, st *strateg
 	}(st.strategy, proc)
 }
 
-func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec) (driver.StartSpec, error) {
-	env := make([]string, 0, len(spec.GetEnv()))
-	for k, v := range spec.GetEnv() {
-		env = append(env, k+"="+v)
+func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec, launch *pb.ArtifactRef) (driver.StartSpec, error) {
+	if launch == nil {
+		launch = spec.GetArtifact()
 	}
-	args, err := r.renderArgs(spec)
+	args, err := r.renderArgs(spec, launch)
 	if err != nil {
 		return driver.StartSpec{}, err
 	}
 	limits := spec.GetLimits()
-	return driver.StartSpec{
+	out := driver.StartSpec{
 		Strategy:      spec.GetStrategy(),
-		BinaryPath:    r.deps.Artifacts.CurrentBinaryPath(spec.GetStrategy()),
 		Args:          args,
-		Env:           env,
-		WorkDir:       r.deps.Artifacts.StrategyDir(spec.GetStrategy()),
 		CPUMillicores: limits.GetCpuMillicores(),
 		MemoryBytes:   limits.GetMemoryBytes(),
 		MaxOpenFiles:  limits.GetMaxOpenFiles(),
-	}, nil
+	}
+	if launch.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
+		return r.buildOCIStartSpec(spec, launch, out, args)
+	}
+	out.Driver = driver.KindExec
+	out.BinaryPath = r.deps.Artifacts.CurrentBinaryPath(spec.GetStrategy())
+	out.WorkDir = r.deps.Artifacts.StrategyDir(spec.GetStrategy())
+	out.Env = envPairs(spec.GetEnv())
+	return out, nil
 }
 
-// renderArgs expands ${CONFIG}/${RELEASE_DIR}/${BINARY} against the current
-// symlink. Unknown placeholders fail explicitly.
-func (r *Reconciler) renderArgs(spec *pb.StrategyAssignmentSpec) ([]string, error) {
+func (r *Reconciler) buildOCIStartSpec(spec *pb.StrategyAssignmentSpec, launch *pb.ArtifactRef, out driver.StartSpec, renderedArgs []string) (driver.StartSpec, error) {
+	strat := spec.GetStrategy()
+	meta, err := artifact.ReadCurrentOCIMeta(r.deps.Artifacts, strat)
+	if err != nil {
+		return driver.StartSpec{}, fmt.Errorf("oci.json: %w", err)
+	}
+	rootfs := r.deps.Artifacts.CurrentRootfsPath(strat)
+	if _, err := os.Stat(rootfs); err != nil {
+		return driver.StartSpec{}, fmt.Errorf("oci rootfs missing: %w", err)
+	}
+	work, err := r.deps.Artifacts.EnsureWorkDir(strat)
+	if err != nil {
+		return driver.StartSpec{}, err
+	}
+	argv := append([]string(nil), meta.Entrypoint...)
+	if len(renderedArgs) > 0 {
+		argv = append(argv, renderedArgs...)
+	} else {
+		argv = append(argv, meta.Cmd...)
+	}
+	if len(argv) == 0 {
+		return driver.StartSpec{}, fmt.Errorf("oci: empty entrypoint/cmd")
+	}
+	uid, gid := artifact.ParseUser(meta.User)
+	out.Driver = driver.KindOCI
+	out.Rootfs = rootfs
+	out.Argv = argv
+	out.ImageEnv = append([]string(nil), meta.Env...)
+	out.Env = mergeEnv(meta.Env, spec.GetEnv())
+	out.WorkDir = work
+	out.WorkBind = work
+	out.SharedBind = r.deps.Artifacts.SharedRoot()
+	out.ContainerUID = uid
+	out.ContainerGID = gid
+	if cfg := spec.GetConfig(); cfg != nil && cfg.GetDigest() != "" {
+		cfgPath, err := filepath.Abs(r.deps.Artifacts.CurrentConfigPath(strat, cfg))
+		if err == nil {
+			out.ConfigBind = cfgPath
+		}
+	}
+	return out, nil
+}
+
+func envPairs(env map[string]string) []string {
+	out := make([]string, 0, len(env))
+	for k, v := range env {
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
+func mergeEnv(image []string, spec map[string]string) []string {
+	out := append([]string(nil), image...)
+	for k, v := range spec {
+		prefix := k + "="
+		found := false
+		for i, e := range out {
+			if strings.HasPrefix(e, prefix) {
+				out[i] = prefix + v
+				found = true
+				break
+			}
+		}
+		if !found {
+			out = append(out, prefix+v)
+		}
+	}
+	return out
+}
+
+// renderArgs expands placeholders against the current symlink. OCI rejects
+// ${RELEASE_DIR} and ${BINARY} — those paths are not bound into the container.
+func (r *Reconciler) renderArgs(spec *pb.StrategyAssignmentSpec, launch *pb.ArtifactRef) ([]string, error) {
 	raw := spec.GetArgs()
 	if len(raw) == 0 {
 		return nil, nil
 	}
-	vals, err := r.placeholderValues(spec)
+	oci := launch != nil && launch.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE
+	if oci {
+		for _, arg := range raw {
+			if strings.Contains(arg, "${RELEASE_DIR}") || strings.Contains(arg, "${BINARY}") {
+				return nil, fmt.Errorf("OCI deployments cannot use ${RELEASE_DIR} or ${BINARY}")
+			}
+		}
+	}
+	vals, err := r.placeholderValues(spec, oci)
 	if err != nil {
 		return nil, err
 	}
@@ -464,19 +559,20 @@ func (r *Reconciler) renderArgs(spec *pb.StrategyAssignmentSpec) ([]string, erro
 	return out, nil
 }
 
-func (r *Reconciler) placeholderValues(spec *pb.StrategyAssignmentSpec) (map[string]string, error) {
+func (r *Reconciler) placeholderValues(spec *pb.StrategyAssignmentSpec, oci bool) (map[string]string, error) {
 	strat := spec.GetStrategy()
-	releaseDir, err := r.deps.Artifacts.CurrentReleaseDir(strat)
-	if err != nil {
-		return nil, fmt.Errorf("resolve ${RELEASE_DIR}: %w", err)
-	}
-	binPath, err := filepath.Abs(r.deps.Artifacts.CurrentBinaryPath(strat))
-	if err != nil {
-		return nil, fmt.Errorf("resolve ${BINARY}: %w", err)
-	}
-	vals := map[string]string{
-		"RELEASE_DIR": releaseDir,
-		"BINARY":      binPath,
+	vals := map[string]string{}
+	if !oci {
+		releaseDir, err := r.deps.Artifacts.CurrentReleaseDir(strat)
+		if err != nil {
+			return nil, fmt.Errorf("resolve ${RELEASE_DIR}: %w", err)
+		}
+		binPath, err := filepath.Abs(r.deps.Artifacts.CurrentBinaryPath(strat))
+		if err != nil {
+			return nil, fmt.Errorf("resolve ${BINARY}: %w", err)
+		}
+		vals["RELEASE_DIR"] = releaseDir
+		vals["BINARY"] = binPath
 	}
 	if cfg := spec.GetConfig(); cfg != nil && cfg.GetDigest() != "" {
 		cfgPath, err := filepath.Abs(r.deps.Artifacts.CurrentConfigPath(strat, cfg))

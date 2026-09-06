@@ -79,7 +79,10 @@ func TestHTTPFetcherStatusClassification(t *testing.T) {
 }
 
 // fakeFetcher records which fetcher a SchemeFetcher dispatched to.
-type fakeFetcher struct{ hits *[]string; tag string }
+type fakeFetcher struct {
+	hits *[]string
+	tag  string
+}
 
 func (f fakeFetcher) Fetch(_ context.Context, _ *pb.ArtifactRef, _ string) error {
 	*f.hits = append(*f.hits, f.tag)

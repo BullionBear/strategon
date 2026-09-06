@@ -756,3 +756,79 @@ func TestGetMachineMetrics(t *testing.T) {
 		t.Fatalf("last_resources: %+v", m.Msg.GetLastResources())
 	}
 }
+
+func TestDeploySetsDriverFromArtifactType(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/img.tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["s"].GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_OCI {
+		t.Fatalf("driver = %v, want OCI", rec.Assignments["s"].GetDriver())
+	}
+
+	_, err = client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "s", Version: "v2", Digest: "sha256:bbb", Uri: "file:///tmp/bin",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY,
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v2",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["s"].GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_EXEC {
+		t.Fatalf("driver = %v, want EXEC after binary deploy", rec.Assignments["s"].GetDriver())
+	}
+}
+
+func TestDeployOCIRejectedWhenMachineAdvertisesExecOnly(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{
+		MachineId: "m1",
+		Spec: &pb.MachineSpec{
+			SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///tmp/img.tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err == nil {
+		t.Fatal("expected FailedPrecondition")
+	}
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("code = %v", connect.CodeOf(err))
+	}
+}

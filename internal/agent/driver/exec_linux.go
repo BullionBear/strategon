@@ -55,9 +55,14 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
 	}
+	return attachStarted(cmd, now)
+}
+
+// attachStarted builds a Process handle for a child this agent just Start-ed.
+func attachStarted(cmd *exec.Cmd, now time.Time) (*Process, error) {
 	pid := cmd.Process.Pid
 
-	// ③ pidfd: a pollable exit notification. If unavailable, WatchExit falls
+	// pidfd: a pollable exit notification. If unavailable, WatchExit falls
 	// back to cmd-independent polling of /proc.
 	pidfd := -1
 	if fd, err := unix.PidfdOpen(pid, 0); err == nil {

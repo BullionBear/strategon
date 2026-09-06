@@ -352,14 +352,14 @@ export enum ArtifactType {
   UNSPECIFIED = 0,
 
   /**
-   * Go static binary tarball
+   * single executable file (not a tarball)
    *
    * @generated from enum value: ARTIFACT_TYPE_BINARY = 1;
    */
   BINARY = 1,
 
   /**
-   * reserved for Python/ML strategies
+   * docker-save or OCI layout archive
    *
    * @generated from enum value: ARTIFACT_TYPE_OCI_IMAGE = 2;
    */
@@ -389,7 +389,7 @@ export enum ExecutionDriver {
   EXEC = 1,
 
   /**
-   * containerd/podman, host network
+   * in-process rootless userns, host network
    *
    * @generated from enum value: EXECUTION_DRIVER_OCI = 2;
    */

@@ -34,12 +34,18 @@ import (
 )
 
 func main() {
+	if driver.MaybeRunOCIHelper() {
+		return
+	}
+	driver.PreferSelfExeProbe()
+
 	controlURL := flag.String("control-plane", "http://127.0.0.1:8080", "control plane base URL (http for h2c, https for mTLS)")
 	machineID := flag.String("machine-id", "", "machine id (defaults to client cert CN when mTLS is enabled)")
 	base := flag.String("base", "/opt/strategies", "strategy release base directory")
 	cgroupRoot := flag.String("cgroup-root", "", "delegated cgroup v2 root (empty disables confinement)")
 	agentVersion := flag.Int("agent-version", 2, "agent capability version (monotonic)")
 	sharedRetention := flag.Int("shared-retention", 3, "shared-file store entries to retain per name (including live)")
+	releaseRetention := flag.Int("release-retention", 3, "release versions to retain per strategy (including current)")
 	metricsListen := flag.String("metrics-listen", "", "optional Prometheus text /metrics listen address (e.g. 127.0.0.1:9101); empty disables")
 	region := flag.String("region", "", "operator-assigned region label for fleet grouping (e.g. tw); empty groups as Unassigned")
 	zone := flag.String("zone", "", "operator-assigned zone label within a region")
@@ -83,16 +89,18 @@ func main() {
 	out := make(chan *pb.AgentMessage, 128)
 	agentClient := strategyplatformv1connect.NewAgentServiceClient(httpClient, *controlURL, connect.WithGRPC())
 	artifacts := artifact.NewManager(*base, artifact.NewResolvingFetcher(artifact.NewCPResolver(agentClient)))
+	execDrv := driver.NewExecDriver(*cgroupRoot)
 	rec := reconciler.New(reconciler.Deps{
-		Driver:          driver.NewExecDriver(*cgroupRoot),
-		Artifacts:       artifacts,
-		Health:          health.AlwaysReady{},
-		Clock:           clock.Real{},
-		Out:             out,
-		BaseDir:         *base,
-		AgentVersion:    *agentVersion,
-		SharedRetention: *sharedRetention,
-		Logger:          logger,
+		Driver:           driver.NewRouter(execDrv, driver.NewOCIDriver(execDrv)),
+		Artifacts:        artifacts,
+		Health:           health.AlwaysReady{},
+		Clock:            clock.Real{},
+		Out:              out,
+		BaseDir:          *base,
+		AgentVersion:     *agentVersion,
+		SharedRetention:  *sharedRetention,
+		ReleaseRetention: *releaseRetention,
+		Logger:           logger,
 	})
 
 	collector := telemetry.New(func() []telemetry.ProcessTarget {
