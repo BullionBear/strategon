@@ -4,7 +4,6 @@ package driver
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"syscall"
 	"time"
@@ -44,16 +43,7 @@ func (d *OCIDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		cmd.Env = []string{}
 	}
 	cmd.Dir = spec.WorkDir
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUTS,
-		UidMappings: []syscall.SysProcIDMap{
-			{ContainerID: uid, HostID: os.Getuid(), Size: 1},
-		},
-		GidMappings: []syscall.SysProcIDMap{
-			{ContainerID: gid, HostID: os.Getgid(), Size: 1},
-		},
-		Setsid: true,
-	}
+	cmd.SysProcAttr = ociSysProcAttr(uid, gid)
 
 	if d.exec != nil {
 		if cgFD := d.exec.setupCgroup(spec); cgFD >= 0 {

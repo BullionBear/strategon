@@ -37,7 +37,6 @@ func main() {
 	if driver.MaybeRunOCIHelper() {
 		return
 	}
-	driver.PreferSelfExeProbe()
 
 	controlURL := flag.String("control-plane", "http://127.0.0.1:8080", "control plane base URL (http for h2c, https for mTLS)")
 	machineID := flag.String("machine-id", "", "machine id (defaults to client cert CN when mTLS is enabled)")

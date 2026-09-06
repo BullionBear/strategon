@@ -25,12 +25,14 @@ jobs:
       - name: Stage placeholder web assets
         run: touch internal/webassets/dist/.gitkeep
       - run: go vet ./...
-      - run: go test ./...
-      # Ubuntu 24.04 defaults to apparmor_restrict_unprivileged_userns=1,
-      # which would skip every OCI userns test. Unblock so --oci-init is
-      # actually exercised (failure is red, not skip).
+      # Ubuntu 24.04 defaults to apparmor_restrict_unprivileged_userns=1, which
+      # refuses the /proc/self/exe re-exec --oci-init depends on. This must run
+      # BEFORE `go test ./...`: that step already covers ./internal/agent/driver,
+      # so leaving it restricted fails the OCI tests before the dedicated step
+      # is reached.
       - name: Enable unprivileged user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: go test ./...
       # STRATEGON_REQUIRE_USERNS turns the local "userns unavailable" skips into
       # failures, so a runner image that re-blocks user namespaces goes red
       # instead of silently dropping the OCI coverage.

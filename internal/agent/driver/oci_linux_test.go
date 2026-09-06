@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func TestMain(m *testing.M) {
@@ -92,5 +94,27 @@ func TestOCIDriverRejectsEmptyArgv(t *testing.T) {
 	d := NewOCIDriver(NewExecDriver(""))
 	if _, err := d.Start(StartSpec{Driver: KindOCI, Rootfs: t.TempDir()}, time.Now()); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// The probe is only meaningful if it asks the kernel for exactly what Start
+// asks for. A weaker probe (CLONE_NEWUSER alone, or exec'ing /bin/true instead
+// of /proc/self/exe) reports OCI-capable on hosts where Start is refused — the
+// control plane then admits a deploy that dies at launch.
+func TestUserNSProbeMatchesStart(t *testing.T) {
+	cmd := probeCommand()
+	if cmd.Path != "/proc/self/exe" {
+		t.Fatalf("probe execs %q, want /proc/self/exe like Start", cmd.Path)
+	}
+	if len(cmd.Args) < 2 || cmd.Args[1] != flagOCIProbe {
+		t.Fatalf("probe args = %#v, want %s", cmd.Args, flagOCIProbe)
+	}
+	attr := ociSysProcAttr(0, 0)
+	want := uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUTS)
+	if attr.Cloneflags != want {
+		t.Fatalf("cloneflags = %#x, want %#x", attr.Cloneflags, want)
+	}
+	if len(attr.UidMappings) != 1 || attr.UidMappings[0].HostID != os.Getuid() || attr.UidMappings[0].Size != 1 {
+		t.Fatalf("uid mappings = %#v, want a single-uid map onto this process", attr.UidMappings)
 	}
 }
