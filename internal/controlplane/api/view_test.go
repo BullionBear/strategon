@@ -17,19 +17,47 @@ func TestIsConvergedRequiresLiveProcess(t *testing.T) {
 	}
 	v.Pid = 42
 	if !isConverged(v) {
-		t.Fatal("HEALTHY + pid should be converged")
+		t.Fatal("HEALTHY + pid (no Live condition) should be converged")
 	}
-	v.Pid = 0
 	v.Conditions = []*pb.Condition{{
 		Type:   "Live",
 		Status: pb.ConditionStatus_CONDITION_STATUS_FALSE,
 		Reason: "Exited",
 	}}
 	if isConverged(v) {
+		t.Fatal("HEALTHY + Live=FALSE must not be converged even when pid is set")
+	}
+	v.Pid = 0
+	if isConverged(v) {
 		t.Fatal("HEALTHY + Live=FALSE must not be converged")
 	}
 	v.Conditions[0].Status = pb.ConditionStatus_CONDITION_STATUS_TRUE
 	if !isConverged(v) {
 		t.Fatal("HEALTHY + Live=TRUE should be converged")
+	}
+}
+
+func TestAssignmentLivePrefersLiveCondition(t *testing.T) {
+	v := &pb.StrategyView{
+		Pid: 99,
+		Conditions: []*pb.Condition{{
+			Type:   "Live",
+			Status: pb.ConditionStatus_CONDITION_STATUS_FALSE,
+		}},
+	}
+	if assignmentLive(v) {
+		t.Fatal("stale pid must not override Live=FALSE")
+	}
+	v.Conditions[0].Status = pb.ConditionStatus_CONDITION_STATUS_TRUE
+	if !assignmentLive(v) {
+		t.Fatal("Live=TRUE should be live")
+	}
+	v.Conditions = nil
+	if !assignmentLive(v) {
+		t.Fatal("pid is a fallback when no Live condition is present")
+	}
+	v.Pid = 0
+	if assignmentLive(v) {
+		t.Fatal("no pid and no Live must not be live")
 	}
 }

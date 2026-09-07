@@ -170,13 +170,12 @@ func isConverged(v *pb.StrategyView) bool {
 }
 
 func assignmentLive(v *pb.StrategyView) bool {
-	if v.GetPid() > 0 {
-		return true
-	}
 	for _, c := range v.GetConditions() {
 		if c.GetType() == "Live" {
 			return c.GetStatus() == pb.ConditionStatus_CONDITION_STATUS_TRUE
 		}
 	}
-	return false
+	// Older agents omit the Live condition; pid is a fallback only then.
+	// A stale ProcessMetrics pid must not override Live=FALSE.
+	return v.GetPid() > 0
 }
