@@ -1,9 +1,12 @@
 package reconciler
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -436,6 +439,96 @@ func TestFailedDeployDoesNotRetryUntilGenerationChanges(t *testing.T) {
 	// bad URI). Wait for it to finish so its release-dir writes complete before
 	// t.TempDir cleanup, rather than racing it.
 	waitWorkerPhase(t, r, pb.DeployPhase_DEPLOY_PHASE_FAILED)
+}
+
+func ociArtRef(version, digest string) *pb.ArtifactRef {
+	return &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Name: "strat", Version: version, Digest: digest}
+}
+
+func crashWithOCIInitLog(t *testing.T, running *pb.ArtifactRef, logBody string) (lastError, warnLog string) {
+	t.Helper()
+	t0 := time.Unix(1000, 0)
+	r, fd, mgr, _, _ := newTestReconciler(t, t0)
+	var buf bytes.Buffer
+	r.deps.Logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	spec := assignment("s", running.GetVersion(), running.GetDigest(), &pb.DeployPolicy{Startsecs: 5})
+	spec.Artifact = running
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
+	st.runningArtifact = running
+	proc := mustStart(t, fd)
+	proc.StartedAt = t0
+	st.proc = proc
+	r.actual["s"] = st
+	if _, err := mgr.EnsureWorkDir("s"); err != nil {
+		t.Fatal(err)
+	}
+	logPath := driver.OCIInitLogPath(mgr.WorkDir("s"))
+	if err := os.WriteFile(logPath, []byte(logBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	return st.lastError, buf.String()
+}
+
+func TestRecordStartCrashIgnoresEmptyOCIInitLog(t *testing.T) {
+	lastError, warnLog := crashWithOCIInitLog(t, ociArtRef("v1", "sha256:aaa"), "")
+	if lastError != "exited after start (code 0)" {
+		t.Fatalf("empty oci-init.log must keep generic lastError, got %q", lastError)
+	}
+	if strings.Contains(warnLog, "oci-init failed") {
+		t.Fatalf("empty log must not warn, got %q", warnLog)
+	}
+}
+
+func TestRecordStartCrashUsesNonEmptyOCIInitLog(t *testing.T) {
+	lastError, warnLog := crashWithOCIInitLog(t, ociArtRef("v1", "sha256:aaa"), "oci-init: exec /payload: exec format error\n")
+	if lastError != "oci-init: exec /payload: exec format error" {
+		t.Fatalf("lastError = %q", lastError)
+	}
+	if !strings.Contains(warnLog, "oci-init failed") {
+		t.Fatalf("expected warn, got %q", warnLog)
+	}
+}
+
+func TestRecordStartCrashIgnoresStaleLogForBinary(t *testing.T) {
+	lastError, warnLog := crashWithOCIInitLog(t, artRef("v2", "sha256:bbb"), "stale oci-init from a previous OCI deploy\n")
+	if lastError != "exited after start (code 0)" {
+		t.Fatalf("binary crash must not use leftover oci-init.log, got %q", lastError)
+	}
+	if strings.Contains(warnLog, "oci-init failed") {
+		t.Fatalf("binary crash must not warn about oci-init, got %q", warnLog)
+	}
+}
+
+func TestRecordStartCrashReadsSiblingLogNotWorkDir(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, mgr, _, _ := newTestReconciler(t, t0)
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5})
+	spec.Artifact = ociArtRef("v1", "sha256:aaa")
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
+	st.runningArtifact = spec.Artifact
+	proc := mustStart(t, fd)
+	proc.StartedAt = t0
+	st.proc = proc
+	r.actual["s"] = st
+	work, err := mgr.EnsureWorkDir("s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, driver.OCIInitLogName), []byte("poisoned by payload\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(driver.OCIInitLogPath(work), []byte("oci-init: bind rootfs: no such file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	if st.lastError != "oci-init: bind rootfs: no such file" {
+		t.Fatalf("must read sibling log, not bind-mounted work copy; got %q", st.lastError)
+	}
 }
 
 // waitWorkerPhase drains workerCh until the given phase is observed, so tests

@@ -659,21 +659,36 @@ func (r *Reconciler) handleExit(ex processExit) {
 }
 
 // recordStartCrash writes a current-generation lastError and, for OCI, a WARN
-// pointing at work/oci-init.log when that file exists.
+// pointing at the sibling oci-init.log when its first line is non-empty.
+// An empty file is created on every successful Start, and WorkDir (plus the
+// sibling log) survives redeploys, so existence alone is not a failure signal.
 func (r *Reconciler) recordStartCrash(st *strategyState, info driver.ExitInfo) {
 	st.lastError = fmt.Sprintf("exited after start (code %d)", info.Code)
-	if r.deps.Artifacts == nil {
+	if r.deps.Artifacts == nil || !r.launchIsOCI(st) {
 		return
 	}
-	logPath := filepath.Join(r.deps.Artifacts.WorkDir(st.strategy), driver.OCIInitLogName)
+	logPath := driver.OCIInitLogPath(r.deps.Artifacts.WorkDir(st.strategy))
 	b, err := os.ReadFile(logPath)
 	if err != nil {
 		return
 	}
-	r.logger().Warn("oci-init failed; see work log", "strategy", st.strategy, "path", logPath)
-	if line, _, _ := strings.Cut(string(b), "\n"); strings.TrimSpace(line) != "" {
-		st.lastError = strings.TrimSpace(line)
+	line, _, _ := strings.Cut(string(b), "\n")
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
 	}
+	r.logger().Warn("oci-init failed; see init log", "strategy", st.strategy, "path", logPath)
+	st.lastError = line
+}
+
+func (r *Reconciler) launchIsOCI(st *strategyState) bool {
+	if st.runningArtifact != nil {
+		return st.runningArtifact.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE
+	}
+	if spec := r.desired[st.strategy]; spec != nil {
+		return spec.GetArtifact().GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE
+	}
+	return false
 }
 
 // tick drives time-based work: health-window evaluation, async readiness
