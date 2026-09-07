@@ -112,8 +112,13 @@ curl -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/Regi
 ```
 
 The Artifacts page can hash + PUT + register from the browser. That needs CORS on the S3
-bucket (see `deploy/seaweedfs/cors.json`). If the browser PUT is blocked, the curl
-sequence above still works.
+bucket. Production `deploy/seaweedfs/cors.json` allows only `https://s7n.lynkora.com`
+(a leaked 15-minute presigned PUT must not be replayable from an arbitrary origin).
+The local test stack applies `deploy/seaweedfs/cors.test.json` (`AllowedOrigins: *`)
+instead — do not copy that wildcard into production. If you add another UI origin,
+edit the production file; do not reopen `*`. Large uploads skip in-browser hashing
+and expect a pasted `sha256sum`. If the browser PUT is blocked, the curl sequence
+above still works.
 
 Local / file URI (agent and file on the same machine) still works:
 

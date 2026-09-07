@@ -49,7 +49,7 @@ services:
       AWS_SECRET_ACCESS_KEY: strategonsecret
       AWS_DEFAULT_REGION: us-east-1
     volumes:
-      - ./seaweedfs/cors.json:/cors.json:ro
+      - ./seaweedfs/cors.test.json:/cors.json:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

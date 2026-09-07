@@ -1,9 +1,9 @@
 {
   "CORSRules": [
     {
-      "AllowedOrigins": ["https://s7n.lynkora.com"],
+      "AllowedOrigins": ["*"],
       "AllowedMethods": ["GET", "PUT", "HEAD"],
-      "AllowedHeaders": ["Content-Type"],
+      "AllowedHeaders": ["*"],
       "ExposeHeaders": ["ETag"],
       "MaxAgeSeconds": 3600
     }
