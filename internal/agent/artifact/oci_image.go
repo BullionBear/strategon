@@ -237,8 +237,11 @@ func loadOCILayoutTar(ctx context.Context, tarPath string, want v1.Platform) (v1
 const maxIndexDepth = 3
 
 // pickImageFromIndex walks an OCI index (and nested indexes) for a platform
-// match. A nil image with a nil error means this subtree had no match; a
-// non-nil error is fatal (unreadable blob, nesting too deep).
+// match, confirming each candidate against its config file rather than
+// trusting the descriptor. A nil image with a nil error means this subtree
+// had no match; a candidate whose blobs will not read is recorded in seen and
+// skipped, so the caller reports "no image for linux/<arch>" naming the
+// reason. A non-nil error is fatal (unreadable index, nesting too deep).
 func pickImageFromIndex(idx v1.ImageIndex, want v1.Platform, seen *[]string, visited map[string]struct{}, depth int) (v1.Image, v1.Platform, error) {
 	if depth > maxIndexDepth {
 		return nil, v1.Platform{}, fmt.Errorf("oci layout: index nesting too deep")
@@ -270,19 +273,31 @@ func pickImageFromIndex(idx v1.ImageIndex, want v1.Platform, seen *[]string, vis
 			continue
 		}
 
-		p := v1.Platform{OS: "linux"}
-		if d.Platform != nil {
-			p = *d.Platform
-		}
-		*seen = append(*seen, p.String())
-		if !platformOK(p, want) {
+		// The descriptor platform is a hint: it may be absent (podman's
+		// oci-archive omits it) or partial, and platformOK treats an empty
+		// field as a match. Use it only to skip a stated mismatch cheaply.
+		if d.Platform != nil && !platformOK(*d.Platform, want) {
+			*seen = append(*seen, d.Platform.String())
 			continue
 		}
 		img, err := idx.Image(d.Digest)
 		if err != nil {
-			return nil, v1.Platform{}, err
+			*seen = append(*seen, fmt.Sprintf("%s (unreadable: %v)", dig, err))
+			continue
 		}
-		return img, p, nil
+		// Confirm against the config file the way the docker-archive path
+		// does, so an arm64 image with a bare descriptor is rejected here
+		// rather than at exec time with "exec format error".
+		got, err := imagePlatform(img)
+		if err != nil {
+			*seen = append(*seen, fmt.Sprintf("%s (no config: %v)", dig, err))
+			continue
+		}
+		*seen = append(*seen, got.String())
+		if !platformOK(got, want) {
+			continue
+		}
+		return img, got, nil
 	}
 	return nil, v1.Platform{}, nil
 }

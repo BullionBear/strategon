@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
 	AUTO_HASH_MAX_BYTES,
 	CryptoUnavailableError,
+	FileChangedWhileHashingError,
 	FileTooLargeToHashError,
 	sha256File,
 	webCryptoSubtle
@@ -31,6 +32,23 @@ describe('sha256File', () => {
 		const stream = vi.spyOn(file, 'stream');
 		await expect(sha256File(file)).rejects.toBeInstanceOf(FileTooLargeToHashError);
 		expect(stream).not.toHaveBeenCalled();
+	});
+
+	// file.size is a snapshot taken when the file was picked. If the bytes on
+	// disk change afterwards the stream disagrees with it, and a digest built
+	// on the mismatch is one no agent can ever verify.
+	it('rejects a stream shorter than file.size instead of zero-padding', async () => {
+		const payload = new Uint8Array([1, 2, 3, 4]);
+		const file = fileFrom(payload);
+		Object.defineProperty(file, 'size', { value: payload.byteLength + 8 });
+		await expect(sha256File(file)).rejects.toBeInstanceOf(FileChangedWhileHashingError);
+	});
+
+	it('rejects a stream longer than file.size instead of throwing RangeError', async () => {
+		const payload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+		const file = fileFrom(payload);
+		Object.defineProperty(file, 'size', { value: 2 });
+		await expect(sha256File(file)).rejects.toBeInstanceOf(FileChangedWhileHashingError);
 	});
 
 	it('errors clearly when crypto.subtle is missing', async () => {

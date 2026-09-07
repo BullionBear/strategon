@@ -41,10 +41,10 @@
 		artifacts = res.artifacts;
 	}
 
-	/** Distinct binary artifact names (exclude `-config` siblings). */
+	/** Distinct deployable artifact names (exclude `-config` siblings). */
 	const strategyOptions = $derived(
 		groupArtifacts(artifacts)
-			.filter((g) => g.kind === 'binary')
+			.filter((g) => g.kind === 'binary' || g.kind === 'oci')
 			.map((g) => g.name)
 	);
 

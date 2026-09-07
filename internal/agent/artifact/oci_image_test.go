@@ -120,12 +120,17 @@ func TestDownloadOCIUnpackAndVerify(t *testing.T) {
 	}
 }
 
-func TestDownloadOCIPlatformMismatch(t *testing.T) {
-	other := "arm64"
+// otherArch is an architecture the host is not, so a built image is a genuine
+// platform mismatch wherever the suite runs.
+func otherArch() string {
 	if runtime.GOARCH == "arm64" {
-		other = "amd64"
+		return "amd64"
 	}
-	path, digest := writeDockerArchive(t, other, map[string]string{"x": "x"})
+	return "arm64"
+}
+
+func TestDownloadOCIPlatformMismatch(t *testing.T) {
+	path, digest := writeDockerArchive(t, otherArch(), map[string]string{"x": "x"})
 	mgr := NewManager(t.TempDir(), LocalFetcher{})
 	ref := &pb.ArtifactRef{
 		Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Version: "v1",
@@ -371,6 +376,75 @@ func TestDownloadOCILayoutArchive(t *testing.T) {
 		if strings.HasPrefix(e.Name(), "oci-layout-") {
 			t.Fatalf("staging dir %s left behind", e.Name())
 		}
+	}
+}
+
+// writeBareDescriptorOCIArchive mirrors `podman save --format oci-archive`:
+// the index descriptor carries no platform at all, so the only truth about
+// the image's architecture is its config file.
+func writeBareDescriptorOCIArchive(t *testing.T, arch string, files map[string]string) (path, digest string) {
+	t.Helper()
+	img, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{
+		OS:           "linux",
+		Architecture: arch,
+		Config:       v1.Config{Entrypoint: []string{"/hello"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err = mutate.Append(img, mutate.Addendum{Layer: fileLayer(t, files)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	idx := mutate.AppendManifests(empty.Index, mutate.IndexAddendum{Add: img})
+	dir := t.TempDir()
+	if _, err := layout.Write(dir, idx); err != nil {
+		t.Fatal(err)
+	}
+	path = filepath.Join(t.TempDir(), "oci-bare.tar")
+	tarDir(t, dir, path)
+	sum, err := fileSHA256(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path, "sha256:" + sum
+}
+
+// A descriptor with no platform passes platformOK on every field, so the
+// layout path must confirm against the config file the way the docker-archive
+// path does. Otherwise a foreign-arch image unpacks cleanly and only fails at
+// exec with "exec format error".
+func TestLoadImageBareDescriptorChecksConfigPlatform(t *testing.T) {
+	path, _ := writeBareDescriptorOCIArchive(t, otherArch(), map[string]string{"hello": "ok"})
+	_, _, release, err := loadImage(context.Background(), path)
+	if release != nil {
+		defer release()
+	}
+	if err == nil {
+		t.Fatal("accepted a foreign-arch image behind a platformless descriptor")
+	}
+	if !strings.Contains(err.Error(), otherArch()) {
+		t.Fatalf("error should name the image arch it rejected: %v", err)
+	}
+}
+
+// The same shape on the host arch must still load: the config confirms it.
+func TestLoadImageBareDescriptorAcceptsHostArch(t *testing.T) {
+	path, _ := writeBareDescriptorOCIArchive(t, runtime.GOARCH, map[string]string{"hello": "ok"})
+	img, plat, release, err := loadImage(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if !strings.EqualFold(plat.Architecture, runtime.GOARCH) {
+		t.Fatalf("platform = %s, want linux/%s", plat.String(), runtime.GOARCH)
+	}
+	cfg, err := img.ConfigFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Config.Entrypoint) != 1 || cfg.Config.Entrypoint[0] != "/hello" {
+		t.Fatalf("entrypoint = %v", cfg.Config.Entrypoint)
 	}
 }
 

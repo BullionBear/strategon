@@ -20,6 +20,14 @@ export class FileTooLargeToHashError extends Error {
 	}
 }
 
+/** The picked File changed on disk between selection and hashing. */
+export class FileChangedWhileHashingError extends Error {
+	constructor() {
+		super('File changed while it was being read — re-select it and try again.');
+		this.name = 'FileChangedWhileHashingError';
+	}
+}
+
 export function webCryptoSubtle(): SubtleCrypto | undefined {
 	return globalThis.crypto?.subtle;
 }
@@ -50,14 +58,22 @@ async function readFileCapped(file: File, maxBytes: number): Promise<Uint8Array<
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) break;
-			if (offset + value.byteLength > maxBytes) {
-				throw new FileTooLargeToHashError(offset + value.byteLength);
+			// `out` is sized from file.size, so a stream that outruns it means
+			// the file grew after it was picked. Bail rather than let `set`
+			// throw a bare RangeError.
+			if (offset + value.byteLength > out.length) {
+				throw new FileChangedWhileHashingError();
 			}
 			out.set(value, offset);
 			offset += value.byteLength;
 		}
 	} finally {
 		reader.releaseLock();
+	}
+	// A short stream leaves the tail zero-filled, which would hand back a
+	// digest for bytes the file never had — and one no agent can verify.
+	if (offset !== out.length) {
+		throw new FileChangedWhileHashingError();
 	}
 	return out;
 }
