@@ -11,6 +11,13 @@
 		typeLabel,
 		type CatalogArtifact
 	} from '$lib/artifacts';
+	import {
+		AUTO_HASH_MAX_BYTES,
+		CryptoUnavailableError,
+		FileTooLargeToHashError,
+		sha256File,
+		webCryptoSubtle
+	} from '$lib/sha256';
 
 	let artifacts = $state<CatalogArtifact[]>([]);
 	let busy = $state(false);
@@ -27,6 +34,7 @@
 	let regFile = $state<File | null>(null);
 	let showRegister = $state(false);
 	let hashing = $state(false);
+	let digestLocked = $state(false);
 
 	const groups = $derived(groupCatalog(artifacts));
 
@@ -63,6 +71,7 @@
 		regDigest = '';
 		regUri = '';
 		regFile = null;
+		digestLocked = false;
 		showRegister = true;
 		error = '';
 		info = '';
@@ -72,26 +81,32 @@
 		return kind === 'oci' ? ArtifactType.OCI_IMAGE : ArtifactType.BINARY;
 	}
 
-	async function sha256File(file: File): Promise<string> {
-		const buf = await file.arrayBuffer();
-		const hash = await crypto.subtle.digest('SHA-256', buf);
-		const hex = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
-		return `sha256:${hex}`;
-	}
-
 	async function onFileChange(ev: Event) {
 		const input = ev.currentTarget as HTMLInputElement;
 		const file = input.files?.[0] ?? null;
 		regFile = file;
 		regDigest = '';
+		digestLocked = false;
 		if (!file) return;
+		if (!webCryptoSubtle()) {
+			error = new CryptoUnavailableError().message;
+			info = '';
+			return;
+		}
+		if (file.size > AUTO_HASH_MAX_BYTES) {
+			error = '';
+			info = new FileTooLargeToHashError(file.size).message;
+			return;
+		}
 		hashing = true;
 		error = '';
+		info = '';
 		try {
 			regDigest = await sha256File(file);
+			digestLocked = true;
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
-			regFile = null;
+			digestLocked = false;
 		} finally {
 			hashing = false;
 		}
@@ -118,6 +133,9 @@
 			let digest = regDigest;
 			if (regFile) {
 				if (!digest) {
+					if (regFile.size > AUTO_HASH_MAX_BYTES || !webCryptoSubtle()) {
+						throw new Error('Digest is required. Paste the sha256sum of the selected file.');
+					}
 					digest = await sha256File(regFile);
 					regDigest = digest;
 				}
@@ -185,8 +203,10 @@
 					<span class="mono">-config</span> suffix.
 				{:else if regKind === 'oci'}
 					Upload a <span class="mono">docker save</span> / OCI-layout tar, or register an existing URI.
+					Large tars skip in-browser hashing — paste <span class="mono">sha256sum</span>.
 				{:else}
 					Upload a file (presigned PUT to the object store) or register an existing URI.
+					Files over 64 MiB skip in-browser hashing — paste <span class="mono">sha256sum</span>.
 				{/if}
 			</p>
 			<div class="form">
@@ -207,7 +227,7 @@
 					File
 					<input type="file" disabled={busy || hashing} onchange={onFileChange} />
 				</label>
-				<label>Digest<input class="wide" bind:value={regDigest} placeholder={hashing ? 'hashing…' : 'sha256:…'} disabled={!!regFile} /></label>
+				<label>Digest<input class="wide" bind:value={regDigest} placeholder={hashing ? 'hashing…' : 'sha256:…'} disabled={digestLocked} /></label>
 				<label>URI<input class="wide" bind:value={regUri} placeholder={regFile ? 'filled after upload' : 's3://… or file:///…'} disabled={!!regFile} /></label>
 				<button class="btn" disabled={busy || hashing} onclick={register}>
 					{regFile ? 'Upload & register' : 'Register'}
