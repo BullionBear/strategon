@@ -65,6 +65,22 @@ func applyRootfs(ia InitArgs) error {
 		}
 	}
 
+	// procfs must be mounted before pivot_root, while the host's /proc is
+	// still in this mount namespace. The kernel's mount_too_revealing() only
+	// lets an unprivileged user namespace mount proc when a fully visible
+	// procfs already exists to compare against; detaching the old root below
+	// removes the last one, so mounting afterwards is always EPERM.
+	// MS_NOSUID|MS_NODEV|MS_NOEXEC matches the flags the host mount is locked
+	// with — a laxer new mount fails the same check.
+	procTarget := filepath.Join(rootfs, "proc")
+	if err := os.MkdirAll(procTarget, 0o755); err != nil {
+		return err
+	}
+	if err := unix.Mount("proc", procTarget, "proc",
+		unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
+		return fmt.Errorf("mount proc: %w", err)
+	}
+
 	if err := unix.PivotRoot(rootfs, oldroot); err != nil {
 		return fmt.Errorf("pivot_root: %w", err)
 	}
@@ -75,13 +91,6 @@ func applyRootfs(ia InitArgs) error {
 		return fmt.Errorf("unmount oldroot: %w", err)
 	}
 	_ = os.Remove("/.oldroot")
-
-	if err := os.MkdirAll("/proc", 0o755); err != nil {
-		return err
-	}
-	if err := unix.Mount("proc", "/proc", "proc", 0, ""); err != nil {
-		return fmt.Errorf("mount proc: %w", err)
-	}
 
 	cwd := ia.CWD
 	if cwd == "" {

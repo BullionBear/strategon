@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -116,5 +117,89 @@ func TestUserNSProbeMatchesStart(t *testing.T) {
 	}
 	if len(attr.UidMappings) != 1 || attr.UidMappings[0].HostID != os.Getuid() || attr.UidMappings[0].Size != 1 {
 		t.Fatalf("uid mappings = %#v, want a single-uid map onto this process", attr.UidMappings)
+	}
+}
+
+// copyIntoRootfs copies bin into rootfs at the same path, together with any
+// shared libraries it needs. Without the libraries the payload cannot exec, and
+// a test that only checks the fork succeeded would not notice.
+func copyIntoRootfs(t *testing.T, rootfs, bin string) {
+	t.Helper()
+	copyOne := func(src string) {
+		dst := filepath.Join(rootfs, src)
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		data, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(dst, data, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	copyOne(bin)
+	out, err := exec.Command("ldd", bin).Output()
+	if err != nil {
+		return // static binary, or no ldd: nothing more to carry
+	}
+	for _, f := range strings.Fields(string(out)) {
+		if strings.HasPrefix(f, "/") && strings.Contains(f, ".so") {
+			resolved, err := filepath.EvalSymlinks(f)
+			if err != nil {
+				continue
+			}
+			copyOne(f)
+			if resolved != f {
+				copyOne(resolved)
+			}
+		}
+	}
+}
+
+// The payload must actually reach exec. Everything --oci-init does before that
+// — the binds, the proc mount, pivot_root — reports failure only on a stderr
+// that goes to /dev/null, so a child that dies in init is indistinguishable
+// from one that never started unless the test waits to see it stay up.
+func TestOCIDriverPayloadReachesExec(t *testing.T) {
+	requireUserNS(t)
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("sleep not available")
+	}
+	rootfs := t.TempDir()
+	copyIntoRootfs(t, rootfs, sleep)
+	work := filepath.Join(t.TempDir(), "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	d := NewOCIDriver(NewExecDriver(""))
+	p, err := d.Start(StartSpec{
+		Strategy: "s",
+		Driver:   KindOCI,
+		Rootfs:   rootfs,
+		Argv:     []string{sleep, "30"},
+		WorkDir:  work,
+		WorkBind: work,
+		Env:      []string{"PATH=/bin:/usr/bin"},
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	exited := make(chan ExitInfo, 1)
+	go func() { exited <- d.WatchExit(p, time.Now) }()
+	select {
+	case info := <-exited:
+		t.Fatalf("payload exited during init (code %d); --oci-init failed before exec", info.Code)
+	case <-time.After(time.Second):
+	}
+	if err := d.Signal(p, syscall.SIGKILL); err != nil {
+		t.Fatalf("signal: %v", err)
+	}
+	select {
+	case <-exited:
+	case <-time.After(5 * time.Second):
+		t.Fatal("WatchExit did not return")
 	}
 }
