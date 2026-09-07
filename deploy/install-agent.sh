@@ -107,13 +107,18 @@ REMOTE_FACTS="$(
     fi
     printf "%s " "$(tailscale ip -4 2>/dev/null | head -1 || echo none)"
     if [ -f "$HOME/.config/systemd/user/strategon-agent.service" ]; then
-      printf "user-unit\n"
+      printf "user-unit "
     else
-      printf "none\n"
+      printf "none "
+    fi
+    if [ "$(id -u)" = 0 ] || sudo -n true 2>/dev/null; then
+      printf "sudo-ok\n"
+    else
+      printf "sudo-needs-password\n"
     fi
   '
 )" || fail "cannot reach $TARGET over SSH"
-read -r REMOTE_USER ARCH REMOTE_SHA UNIT_HASH TS_IP USER_UNIT <<<"$REMOTE_FACTS"
+read -r REMOTE_USER ARCH REMOTE_SHA UNIT_HASH TS_IP USER_UNIT SUDO_STATE <<<"$REMOTE_FACTS"
 [[ -n "$ARCH" ]] || fail "cannot reach $TARGET over SSH (empty probe result)"
 
 [[ "$ARCH" == "unsupported" ]] && fail "unsupported CPU architecture on $TARGET"
@@ -138,6 +143,17 @@ fi
 
 SUDO=""
 [[ "$REMOTE_USER" != "root" ]] && SUDO="sudo"
+
+# ssh -t cannot allocate a terminal when this script's stdin is not one (CI, a
+# pipeline, an agent shell). sudo then refuses to prompt and the apply step
+# does nothing. Say so here rather than after staging files.
+if [[ -n "$SUDO" && "$SUDO_STATE" == "sudo-needs-password" && ! -t 0 ]]; then
+  if $CHECK_ONLY; then
+    log "warning: sudo needs a password here and stdin is not a terminal — a real run would fail"
+  else
+    fail "sudo on $TARGET needs a password but stdin is not a terminal; re-run from an interactive shell or grant passwordless sudo"
+  fi
+fi
 
 if [[ -z "$METRICS_IP" ]]; then
   [[ "$TS_IP" == "none" ]] && fail "no Tailscale IP on $TARGET; pass metrics-ip explicitly"
@@ -291,17 +307,36 @@ systemctl enable strategon-agent.service >/dev/null 2>&1 || true
 systemctl restart strategon-agent.service
 REMOTE
 
+# `cmd; rm -f` would report rm's status, so a failed apply (sudo refusing to
+# prompt, a bad install) looked like success. Keep the apply's own status.
 if [[ -z "$SUDO" ]]; then
-  run_ssh "$TARGET" "bash $APPLY; rm -f $APPLY"
+  run_ssh "$TARGET" "bash $APPLY; rc=\$?; rm -f $APPLY; exit \$rc" \
+    || fail "apply failed on $TARGET (nothing was upgraded; see output above)"
 else
   # -t allocates a terminal so sudo can prompt when the host requires a
   # password. Harmless where sudo is passwordless.
-  run_ssh -t "$TARGET" "sudo bash $APPLY; rm -f $APPLY"
+  run_ssh -t "$TARGET" "sudo bash $APPLY; rc=\$?; rm -f $APPLY; exit \$rc" \
+    || fail "apply failed on $TARGET (nothing was upgraded; see output above)"
 fi
 
 # -------------------------------------------------------------------- verify
+# is-active alone is not proof of an upgrade: the *old* agent is still active
+# when the apply step does nothing, which once reported a whole fleet as
+# deployed while one host stayed on the previous release. Check the binary that
+# is actually installed against the checksum we intended to install.
 sleep 3
-STATE="$(run_ssh "$TARGET" "systemctl is-active strategon-agent.service" || true)"
+VERIFY="$(
+  run_ssh "$TARGET" '
+    printf "%s " "$(sha256sum '"$REMOTE_DIR"'/agent 2>/dev/null | cut -d" " -f1 || echo none)"
+    systemctl is-active strategon-agent.service
+  ' || true
+)"
+read -r GOT_REMOTE_SHA STATE <<<"$VERIFY"
+if [[ "$GOT_REMOTE_SHA" != "$WANT_SHA" ]]; then
+  printf 'error: %s still runs a different binary after apply (have %s want %s)\n' \
+    "$TARGET" "${GOT_REMOTE_SHA:0:12}" "${WANT_SHA:0:12}" >&2
+  exit 1
+fi
 if [[ "$STATE" != "active" ]]; then
   printf 'error: agent is %s on %s\n' "$STATE" "$TARGET" >&2
   run_ssh "$TARGET" "$SUDO journalctl -u strategon-agent -n 20 --no-pager" >&2
