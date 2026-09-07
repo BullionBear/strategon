@@ -4,7 +4,9 @@ package driver
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -44,6 +46,15 @@ func (d *OCIDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 	}
 	cmd.Dir = spec.WorkDir
 	cmd.SysProcAttr = ociSysProcAttr(uid, gid)
+	if spec.WorkDir != "" {
+		logPath := filepath.Join(spec.WorkDir, OCIInitLogName)
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+		if err != nil {
+			return nil, fmt.Errorf("oci start: %s: %w", OCIInitLogName, err)
+		}
+		cmd.Stderr = f
+		defer f.Close()
+	}
 
 	if d.exec != nil {
 		if cgFD := d.exec.setupCgroup(spec); cgFD >= 0 {

@@ -384,7 +384,7 @@ func (r *Reconciler) retireStrategy(st *strategyState) {
 //
 // When healthCheck is true the process enters STARTING → HEALTH_CHECKING (resume
 // / post-deploy crash during the window). When false (steady-state crash
-// restart) the phase stays HEALTHY.
+// restart) the process is live again so phase returns to HEALTHY.
 func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState, healthCheck bool) {
 	if healthCheck {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
@@ -408,6 +408,7 @@ func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return
 	}
 	r.installProcess(spec, st, proc)
+	st.lastError = ""
 	if healthCheck {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
 		st.healthDeadline = r.now().Add(healthWindow(spec))
@@ -635,6 +636,7 @@ func (r *Reconciler) handleExit(ex processExit) {
 	if supervisor.CrashedOnStart(lived, int(policy.GetStartsecs())) {
 		st.backoff.RecordCrash(r.now(), r.deps.Jitter)
 		st.restartCount++
+		r.recordStartCrash(st, ex.info)
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING &&
 			st.backoff.Consecutive > int(policy.GetMaxCrashesInWindow()) &&
 			policy.GetEnableAutoRollback() {
@@ -646,6 +648,31 @@ func (r *Reconciler) handleExit(ex processExit) {
 		// else: exponential backoff; reconcile() restarts when the tick elapses.
 	} else {
 		st.backoff.Reset() // lived long enough: healthy run that exited, restart clean
+		st.lastError = fmt.Sprintf("exited (code %d)", ex.info.Code)
+	}
+	if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		// HEALTHY means the desired version is running. A dead process must
+		// not keep advertising that — crash-restart will promote again after
+		// installProcess succeeds.
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
+	}
+}
+
+// recordStartCrash writes a current-generation lastError and, for OCI, a WARN
+// pointing at work/oci-init.log when that file exists.
+func (r *Reconciler) recordStartCrash(st *strategyState, info driver.ExitInfo) {
+	st.lastError = fmt.Sprintf("exited after start (code %d)", info.Code)
+	if r.deps.Artifacts == nil {
+		return
+	}
+	logPath := filepath.Join(r.deps.Artifacts.WorkDir(st.strategy), driver.OCIInitLogName)
+	b, err := os.ReadFile(logPath)
+	if err != nil {
+		return
+	}
+	r.logger().Warn("oci-init failed; see work log", "strategy", st.strategy, "path", logPath)
+	if line, _, _ := strings.Cut(string(b), "\n"); strings.TrimSpace(line) != "" {
+		st.lastError = strings.TrimSpace(line)
 	}
 }
 
@@ -734,7 +761,7 @@ func (r *Reconciler) recomputeObservedGeneration() {
 			}
 			continue
 		}
-		if !versionMatches(spec, st) || st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		if !versionMatches(spec, st) || st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY || st.proc == nil {
 			converged = false
 			break
 		}

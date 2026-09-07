@@ -112,7 +112,25 @@ func applyRootfs(ia InitArgs) error {
 	if err != nil {
 		return err
 	}
+	// Drop the inherited oci-init.log FD so the payload's stdout/stderr
+	// still go to /dev/null — that is the existing strategy-output policy.
+	// /dev/null is bind-mounted into the rootfs before pivot; if it is
+	// missing (minimal test roots) keep the inherited fds rather than fail exec.
+	_ = discardStdio()
 	return unix.Exec(bin, ia.Argv, os.Environ())
+}
+
+func discardStdio() error {
+	null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer null.Close()
+	fd := int(null.Fd())
+	if err := unix.Dup2(fd, 1); err != nil {
+		return err
+	}
+	return unix.Dup2(fd, 2)
 }
 
 func bindSame(rootfs, hostPath string, dir bool) error {

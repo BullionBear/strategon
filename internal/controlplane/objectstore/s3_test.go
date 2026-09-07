@@ -50,3 +50,26 @@ func TestPresignGetLocalSignature(t *testing.T) {
 		t.Fatalf("expires_at = %v, want ~5m from now", exp)
 	}
 }
+
+func TestPresignPutLocalSignature(t *testing.T) {
+	s, err := New(Config{
+		Endpoint:  "http://127.0.0.1:8333",
+		AccessKey: "ak",
+		SecretKey: "sk",
+		Bucket:    "artifacts",
+		Region:    "us-east-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	url, exp, err := s.PresignPut(context.Background(), "artifacts", "artifacts/n/v1/abcd", DefaultPresignPutTTL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(url, "127.0.0.1:8333") || !strings.Contains(url, "artifacts/n/v1/abcd") {
+		t.Fatalf("url = %q", url)
+	}
+	if time.Until(exp) < 14*time.Minute || time.Until(exp) > 15*time.Minute {
+		t.Fatalf("expires_at = %v, want ~15m from now", exp)
+	}
+}

@@ -23,8 +23,10 @@
 	let regVersion = $state('');
 	let regDigest = $state('');
 	let regUri = $state('');
-	let regKind = $state<'binary' | 'config'>('binary');
+	let regKind = $state<'binary' | 'config' | 'oci'>('binary');
+	let regFile = $state<File | null>(null);
 	let showRegister = $state(false);
+	let hashing = $state(false);
 
 	const groups = $derived(groupCatalog(artifacts));
 
@@ -54,15 +56,45 @@
 		expandedDigests = next;
 	}
 
-	function openRegister(name = '', kind: 'binary' | 'config' = 'binary') {
+	function openRegister(name = '', kind: 'binary' | 'config' | 'oci' = 'binary') {
 		regName = name;
 		regKind = kind;
 		regVersion = '';
 		regDigest = '';
 		regUri = '';
+		regFile = null;
 		showRegister = true;
 		error = '';
 		info = '';
+	}
+
+	function artifactTypeOf(kind: 'binary' | 'config' | 'oci'): ArtifactType {
+		return kind === 'oci' ? ArtifactType.OCI_IMAGE : ArtifactType.BINARY;
+	}
+
+	async function sha256File(file: File): Promise<string> {
+		const buf = await file.arrayBuffer();
+		const hash = await crypto.subtle.digest('SHA-256', buf);
+		const hex = [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, '0')).join('');
+		return `sha256:${hex}`;
+	}
+
+	async function onFileChange(ev: Event) {
+		const input = ev.currentTarget as HTMLInputElement;
+		const file = input.files?.[0] ?? null;
+		regFile = file;
+		regDigest = '';
+		if (!file) return;
+		hashing = true;
+		error = '';
+		try {
+			regDigest = await sha256File(file);
+		} catch (e) {
+			error = e instanceof Error ? e.message : String(e);
+			regFile = null;
+		} finally {
+			hashing = false;
+		}
 	}
 
 	async function register() {
@@ -70,21 +102,52 @@
 			regKind === 'config' && regName && !regName.endsWith('-config')
 				? `${regName}-config`
 				: regName;
-		if (!name || !regVersion || !regDigest || !regUri) {
-			error = 'Name, version, digest, and URI are required';
+		if (!name || !regVersion) {
+			error = 'Name and version are required';
+			return;
+		}
+		if (!regFile && (!regDigest || !regUri)) {
+			error = 'Choose a file to upload, or provide digest + URI';
 			return;
 		}
 		busy = true;
 		error = '';
 		info = '';
 		try {
+			let uri = regUri;
+			let digest = regDigest;
+			if (regFile) {
+				if (!digest) {
+					digest = await sha256File(regFile);
+					regDigest = digest;
+				}
+				info = 'Requesting upload URL…';
+				const up = await client.createArtifactUpload({
+					name,
+					version: regVersion,
+					digest,
+					type: artifactTypeOf(regKind)
+				});
+				info = `Uploading ${regFile.name}…`;
+				const put = await fetch(up.putUrl, {
+					method: 'PUT',
+					body: regFile,
+					headers: { 'Content-Type': 'application/octet-stream' }
+				});
+				if (!put.ok) {
+					throw new Error(
+						`upload failed (${put.status}). If this is a CORS error, PUT from curl — see README.`
+					);
+				}
+				uri = up.s3Uri;
+			}
 			await client.registerArtifact({
 				artifact: {
 					name,
 					version: regVersion,
-					digest: regDigest,
-					uri: regUri,
-					type: ArtifactType.BINARY
+					digest,
+					uri,
+					type: artifactTypeOf(regKind)
 				}
 			});
 			info = `Registered ${name}@${regVersion}`;
@@ -92,6 +155,7 @@
 			await loadArtifacts();
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
+			info = '';
 		} finally {
 			busy = false;
 		}
@@ -114,13 +178,15 @@
 
 	{#if showRegister}
 		<div class="panel register" style="margin-top:1.25rem">
-			<h2>Register {regKind === 'config' ? 'config' : 'binary'}</h2>
+			<h2>Register {regKind === 'config' ? 'config' : regKind === 'oci' ? 'OCI image' : 'binary'}</h2>
 			<p class="muted" style="margin-bottom:0.85rem">
 				{#if regKind === 'config'}
 					Stored as <span class="mono">&lt;name&gt;-config</span> when name has no
 					<span class="mono">-config</span> suffix.
+				{:else if regKind === 'oci'}
+					Upload a <span class="mono">docker save</span> / OCI-layout tar, or register an existing URI.
 				{:else}
-					Digest + URI are required so agents can fetch and verify.
+					Upload a file (presigned PUT to the object store) or register an existing URI.
 				{/if}
 			</p>
 			<div class="form">
@@ -129,6 +195,7 @@
 					<select bind:value={regKind}>
 						<option value="binary">binary</option>
 						<option value="config">config</option>
+						<option value="oci">oci image</option>
 					</select>
 				</label>
 				<label>
@@ -136,9 +203,15 @@
 					<input bind:value={regName} placeholder={regKind === 'config' ? 'mystrat' : 'mystrat'} />
 				</label>
 				<label>Version<input bind:value={regVersion} placeholder="v42" /></label>
-				<label>Digest<input class="wide" bind:value={regDigest} placeholder="sha256:…" /></label>
-				<label>URI<input class="wide" bind:value={regUri} placeholder="file:///path/to/bin" /></label>
-				<button class="btn" disabled={busy} onclick={register}>Register</button>
+				<label>
+					File
+					<input type="file" disabled={busy || hashing} onchange={onFileChange} />
+				</label>
+				<label>Digest<input class="wide" bind:value={regDigest} placeholder={hashing ? 'hashing…' : 'sha256:…'} disabled={!!regFile} /></label>
+				<label>URI<input class="wide" bind:value={regUri} placeholder={regFile ? 'filled after upload' : 's3://… or file:///…'} disabled={!!regFile} /></label>
+				<button class="btn" disabled={busy || hashing} onclick={register}>
+					{regFile ? 'Upload & register' : 'Register'}
+				</button>
 				<button class="btn secondary" type="button" disabled={busy} onclick={() => (showRegister = false)}
 					>Cancel</button
 				>
@@ -155,7 +228,7 @@
 
 	{#if groups.length === 0}
 		<div class="panel empty" style="margin-top:1.25rem">
-			<p class="muted">No artifacts yet. Register a binary or config to get started.</p>
+			<p class="muted">No artifacts yet. Register a binary, OCI image, or config to get started.</p>
 		</div>
 	{:else}
 		<div class="groups" style="margin-top:1.25rem">
@@ -173,7 +246,7 @@
 							onclick={() =>
 								openRegister(
 									g.kind === 'config' ? g.name.replace(/-config$/, '') : g.name,
-									g.kind === 'config' ? 'config' : 'binary'
+									g.kind === 'config' ? 'config' : g.kind === 'oci' ? 'oci' : 'binary'
 								)}
 						>
 							Register new version

@@ -20,6 +20,7 @@ import (
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/ingest"
+	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/sharedfile"
 	"google.golang.org/protobuf/proto"
@@ -43,12 +44,13 @@ type AgentController interface {
 
 // Server implements strategyplatformv1connect.ControlPlaneServiceHandler.
 type Server struct {
-	store  store.Store
-	hub    *store.Hub
-	agents AgentNotifier
-	broker *filetransfer.Broker
-	ingest *ingest.Service
-	logger *slog.Logger
+	store   store.Store
+	hub     *store.Hub
+	agents  AgentNotifier
+	broker  *filetransfer.Broker
+	ingest  *ingest.Service
+	objects objectstore.Store
+	logger  *slog.Logger
 }
 
 // New constructs a human-API server.
@@ -67,6 +69,12 @@ func NewWithBroker(st store.Store, hub *store.Hub, agents AgentNotifier, broker 
 // WithIngest attaches the registration-time ingest service (optional).
 func (s *Server) WithIngest(svc *ingest.Service) *Server {
 	s.ingest = svc
+	return s
+}
+
+// WithObjectStore attaches the S3 store used by CreateArtifactUpload.
+func (s *Server) WithObjectStore(o objectstore.Store) *Server {
+	s.objects = o
 	return s
 }
 
@@ -753,6 +761,44 @@ func (s *Server) RegisterArtifact(ctx context.Context, req *connect.Request[pb.R
 		ToVersion: art.GetVersion(),
 	})
 	return connect.NewResponse(&pb.RegisterArtifactResponse{}), nil
+}
+
+func (s *Server) CreateArtifactUpload(ctx context.Context, req *connect.Request[pb.CreateArtifactUploadRequest]) (*connect.Response[pb.CreateArtifactUploadResponse], error) {
+	if s.objects == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("object store is not configured"))
+	}
+	name := strings.TrimSpace(req.Msg.GetName())
+	version := strings.TrimSpace(req.Msg.GetVersion())
+	digest := strings.TrimSpace(req.Msg.GetDigest())
+	if name == "" || version == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name and version are required"))
+	}
+	if err := requireSHA256Digest(digest); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	bucket := s.objects.Bucket()
+	if bucket == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("object store bucket is not configured"))
+	}
+	key := objectstore.ObjectKey(name, version, digest)
+	url, exp, err := s.objects.PresignPut(ctx, bucket, key, objectstore.DefaultPresignPutTTL)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	uri := objectstore.ObjectURI(bucket, name, version, digest)
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp: timestamppb.Now(),
+		Actor:     auth.ActorFromContext(ctx),
+		Action:    "CreateArtifactUpload",
+		Strategy:  name,
+		ToVersion: version,
+		Detail:    uri,
+	})
+	return connect.NewResponse(&pb.CreateArtifactUploadResponse{
+		PutUrl:    url,
+		ExpiresAt: timestamppb.New(exp),
+		S3Uri:     uri,
+	}), nil
 }
 
 func (s *Server) ListArtifacts(_ context.Context, req *connect.Request[pb.ListArtifactsRequest]) (*connect.Response[pb.ListArtifactsResponse], error) {

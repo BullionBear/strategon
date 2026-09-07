@@ -71,6 +71,64 @@
         }
       }
     },
+    "/strategyplatform.v1.ControlPlaneService/CreateArtifactUpload": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "CreateArtifactUpload",
+        "operationId": "strategyplatform.v1.ControlPlaneService.CreateArtifactUpload",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.CreateArtifactUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.CreateArtifactUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/Deploy": {
       "post": {
         "tags": [
@@ -1185,7 +1243,7 @@
           "action": {
             "type": "string",
             "title": "action",
-            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"SetSharedFiles\" | \"ResolveArtifactSource\""
+            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"CreateArtifactUpload\" | \"SetSharedFiles\" | \"ResolveArtifactSource\""
           },
           "machineId": {
             "type": "string",
@@ -1309,6 +1367,52 @@
           }
         },
         "title": "ControlPlaneVersion",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.CreateArtifactUploadRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "version": {
+            "type": "string",
+            "title": "version"
+          },
+          "digest": {
+            "type": "string",
+            "title": "digest",
+            "description": "\"sha256:…\""
+          },
+          "type": {
+            "title": "type",
+            "description": "recorded by the client on RegisterArtifact",
+            "$ref": "#/components/schemas/strategyplatform.v1.ArtifactType"
+          }
+        },
+        "title": "CreateArtifactUploadRequest",
+        "additionalProperties": false,
+        "description": "CreateArtifactUpload returns a presigned PUT so the client can write bytes\n directly to the object store. After the PUT, call RegisterArtifact with\n the returned s3_uri. The control plane never proxies the payload."
+      },
+      "strategyplatform.v1.CreateArtifactUploadResponse": {
+        "type": "object",
+        "properties": {
+          "putUrl": {
+            "type": "string",
+            "title": "put_url"
+          },
+          "expiresAt": {
+            "title": "expires_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          },
+          "s3Uri": {
+            "type": "string",
+            "title": "s3_uri",
+            "description": "s3://\u003cbucket\u003e/artifacts/\u003cname\u003e/\u003cversion\u003e/\u003chex\u003e"
+          }
+        },
+        "title": "CreateArtifactUploadResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.CronAction": {

@@ -49,6 +49,10 @@ type StartSpec struct {
 	ConfigBind string // host path of the config file; empty if none
 }
 
+// OCIInitLogName is the host-side file under WorkDir that captures --oci-init
+// stderr. Truncated on each Start so crash loops cannot grow it without bound.
+const OCIInitLogName = "oci-init.log"
+
 // Process is a handle to a supervised process.
 //
 // StartTime is /proc/<pid>/stat field 22 (starttime in clock ticks) and is

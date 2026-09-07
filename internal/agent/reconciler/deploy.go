@@ -20,6 +20,7 @@ func (r *Reconciler) beginDeploy(spec *pb.StrategyAssignmentSpec, st *strategySt
 	ctx, cancel := context.WithCancel(r.ctx)
 	st.inflight = &deployOp{target: spec.GetArtifact(), config: spec.GetConfig(), cancel: cancel}
 	st.phase = pb.DeployPhase_DEPLOY_PHASE_PENDING
+	st.lastError = ""
 	st.warnedBadVersion = "" // a real deploy is starting; allow a fresh skip warning later
 	// Remember the currently-running version so rollback is O(1) (no download).
 	st.prevArtifact = st.runningArtifact
@@ -175,6 +176,7 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 	if st.prevArtifact == nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
 		st.lastError = "no previous version to roll back to"
+		st.failedAtGen = r.generation
 		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackImpossible", st.lastError)
 		return
 	}
@@ -182,6 +184,7 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 	if err := r.deps.Artifacts.SwitchTo(st.strategy, st.prevArtifact.GetVersion()); err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
 		st.lastError = err.Error()
+		st.failedAtGen = r.generation
 		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
 		return
 	}
@@ -192,6 +195,7 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 	if err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
 		st.lastError = err.Error()
+		st.failedAtGen = r.generation
 		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
 		return
 	}
@@ -199,6 +203,7 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 	if err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
 		st.lastError = err.Error()
+		st.failedAtGen = r.generation
 		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
 		return
 	}

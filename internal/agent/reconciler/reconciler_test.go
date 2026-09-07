@@ -283,6 +283,108 @@ func TestCrashLoopDuringHealthCheckingRestartsAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestRollbackImpossibleStaysFailed(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, _, fk, _ := newTestReconciler(t, t0)
+	r.generation = 12
+	policy := &pb.DeployPolicy{Startsecs: 5, MaxCrashesInWindow: 2, EnableAutoRollback: true, HealthWindowSeconds: 120}
+	spec := assignment("s", "v1", "sha256:v1", policy)
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
+	st.inflight = &deployOp{target: artRef("v1", "sha256:v1"), cancel: func() {}}
+	st.runningArtifact = artRef("v1", "sha256:v1")
+	r.actual["s"] = st
+
+	for i := 0; i < 3; i++ {
+		proc := mustStart(t, fd)
+		proc.StartedAt = t0
+		st.proc = proc
+		r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	}
+
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_FAILED {
+		t.Fatalf("phase = %v, want FAILED", st.phase)
+	}
+	if st.failedAtGen != 12 {
+		t.Fatalf("failedAtGen = %d, want 12", st.failedAtGen)
+	}
+	if st.lastError != "no previous version to roll back to" {
+		t.Fatalf("lastError = %q", st.lastError)
+	}
+
+	starts := fd.starts()
+	fk.Advance(2 * time.Minute)
+	for i := 0; i < 5; i++ {
+		r.reconcile()
+	}
+	if fd.starts() != starts {
+		t.Fatalf("FAILED must not restart; starts %d → %d", starts, fd.starts())
+	}
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_FAILED {
+		t.Fatalf("phase overwritten to %v", st.phase)
+	}
+}
+
+func TestHealthyExitDemotesPhaseUntilRestart(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, _, fk, _ := newTestReconciler(t, t0)
+	r.generation = 7
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5})
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.lastError = "stale from previous generation"
+	proc := mustStart(t, fd)
+	proc.StartedAt = t0
+	st.proc = proc
+	r.actual["s"] = st
+
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_STARTING {
+		t.Fatalf("phase = %v, want STARTING while dead", st.phase)
+	}
+	if st.lastError == "" || st.lastError == "stale from previous generation" {
+		t.Fatalf("lastError should record the crash, got %q", st.lastError)
+	}
+	r.recomputeObservedGeneration()
+	if r.observedGenA.Load() == 7 {
+		t.Fatal("machine must not stay converged while the process is dead")
+	}
+
+	fk.Advance(2 * time.Second)
+	r.reconcile()
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		t.Fatalf("phase = %v, want HEALTHY after restart", st.phase)
+	}
+	if st.proc == nil {
+		t.Fatal("expected live process")
+	}
+	if st.lastError != "" {
+		t.Fatalf("lastError should clear on successful start, got %q", st.lastError)
+	}
+}
+
+func TestBeginDeployClearsLastError(t *testing.T) {
+	r, _, _, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	spec := assignment("s", "v2", "sha256:v2", &pb.DeployPolicy{})
+	spec.Artifact.Uri = "file://tmp/missing.sh"
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.lastError = "no previous version to roll back to"
+	st.runningArtifact = artRef("v1", "sha256:v1")
+	r.actual["s"] = st
+
+	r.beginDeploy(spec, st)
+	if st.lastError != "" {
+		t.Fatalf("lastError = %q, want empty after beginDeploy", st.lastError)
+	}
+	waitWorkerPhase(t, r, pb.DeployPhase_DEPLOY_PHASE_FAILED)
+}
+
 func TestFailedDeployDoesNotRetryUntilGenerationChanges(t *testing.T) {
 	r, _, _, _, out := newTestReconciler(t, time.Unix(1000, 0))
 	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{})

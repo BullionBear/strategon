@@ -201,9 +201,10 @@ func TestSafeTarNameRejectsSlip(t *testing.T) {
 	}
 }
 
-// writeOCILayoutArchive produces what `docker save` emits on Engine 25+ with
-// the containerd snapshotter: an OCI layout (index.json + oci-layout + blobs/)
-// rolled into a tar, rather than the classic manifest.json docker archive.
+// writeOCILayoutArchive produces a flat OCI layout tar: index.json points
+// directly at the image manifest. Classic `docker save` (graph driver) emits
+// a docker archive instead; Engine 25+ with the containerd snapshotter emits
+// the nested shape — see writeNestedOCILayoutArchive.
 func writeOCILayoutArchive(t *testing.T, arch string, files map[string]string) (path, digest string) {
 	t.Helper()
 	img, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{
@@ -229,6 +230,58 @@ func writeOCILayoutArchive(t *testing.T, arch string, files map[string]string) (
 		t.Fatal(err)
 	}
 	path = filepath.Join(t.TempDir(), "oci.tar")
+	tarDir(t, dir, path)
+	sum, err := fileSHA256(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return path, "sha256:" + sum
+}
+
+// writeNestedOCILayoutArchive mirrors containerd-store `docker save`:
+// top-level index → nested index → linux/<arch> manifest plus an
+// unknown/unknown attestation descriptor that platformOK must skip.
+func writeNestedOCILayoutArchive(t *testing.T, arch string, files map[string]string) (path, digest string) {
+	t.Helper()
+	img, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{
+		OS:           "linux",
+		Architecture: arch,
+		Config:       v1.Config{Entrypoint: []string{"/hello"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img, err = mutate.Append(img, mutate.Addendum{Layer: fileLayer(t, files)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attest, err := mutate.ConfigFile(empty.Image, &v1.ConfigFile{
+		OS:           "unknown",
+		Architecture: "unknown",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	inner := mutate.AppendManifests(empty.Index,
+		mutate.IndexAddendum{
+			Add: img,
+			Descriptor: v1.Descriptor{
+				Platform: &v1.Platform{OS: "linux", Architecture: arch},
+			},
+		},
+		mutate.IndexAddendum{
+			Add: attest,
+			Descriptor: v1.Descriptor{
+				Platform: &v1.Platform{OS: "unknown", Architecture: "unknown"},
+			},
+		},
+	)
+	outer := mutate.AppendManifests(empty.Index, mutate.IndexAddendum{Add: inner})
+	dir := t.TempDir()
+	if _, err := layout.Write(dir, outer); err != nil {
+		t.Fatal(err)
+	}
+	path = filepath.Join(t.TempDir(), "oci-nested.tar")
 	tarDir(t, dir, path)
 	sum, err := fileSHA256(path)
 	if err != nil {
@@ -318,6 +371,40 @@ func TestDownloadOCILayoutArchive(t *testing.T) {
 		if strings.HasPrefix(e.Name(), "oci-layout-") {
 			t.Fatalf("staging dir %s left behind", e.Name())
 		}
+	}
+}
+
+func TestLoadImageNestedOCILayout(t *testing.T) {
+	path, _ := writeNestedOCILayoutArchive(t, runtime.GOARCH, map[string]string{"hello": "ok"})
+	img, plat, release, err := loadImage(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	if !strings.EqualFold(plat.OS, "linux") || !strings.EqualFold(plat.Architecture, runtime.GOARCH) {
+		t.Fatalf("platform = %s, want linux/%s", plat.String(), runtime.GOARCH)
+	}
+	cfg, err := img.ConfigFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Config.Entrypoint) != 1 || cfg.Config.Entrypoint[0] != "/hello" {
+		t.Fatalf("entrypoint = %v", cfg.Config.Entrypoint)
+	}
+}
+
+func TestDownloadNestedOCILayoutArchive(t *testing.T) {
+	path, digest := writeNestedOCILayoutArchive(t, runtime.GOARCH, map[string]string{"hello": "#!/bin/true\n"})
+	mgr := NewManager(t.TempDir(), LocalFetcher{})
+	ref := &pb.ArtifactRef{
+		Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Name: "s", Version: "v1",
+		Digest: digest, Uri: "file://" + path,
+	}
+	if err := mgr.Download(context.Background(), "s", ref, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(mgr.RootfsPath("s", "v1"), "hello")); err != nil {
+		t.Fatalf("hello missing from rootfs: %v", err)
 	}
 }
 

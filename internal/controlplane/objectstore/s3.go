@@ -1,7 +1,7 @@
 // Package objectstore is the control plane's S3-compatible object store
-// (SeaweedFS) client: PutObject for registration-time ingest and PresignGet
-// for agent fetch. Presign is a local signature computation — no network round
-// trip — so ResolveArtifactSource stays O(1).
+// (SeaweedFS) client: PutObject for registration-time ingest, PresignGet
+// for agent fetch, and PresignPut for operator uploads. Presign is a local
+// signature computation — no network round trip.
 package objectstore
 
 import (
@@ -32,6 +32,10 @@ func ObjectURI(bucket, name, version, digest string) string {
 // download timeout is 10 minutes; TTL only constrains when the GET may start.
 const DefaultPresignTTL = 5 * time.Minute
 
+// DefaultPresignPutTTL is the lifetime of operator upload URLs. Longer than
+// GET so a 100MB+ browser/curl PUT can finish without re-signing.
+const DefaultPresignPutTTL = 15 * time.Minute
+
 // Config holds SeaweedFS / S3 gateway connection settings.
 type Config struct {
 	Endpoint  string // e.g. http://127.0.0.1:8333
@@ -45,6 +49,8 @@ type Config struct {
 type Store interface {
 	// PresignGet returns a time-limited HTTPS (or HTTP) GET URL for bucket/key.
 	PresignGet(ctx context.Context, bucket, key string, ttl time.Duration) (url string, expiresAt time.Time, err error)
+	// PresignPut returns a time-limited HTTPS (or HTTP) PUT URL for bucket/key.
+	PresignPut(ctx context.Context, bucket, key string, ttl time.Duration) (url string, expiresAt time.Time, err error)
 	// PutObject writes body to bucket/key. Used by registration-time ingest (ST-2).
 	PutObject(ctx context.Context, bucket, key string, body io.Reader, size int64) error
 	// Bucket returns the configured default bucket.
@@ -103,6 +109,25 @@ func (s *S3) PresignGet(ctx context.Context, bucket, key string, ttl time.Durati
 	}, s3.WithPresignExpires(ttl))
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("objectstore: presign get %s/%s: %w", bucket, key, err)
+	}
+	return out.URL, time.Now().Add(ttl), nil
+}
+
+// PresignPut signs a PutObject request locally and returns the URL.
+func (s *S3) PresignPut(ctx context.Context, bucket, key string, ttl time.Duration) (string, time.Time, error) {
+	if bucket == "" || key == "" {
+		return "", time.Time{}, fmt.Errorf("objectstore: bucket and key are required")
+	}
+	if ttl <= 0 {
+		ttl = DefaultPresignPutTTL
+	}
+	out, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		ContentType: aws.String("application/octet-stream"),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("objectstore: presign put %s/%s: %w", bucket, key, err)
 	}
 	return out.URL, time.Now().Add(ttl), nil
 }

@@ -157,10 +157,9 @@ func copyIntoRootfs(t *testing.T, rootfs, bin string) {
 	}
 }
 
-// The payload must actually reach exec. Everything --oci-init does before that
-// — the binds, the proc mount, pivot_root — reports failure only on a stderr
-// that goes to /dev/null, so a child that dies in init is indistinguishable
-// from one that never started unless the test waits to see it stay up.
+// The payload must actually reach exec. --oci-init failures now land in
+// work/oci-init.log, but a child that dies in init is still a successful
+// fork from Start's point of view — the test waits to see the payload stay up.
 func TestOCIDriverPayloadReachesExec(t *testing.T) {
 	requireUserNS(t)
 	sleep, err := exec.LookPath("sleep")
@@ -201,5 +200,36 @@ func TestOCIDriverPayloadReachesExec(t *testing.T) {
 	case <-exited:
 	case <-time.After(5 * time.Second):
 		t.Fatal("WatchExit did not return")
+	}
+}
+
+func TestOCIDriverInitStderrGoesToWorkLog(t *testing.T) {
+	requireUserNS(t)
+	work := filepath.Join(t.TempDir(), "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	d := NewOCIDriver(NewExecDriver(""))
+	p, err := d.Start(StartSpec{
+		Strategy: "s",
+		Driver:   KindOCI,
+		Rootfs:   filepath.Join(t.TempDir(), "no-such-rootfs"),
+		Argv:     []string{"/bin/true"},
+		WorkDir:  work,
+		WorkBind: work,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("start (fork) should succeed: %v", err)
+	}
+	info := d.WatchExit(p, time.Now)
+	if info.Code == 0 {
+		t.Fatal("expected init to fail")
+	}
+	body, err := os.ReadFile(filepath.Join(work, OCIInitLogName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "oci-init:") {
+		t.Fatalf("log = %q, want oci-init:", body)
 	}
 }

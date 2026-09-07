@@ -48,6 +48,8 @@ services:
       AWS_ACCESS_KEY_ID: strategon
       AWS_SECRET_ACCESS_KEY: strategonsecret
       AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - ./seaweedfs/cors.json:/cors.json:ro
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
@@ -55,6 +57,8 @@ services:
         for i in $$(seq 1 60); do
           if aws --endpoint-url=http://seaweedfs:8333 s3 mb s3://artifacts 2>/dev/null \
              || aws --endpoint-url=http://seaweedfs:8333 s3 ls s3://artifacts >/dev/null 2>&1; then
+            aws --endpoint-url=http://seaweedfs:8333 s3api put-bucket-cors \
+              --bucket artifacts --cors-configuration file:///cors.json
             echo "bucket artifacts ready"
             exit 0
           fi
