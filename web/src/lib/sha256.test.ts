@@ -9,7 +9,9 @@ import {
 } from './sha256';
 
 function fileFrom(bytes: Uint8Array, name = 'blob.bin'): File {
-	return new File([bytes], name);
+	const copy = new Uint8Array(new ArrayBuffer(bytes.byteLength));
+	copy.set(bytes);
+	return new File([copy], name);
 }
 
 describe('sha256File', () => {

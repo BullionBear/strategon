@@ -39,11 +39,11 @@ export async function sha256File(file: File): Promise<string> {
 	return `sha256:${hex}`;
 }
 
-async function readFileCapped(file: File, maxBytes: number): Promise<Uint8Array> {
+async function readFileCapped(file: File, maxBytes: number): Promise<Uint8Array<ArrayBuffer>> {
 	if (file.size > maxBytes) {
 		throw new FileTooLargeToHashError(file.size);
 	}
-	const out = new Uint8Array(file.size);
+	const out = new Uint8Array(new ArrayBuffer(file.size));
 	let offset = 0;
 	const reader = file.stream().getReader();
 	try {
