@@ -97,6 +97,32 @@ starts it in an unprivileged user namespace (single UID map, host network).
 ```bash
 docker save my/strategy:v1 > /tmp/strategy-v1.tar
 DIGEST="sha256:$(sha256sum /tmp/strategy-v1.tar | cut -d' ' -f1)"
+
+# Presigned PUT (object store must be configured). Then register the s3:// URI.
+UPLOAD=$(curl -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/CreateArtifactUpload \
+  -H 'Content-Type: application/json' \
+  -d "{\"name\":\"ml\",\"version\":\"v1\",\"digest\":\"$DIGEST\",\"type\":\"ARTIFACT_TYPE_OCI_IMAGE\"}")
+PUT_URL=$(printf '%s' "$UPLOAD" | python3 -c 'import json,sys; print(json.load(sys.stdin)["putUrl"])')
+S3_URI=$(printf '%s' "$UPLOAD" | python3 -c 'import json,sys; print(json.load(sys.stdin)["s3Uri"])')
+curl -sS -X PUT -H 'Content-Type: application/octet-stream' --upload-file /tmp/strategy-v1.tar "$PUT_URL"
+
+curl -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/RegisterArtifact \
+  -H 'Content-Type: application/json' \
+  -d "{\"artifact\":{\"name\":\"ml\",\"version\":\"v1\",\"digest\":\"$DIGEST\",\"uri\":\"$S3_URI\",\"type\":\"ARTIFACT_TYPE_OCI_IMAGE\"}}"
+```
+
+The Artifacts page can hash + PUT + register from the browser. That needs CORS on the S3
+bucket. Production `deploy/seaweedfs/cors.json` allows only `https://s7n.lynkora.com`
+(a leaked 15-minute presigned PUT must not be replayable from an arbitrary origin).
+The local test stack applies `deploy/seaweedfs/cors.test.json` (`AllowedOrigins: *`)
+instead — do not copy that wildcard into production. If you add another UI origin,
+edit the production file; do not reopen `*`. Large uploads skip in-browser hashing
+and expect a pasted `sha256sum`. If the browser PUT is blocked, the curl sequence
+above still works.
+
+Local / file URI (agent and file on the same machine) still works:
+
+```bash
 curl -sX POST http://127.0.0.1:8081/strategyplatform.v1.ControlPlaneService/RegisterArtifact \
   -H 'Content-Type: application/json' \
   -d "{\"artifact\":{\"name\":\"ml\",\"version\":\"v1\",\"digest\":\"$DIGEST\",\"uri\":\"file:///tmp/strategy-v1.tar\",\"type\":\"ARTIFACT_TYPE_OCI_IMAGE\"}}"

@@ -19,6 +19,10 @@ type fakeObjects struct {
 	err   error
 }
 
+func (f *fakeObjects) PresignPut(_ context.Context, bucket, key string, _ time.Duration) (string, time.Time, error) {
+	return f.PresignGet(context.Background(), bucket, key, 0)
+}
+
 func (f *fakeObjects) PresignGet(_ context.Context, bucket, key string, _ time.Duration) (string, time.Time, error) {
 	f.calls = append(f.calls, bucket+"/"+key)
 	if f.err != nil {

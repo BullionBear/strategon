@@ -112,7 +112,45 @@ func applyRootfs(ia InitArgs) error {
 	if err != nil {
 		return err
 	}
-	return unix.Exec(bin, ia.Argv, os.Environ())
+	// Preserve the oci-init.log FD across discardStdio so a failed exec
+	// (ENOENT missing interpreter, ENOEXEC wrong arch) can still be written
+	// to the host log. CLOEXEC closes the dup on a successful exec.
+	logFD, dupErr := unix.FcntlInt(2, unix.F_DUPFD_CLOEXEC, 3)
+	// Drop the inherited oci-init.log FD so the payload's stdout/stderr
+	// still go to /dev/null — that is the existing strategy-output policy.
+	// /dev/null is bind-mounted into the rootfs before pivot; if it is
+	// missing (minimal test roots) keep the inherited fds rather than fail exec.
+	_ = discardStdio()
+	err = unix.Exec(bin, ia.Argv, os.Environ())
+	writeExecFailure(logFD, dupErr, bin, err)
+	return err
+}
+
+// writeExecFailure records an exec error on the CLOEXEC dup of the init log.
+// discardStdio has already pointed fd 2 at /dev/null, so os.Stderr is useless.
+func writeExecFailure(logFD int, dupErr error, bin string, err error) {
+	if dupErr != nil || err == nil {
+		return
+	}
+	f := os.NewFile(uintptr(logFD), OCIInitLogName)
+	if f == nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "oci-init: exec %s: %v\n", bin, err)
+}
+
+func discardStdio() error {
+	null, err := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer null.Close()
+	fd := int(null.Fd())
+	if err := unix.Dup2(fd, 1); err != nil {
+		return err
+	}
+	return unix.Dup2(fd, 2)
 }
 
 func bindSame(rootfs, hostPath string, dir bool) error {

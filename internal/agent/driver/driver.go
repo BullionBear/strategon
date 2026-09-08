@@ -4,6 +4,7 @@
 package driver
 
 import (
+	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -47,6 +48,17 @@ type StartSpec struct {
 	WorkBind   string
 	SharedBind string
 	ConfigBind string // host path of the config file; empty if none
+}
+
+// OCIInitLogName is the host-side file that captures --oci-init stderr.
+// Truncated on each Start so crash loops cannot grow it without bound.
+const OCIInitLogName = "oci-init.log"
+
+// OCIInitLogPath is the host path for oci-init stderr. It sits next to
+// (not inside) WorkDir so the payload cannot overwrite the log through the
+// bind-mounted work directory.
+func OCIInitLogPath(workDir string) string {
+	return filepath.Join(filepath.Dir(workDir), OCIInitLogName)
 }
 
 // Process is a handle to a supervised process.

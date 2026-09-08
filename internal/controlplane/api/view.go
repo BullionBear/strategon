@@ -145,13 +145,16 @@ func latestDeployTimes(st store.Store, machineID string) map[string]*timestamppb
 	return out
 }
 
-// isConverged mirrors reconciler convergence: HEALTHY + digest match, or an
-// intentionally halted deployment settled at STOPPED.
+// isConverged mirrors reconciler convergence: HEALTHY + live process + digest
+// match, or an intentionally halted deployment settled at STOPPED.
 func isConverged(v *pb.StrategyView) bool {
 	if v.GetStopped() {
 		return v.GetPhase() == pb.DeployPhase_DEPLOY_PHASE_STOPPED
 	}
 	if v.GetPhase() != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		return false
+	}
+	if !assignmentLive(v) {
 		return false
 	}
 	if v.GetDesiredArtifact() == nil || v.GetRunningArtifact() == nil {
@@ -164,4 +167,15 @@ func isConverged(v *pb.StrategyView) bool {
 		return false
 	}
 	return v.GetDesiredConfig().GetDigest() == v.GetRunningConfig().GetDigest()
+}
+
+func assignmentLive(v *pb.StrategyView) bool {
+	for _, c := range v.GetConditions() {
+		if c.GetType() == "Live" {
+			return c.GetStatus() == pb.ConditionStatus_CONDITION_STATUS_TRUE
+		}
+	}
+	// Older agents omit the Live condition; pid is a fallback only then.
+	// A stale ProcessMetrics pid must not override Live=FALSE.
+	return v.GetPid() > 0
 }

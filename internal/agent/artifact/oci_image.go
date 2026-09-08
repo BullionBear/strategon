@@ -222,30 +222,69 @@ func loadOCILayoutTar(ctx context.Context, tarPath string, want v1.Platform) (v1
 	if err != nil {
 		return fail(fmt.Errorf("oci layout: %w", err))
 	}
-	mf, err := idx.IndexManifest()
+	var seen []string
+	img, plat, err := pickImageFromIndex(idx, want, &seen, map[string]struct{}{}, 0)
 	if err != nil {
 		return fail(err)
 	}
-	var seen []string
+	if img == nil {
+		return fail(fmt.Errorf("oci layout: no image for linux/%s (have %s)", want.Architecture, strings.Join(seen, ", ")))
+	}
+	return img, plat, release, nil
+}
+
+// maxIndexDepth bounds nested-index walks (containerd docker-save is 2 levels).
+const maxIndexDepth = 3
+
+// pickImageFromIndex walks an OCI index (and nested indexes) for a platform
+// match. A nil image with a nil error means this subtree had no match; a
+// non-nil error is fatal (unreadable blob, nesting too deep).
+func pickImageFromIndex(idx v1.ImageIndex, want v1.Platform, seen *[]string, visited map[string]struct{}, depth int) (v1.Image, v1.Platform, error) {
+	if depth > maxIndexDepth {
+		return nil, v1.Platform{}, fmt.Errorf("oci layout: index nesting too deep")
+	}
+	mf, err := idx.IndexManifest()
+	if err != nil {
+		return nil, v1.Platform{}, err
+	}
 	for _, d := range mf.Manifests {
-		if d.MediaType.IsIndex() {
+		dig := d.Digest.String()
+		if _, ok := visited[dig]; ok {
 			continue
 		}
+		visited[dig] = struct{}{}
+
+		if d.MediaType.IsIndex() {
+			*seen = append(*seen, "index")
+			nested, err := idx.ImageIndex(d.Digest)
+			if err != nil {
+				return nil, v1.Platform{}, err
+			}
+			img, plat, err := pickImageFromIndex(nested, want, seen, visited, depth+1)
+			if err != nil {
+				return nil, v1.Platform{}, err
+			}
+			if img != nil {
+				return img, plat, nil
+			}
+			continue
+		}
+
 		p := v1.Platform{OS: "linux"}
 		if d.Platform != nil {
 			p = *d.Platform
 		}
-		seen = append(seen, p.String())
+		*seen = append(*seen, p.String())
 		if !platformOK(p, want) {
 			continue
 		}
 		img, err := idx.Image(d.Digest)
 		if err != nil {
-			return fail(err)
+			return nil, v1.Platform{}, err
 		}
-		return img, p, release, nil
+		return img, p, nil
 	}
-	return fail(fmt.Errorf("oci layout: no image for linux/%s (have %s)", want.Architecture, strings.Join(seen, ", ")))
+	return nil, v1.Platform{}, nil
 }
 
 func imagePlatform(img v1.Image) (v1.Platform, error) {

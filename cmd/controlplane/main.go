@@ -167,6 +167,7 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if objs != nil {
+		humanSrv.WithObjectStore(objs)
 		ingestSvc := ingest.New(st, objs, creds, ingestMode, logger)
 		ingestSvc.FailInterrupted()
 		humanSrv.WithIngest(ingestSvc)

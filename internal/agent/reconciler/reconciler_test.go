@@ -1,9 +1,12 @@
 package reconciler
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -283,6 +286,108 @@ func TestCrashLoopDuringHealthCheckingRestartsAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestRollbackImpossibleStaysFailed(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, _, fk, _ := newTestReconciler(t, t0)
+	r.generation = 12
+	policy := &pb.DeployPolicy{Startsecs: 5, MaxCrashesInWindow: 2, EnableAutoRollback: true, HealthWindowSeconds: 120}
+	spec := assignment("s", "v1", "sha256:v1", policy)
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
+	st.inflight = &deployOp{target: artRef("v1", "sha256:v1"), cancel: func() {}}
+	st.runningArtifact = artRef("v1", "sha256:v1")
+	r.actual["s"] = st
+
+	for i := 0; i < 3; i++ {
+		proc := mustStart(t, fd)
+		proc.StartedAt = t0
+		st.proc = proc
+		r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	}
+
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_FAILED {
+		t.Fatalf("phase = %v, want FAILED", st.phase)
+	}
+	if st.failedAtGen != 12 {
+		t.Fatalf("failedAtGen = %d, want 12", st.failedAtGen)
+	}
+	if st.lastError != "no previous version to roll back to" {
+		t.Fatalf("lastError = %q", st.lastError)
+	}
+
+	starts := fd.starts()
+	fk.Advance(2 * time.Minute)
+	for i := 0; i < 5; i++ {
+		r.reconcile()
+	}
+	if fd.starts() != starts {
+		t.Fatalf("FAILED must not restart; starts %d → %d", starts, fd.starts())
+	}
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_FAILED {
+		t.Fatalf("phase overwritten to %v", st.phase)
+	}
+}
+
+func TestHealthyExitDemotesPhaseUntilRestart(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, _, fk, _ := newTestReconciler(t, t0)
+	r.generation = 7
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5})
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.lastError = "stale from previous generation"
+	proc := mustStart(t, fd)
+	proc.StartedAt = t0
+	st.proc = proc
+	r.actual["s"] = st
+
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_STARTING {
+		t.Fatalf("phase = %v, want STARTING while dead", st.phase)
+	}
+	if st.lastError == "" || st.lastError == "stale from previous generation" {
+		t.Fatalf("lastError should record the crash, got %q", st.lastError)
+	}
+	r.recomputeObservedGeneration()
+	if r.observedGenA.Load() == 7 {
+		t.Fatal("machine must not stay converged while the process is dead")
+	}
+
+	fk.Advance(2 * time.Second)
+	r.reconcile()
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		t.Fatalf("phase = %v, want HEALTHY after restart", st.phase)
+	}
+	if st.proc == nil {
+		t.Fatal("expected live process")
+	}
+	if st.lastError != "" {
+		t.Fatalf("lastError should clear on successful start, got %q", st.lastError)
+	}
+}
+
+func TestBeginDeployClearsLastError(t *testing.T) {
+	r, _, _, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	spec := assignment("s", "v2", "sha256:v2", &pb.DeployPolicy{})
+	spec.Artifact.Uri = "file://tmp/missing.sh"
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.lastError = "no previous version to roll back to"
+	st.runningArtifact = artRef("v1", "sha256:v1")
+	r.actual["s"] = st
+
+	r.beginDeploy(spec, st)
+	if st.lastError != "" {
+		t.Fatalf("lastError = %q, want empty after beginDeploy", st.lastError)
+	}
+	waitWorkerPhase(t, r, pb.DeployPhase_DEPLOY_PHASE_FAILED)
+}
+
 func TestFailedDeployDoesNotRetryUntilGenerationChanges(t *testing.T) {
 	r, _, _, _, out := newTestReconciler(t, time.Unix(1000, 0))
 	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{})
@@ -334,6 +439,96 @@ func TestFailedDeployDoesNotRetryUntilGenerationChanges(t *testing.T) {
 	// bad URI). Wait for it to finish so its release-dir writes complete before
 	// t.TempDir cleanup, rather than racing it.
 	waitWorkerPhase(t, r, pb.DeployPhase_DEPLOY_PHASE_FAILED)
+}
+
+func ociArtRef(version, digest string) *pb.ArtifactRef {
+	return &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Name: "strat", Version: version, Digest: digest}
+}
+
+func crashWithOCIInitLog(t *testing.T, running *pb.ArtifactRef, logBody string) (lastError, warnLog string) {
+	t.Helper()
+	t0 := time.Unix(1000, 0)
+	r, fd, mgr, _, _ := newTestReconciler(t, t0)
+	var buf bytes.Buffer
+	r.deps.Logger = slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	spec := assignment("s", running.GetVersion(), running.GetDigest(), &pb.DeployPolicy{Startsecs: 5})
+	spec.Artifact = running
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
+	st.runningArtifact = running
+	proc := mustStart(t, fd)
+	proc.StartedAt = t0
+	st.proc = proc
+	r.actual["s"] = st
+	if _, err := mgr.EnsureWorkDir("s"); err != nil {
+		t.Fatal(err)
+	}
+	logPath := driver.OCIInitLogPath(mgr.WorkDir("s"))
+	if err := os.WriteFile(logPath, []byte(logBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	return st.lastError, buf.String()
+}
+
+func TestRecordStartCrashIgnoresEmptyOCIInitLog(t *testing.T) {
+	lastError, warnLog := crashWithOCIInitLog(t, ociArtRef("v1", "sha256:aaa"), "")
+	if lastError != "exited after start (code 0)" {
+		t.Fatalf("empty oci-init.log must keep generic lastError, got %q", lastError)
+	}
+	if strings.Contains(warnLog, "oci-init failed") {
+		t.Fatalf("empty log must not warn, got %q", warnLog)
+	}
+}
+
+func TestRecordStartCrashUsesNonEmptyOCIInitLog(t *testing.T) {
+	lastError, warnLog := crashWithOCIInitLog(t, ociArtRef("v1", "sha256:aaa"), "oci-init: exec /payload: exec format error\n")
+	if lastError != "oci-init: exec /payload: exec format error" {
+		t.Fatalf("lastError = %q", lastError)
+	}
+	if !strings.Contains(warnLog, "oci-init failed") {
+		t.Fatalf("expected warn, got %q", warnLog)
+	}
+}
+
+func TestRecordStartCrashIgnoresStaleLogForBinary(t *testing.T) {
+	lastError, warnLog := crashWithOCIInitLog(t, artRef("v2", "sha256:bbb"), "stale oci-init from a previous OCI deploy\n")
+	if lastError != "exited after start (code 0)" {
+		t.Fatalf("binary crash must not use leftover oci-init.log, got %q", lastError)
+	}
+	if strings.Contains(warnLog, "oci-init failed") {
+		t.Fatalf("binary crash must not warn about oci-init, got %q", warnLog)
+	}
+}
+
+func TestRecordStartCrashReadsSiblingLogNotWorkDir(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, mgr, _, _ := newTestReconciler(t, t0)
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5})
+	spec.Artifact = ociArtRef("v1", "sha256:aaa")
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
+	st.runningArtifact = spec.Artifact
+	proc := mustStart(t, fd)
+	proc.StartedAt = t0
+	st.proc = proc
+	r.actual["s"] = st
+	work, err := mgr.EnsureWorkDir("s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(work, driver.OCIInitLogName), []byte("poisoned by payload\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(driver.OCIInitLogPath(work), []byte("oci-init: bind rootfs: no such file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	if st.lastError != "oci-init: bind rootfs: no such file" {
+		t.Fatalf("must read sibling log, not bind-mounted work copy; got %q", st.lastError)
+	}
 }
 
 // waitWorkerPhase drains workerCh until the given phase is observed, so tests

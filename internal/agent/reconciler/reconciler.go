@@ -384,7 +384,7 @@ func (r *Reconciler) retireStrategy(st *strategyState) {
 //
 // When healthCheck is true the process enters STARTING → HEALTH_CHECKING (resume
 // / post-deploy crash during the window). When false (steady-state crash
-// restart) the phase stays HEALTHY.
+// restart) the process is live again so phase returns to HEALTHY.
 func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState, healthCheck bool) {
 	if healthCheck {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
@@ -408,6 +408,7 @@ func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return
 	}
 	r.installProcess(spec, st, proc)
+	st.lastError = ""
 	if healthCheck {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
 		st.healthDeadline = r.now().Add(healthWindow(spec))
@@ -635,6 +636,7 @@ func (r *Reconciler) handleExit(ex processExit) {
 	if supervisor.CrashedOnStart(lived, int(policy.GetStartsecs())) {
 		st.backoff.RecordCrash(r.now(), r.deps.Jitter)
 		st.restartCount++
+		r.recordStartCrash(st, ex.info)
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING &&
 			st.backoff.Consecutive > int(policy.GetMaxCrashesInWindow()) &&
 			policy.GetEnableAutoRollback() {
@@ -646,7 +648,47 @@ func (r *Reconciler) handleExit(ex processExit) {
 		// else: exponential backoff; reconcile() restarts when the tick elapses.
 	} else {
 		st.backoff.Reset() // lived long enough: healthy run that exited, restart clean
+		st.lastError = fmt.Sprintf("exited (code %d)", ex.info.Code)
 	}
+	if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		// HEALTHY means the desired version is running. A dead process must
+		// not keep advertising that — crash-restart will promote again after
+		// installProcess succeeds.
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
+	}
+}
+
+// recordStartCrash writes a current-generation lastError and, for OCI, a WARN
+// pointing at the sibling oci-init.log when its first line is non-empty.
+// An empty file is created on every successful Start, and WorkDir (plus the
+// sibling log) survives redeploys, so existence alone is not a failure signal.
+func (r *Reconciler) recordStartCrash(st *strategyState, info driver.ExitInfo) {
+	st.lastError = fmt.Sprintf("exited after start (code %d)", info.Code)
+	if r.deps.Artifacts == nil || !r.launchIsOCI(st) {
+		return
+	}
+	logPath := driver.OCIInitLogPath(r.deps.Artifacts.WorkDir(st.strategy))
+	b, err := os.ReadFile(logPath)
+	if err != nil {
+		return
+	}
+	line, _, _ := strings.Cut(string(b), "\n")
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return
+	}
+	r.logger().Warn("oci-init failed; see init log", "strategy", st.strategy, "path", logPath)
+	st.lastError = line
+}
+
+func (r *Reconciler) launchIsOCI(st *strategyState) bool {
+	if st.runningArtifact != nil {
+		return st.runningArtifact.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE
+	}
+	if spec := r.desired[st.strategy]; spec != nil {
+		return spec.GetArtifact().GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE
+	}
+	return false
 }
 
 // tick drives time-based work: health-window evaluation, async readiness
@@ -734,7 +776,7 @@ func (r *Reconciler) recomputeObservedGeneration() {
 			}
 			continue
 		}
-		if !versionMatches(spec, st) || st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		if !versionMatches(spec, st) || st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY || st.proc == nil {
 			converged = false
 			break
 		}

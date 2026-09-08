@@ -75,6 +75,9 @@ const (
 	// ControlPlaneServiceRegisterArtifactProcedure is the fully-qualified name of the
 	// ControlPlaneService's RegisterArtifact RPC.
 	ControlPlaneServiceRegisterArtifactProcedure = "/strategyplatform.v1.ControlPlaneService/RegisterArtifact"
+	// ControlPlaneServiceCreateArtifactUploadProcedure is the fully-qualified name of the
+	// ControlPlaneService's CreateArtifactUpload RPC.
+	ControlPlaneServiceCreateArtifactUploadProcedure = "/strategyplatform.v1.ControlPlaneService/CreateArtifactUpload"
 	// ControlPlaneServiceListArtifactsProcedure is the fully-qualified name of the
 	// ControlPlaneService's ListArtifacts RPC.
 	ControlPlaneServiceListArtifactsProcedure = "/strategyplatform.v1.ControlPlaneService/ListArtifacts"
@@ -109,6 +112,7 @@ var (
 	controlPlaneServiceWatchMachineMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("WatchMachine")
 	controlPlaneServiceListAuditMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("ListAudit")
 	controlPlaneServiceRegisterArtifactMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("RegisterArtifact")
+	controlPlaneServiceCreateArtifactUploadMethodDescriptor   = controlPlaneServiceServiceDescriptor.Methods().ByName("CreateArtifactUpload")
 	controlPlaneServiceListArtifactsMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("ListArtifacts")
 	controlPlaneServiceGetControlPlaneVersionMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("GetControlPlaneVersion")
 	controlPlaneServiceGetMachineMetricsMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachineMetrics")
@@ -134,6 +138,7 @@ type ControlPlaneServiceClient interface {
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest]) (*connect.ServerStreamForClient[v1.MachineStatusEvent], error)
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
 	RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error)
+	CreateArtifactUpload(context.Context, *connect.Request[v1.CreateArtifactUploadRequest]) (*connect.Response[v1.CreateArtifactUploadResponse], error)
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
@@ -240,6 +245,12 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceRegisterArtifactMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		createArtifactUpload: connect.NewClient[v1.CreateArtifactUploadRequest, v1.CreateArtifactUploadResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceCreateArtifactUploadProcedure,
+			connect.WithSchema(controlPlaneServiceCreateArtifactUploadMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		listArtifacts: connect.NewClient[v1.ListArtifactsRequest, v1.ListArtifactsResponse](
 			httpClient,
 			baseURL+ControlPlaneServiceListArtifactsProcedure,
@@ -289,6 +300,7 @@ type controlPlaneServiceClient struct {
 	watchMachine           *connect.Client[v1.GetMachineRequest, v1.MachineStatusEvent]
 	listAudit              *connect.Client[v1.ListAuditRequest, v1.ListAuditResponse]
 	registerArtifact       *connect.Client[v1.RegisterArtifactRequest, v1.RegisterArtifactResponse]
+	createArtifactUpload   *connect.Client[v1.CreateArtifactUploadRequest, v1.CreateArtifactUploadResponse]
 	listArtifacts          *connect.Client[v1.ListArtifactsRequest, v1.ListArtifactsResponse]
 	getControlPlaneVersion *connect.Client[v1.GetControlPlaneVersionRequest, v1.ControlPlaneVersion]
 	getMachineMetrics      *connect.Client[v1.GetMachineMetricsRequest, v1.GetMachineMetricsResponse]
@@ -366,6 +378,11 @@ func (c *controlPlaneServiceClient) RegisterArtifact(ctx context.Context, req *c
 	return c.registerArtifact.CallUnary(ctx, req)
 }
 
+// CreateArtifactUpload calls strategyplatform.v1.ControlPlaneService.CreateArtifactUpload.
+func (c *controlPlaneServiceClient) CreateArtifactUpload(ctx context.Context, req *connect.Request[v1.CreateArtifactUploadRequest]) (*connect.Response[v1.CreateArtifactUploadResponse], error) {
+	return c.createArtifactUpload.CallUnary(ctx, req)
+}
+
 // ListArtifacts calls strategyplatform.v1.ControlPlaneService.ListArtifacts.
 func (c *controlPlaneServiceClient) ListArtifacts(ctx context.Context, req *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error) {
 	return c.listArtifacts.CallUnary(ctx, req)
@@ -410,6 +427,7 @@ type ControlPlaneServiceHandler interface {
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest], *connect.ServerStream[v1.MachineStatusEvent]) error
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
 	RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error)
+	CreateArtifactUpload(context.Context, *connect.Request[v1.CreateArtifactUploadRequest]) (*connect.Response[v1.CreateArtifactUploadResponse], error)
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
@@ -512,6 +530,12 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceRegisterArtifactMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceCreateArtifactUploadHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceCreateArtifactUploadProcedure,
+		svc.CreateArtifactUpload,
+		connect.WithSchema(controlPlaneServiceCreateArtifactUploadMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	controlPlaneServiceListArtifactsHandler := connect.NewUnaryHandler(
 		ControlPlaneServiceListArtifactsProcedure,
 		svc.ListArtifacts,
@@ -572,6 +596,8 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceListAuditHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceRegisterArtifactProcedure:
 			controlPlaneServiceRegisterArtifactHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceCreateArtifactUploadProcedure:
+			controlPlaneServiceCreateArtifactUploadHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceListArtifactsProcedure:
 			controlPlaneServiceListArtifactsHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceGetControlPlaneVersionProcedure:
@@ -645,6 +671,10 @@ func (UnimplementedControlPlaneServiceHandler) ListAudit(context.Context, *conne
 
 func (UnimplementedControlPlaneServiceHandler) RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.RegisterArtifact is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) CreateArtifactUpload(context.Context, *connect.Request[v1.CreateArtifactUploadRequest]) (*connect.Response[v1.CreateArtifactUploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.CreateArtifactUpload is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error) {

@@ -8,15 +8,17 @@ export type CatalogArtifact = {
 	stateReason: string;
 };
 
+export type ArtifactKind = 'binary' | 'config' | 'oci' | 'other';
+
 export type ArtifactGroup = {
 	name: string;
-	kind: 'binary' | 'config' | 'other';
+	kind: ArtifactKind;
 	versions: ArtifactRef[]; // newest first; [0] is latest
 };
 
 export type CatalogGroup = {
 	name: string;
-	kind: 'binary' | 'config' | 'other';
+	kind: ArtifactKind;
 	versions: CatalogArtifact[]; // newest first; [0] is latest
 };
 
@@ -54,7 +56,7 @@ export function groupCatalog(artifacts: CatalogArtifact[]): CatalogGroup[] {
 		versions.sort((a, b) => createdAtMs(b.ref) - createdAtMs(a.ref));
 		groups.push({
 			name,
-			kind: artifactKind(name),
+			kind: artifactKind(name, versions[0]?.ref.type),
 			versions
 		});
 	}
@@ -75,7 +77,7 @@ export function groupArtifacts(artifacts: ArtifactRef[]): ArtifactGroup[] {
 		versions.sort((a, b) => createdAtMs(b) - createdAtMs(a));
 		groups.push({
 			name,
-			kind: artifactKind(name),
+			kind: artifactKind(name, versions[0]?.type),
 			versions
 		});
 	}
@@ -83,8 +85,9 @@ export function groupArtifacts(artifacts: ArtifactRef[]): ArtifactGroup[] {
 	return groups;
 }
 
-export function artifactKind(name: string): ArtifactGroup['kind'] {
+export function artifactKind(name: string, type?: ArtifactType): ArtifactGroup['kind'] {
 	if (name.endsWith('-config')) return 'config';
+	if (type === ArtifactType.OCI_IMAGE) return 'oci';
 	return 'binary';
 }
 
@@ -137,6 +140,7 @@ export function relativeTime(a: ArtifactRef | undefined, now = Date.now()): stri
 
 export function typeLabel(a: ArtifactRef, kind: ArtifactGroup['kind']): string {
 	if (kind === 'config') return 'config';
+	if (kind === 'oci') return 'oci';
 	switch (a.type) {
 		case ArtifactType.OCI_IMAGE:
 			return 'oci';

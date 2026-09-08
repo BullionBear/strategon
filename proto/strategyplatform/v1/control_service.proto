@@ -161,7 +161,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "SetSharedFiles" | "ResolveArtifactSource"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "CreateArtifactUpload" | "SetSharedFiles" | "ResolveArtifactSource"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -220,6 +220,22 @@ message RegisterArtifactRequest {
 }
 
 message RegisterArtifactResponse {}
+
+// CreateArtifactUpload returns a presigned PUT so the client can write bytes
+// directly to the object store. After the PUT, call RegisterArtifact with
+// the returned s3_uri. The control plane never proxies the payload.
+message CreateArtifactUploadRequest {
+  string name = 1;
+  string version = 2;
+  string digest = 3; // "sha256:…"
+  ArtifactType type = 4; // recorded by the client on RegisterArtifact
+}
+
+message CreateArtifactUploadResponse {
+  string put_url = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  string s3_uri = 3; // s3://<bucket>/artifacts/<name>/<version>/<hex>
+}
 
 message ListArtifactsRequest {
   string name = 1; // optional filter; empty = all
@@ -331,6 +347,7 @@ service ControlPlaneService {
   rpc ListAudit(ListAuditRequest) returns (ListAuditResponse);
 
   rpc RegisterArtifact(RegisterArtifactRequest) returns (RegisterArtifactResponse);
+  rpc CreateArtifactUpload(CreateArtifactUploadRequest) returns (CreateArtifactUploadResponse);
   rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
 
   // Ops display: control-plane build version (header/footer).

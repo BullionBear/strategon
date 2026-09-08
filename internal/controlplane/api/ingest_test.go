@@ -28,6 +28,10 @@ func (m *memObjects) PresignGet(context.Context, string, string, time.Duration) 
 	return "", time.Time{}, nil
 }
 
+func (m *memObjects) PresignPut(context.Context, string, string, time.Duration) (string, time.Time, error) {
+	return "", time.Time{}, nil
+}
+
 func (m *memObjects) PutObject(_ context.Context, bucket, key string, body io.Reader, _ int64) error {
 	b, err := io.ReadAll(body)
 	if err != nil {
