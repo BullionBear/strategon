@@ -14,7 +14,7 @@ func unixSec(sec int64) time.Time { return time.Unix(sec, 0).UTC() }
 
 // BuildMachine assembles the human-facing Machine message, including the
 // per-strategy StrategyView join of desired (spec) and actual (status).
-// Convergence uses digest equality, matching the agent reconciler.
+// Convergence uses digest + version equality, matching the agent reconciler.
 // st may be nil; when set, fencing-lease fields come from the CP lease store
 // (authoritative) rather than agent-reported status.
 func BuildMachine(rec *store.MachineRecord, st store.Store) *pb.Machine {
@@ -146,7 +146,9 @@ func latestDeployTimes(st store.Store, machineID string) map[string]*timestamppb
 }
 
 // isConverged mirrors reconciler convergence: HEALTHY + live process + digest
-// match, or an intentionally halted deployment settled at STOPPED.
+// and version match, or an intentionally halted deployment settled at STOPPED.
+// Same digest with a stale version (http→s3 retag before the agent promotes
+// the label) is not converged — that used to lie to Rollback and the UI.
 func isConverged(v *pb.StrategyView) bool {
 	if v.GetStopped() {
 		return v.GetPhase() == pb.DeployPhase_DEPLOY_PHASE_STOPPED
@@ -166,7 +168,13 @@ func isConverged(v *pb.StrategyView) bool {
 	if v.GetDesiredArtifact().GetDigest() != v.GetRunningArtifact().GetDigest() {
 		return false
 	}
-	return v.GetDesiredConfig().GetDigest() == v.GetRunningConfig().GetDigest()
+	if v.GetDesiredArtifact().GetVersion() != v.GetRunningArtifact().GetVersion() {
+		return false
+	}
+	if v.GetDesiredConfig().GetDigest() != v.GetRunningConfig().GetDigest() {
+		return false
+	}
+	return v.GetDesiredConfig().GetVersion() == v.GetRunningConfig().GetVersion()
 }
 
 func assignmentLive(v *pb.StrategyView) bool {
