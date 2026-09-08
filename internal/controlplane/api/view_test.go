@@ -37,6 +37,32 @@ func TestIsConvergedRequiresLiveProcess(t *testing.T) {
 	}
 }
 
+func TestIsConvergedRequiresMatchingVersion(t *testing.T) {
+	v := &pb.StrategyView{
+		Phase:           pb.DeployPhase_DEPLOY_PHASE_HEALTHY,
+		Pid:             42,
+		DesiredArtifact: &pb.ArtifactRef{Version: "v3", Digest: "sha256:aaa", Uri: "s3://bucket/v3"},
+		RunningArtifact: &pb.ArtifactRef{Version: "v2", Digest: "sha256:aaa", Uri: "http://old/v2"},
+	}
+	if isConverged(v) {
+		t.Fatal("same digest with stale version must not be converged")
+	}
+	v.RunningArtifact.Version = "v3"
+	if !isConverged(v) {
+		t.Fatal("matching digest + version should be converged")
+	}
+
+	v.DesiredConfig = &pb.ArtifactRef{Version: "c2", Digest: "sha256:cfg"}
+	v.RunningConfig = &pb.ArtifactRef{Version: "c1", Digest: "sha256:cfg"}
+	if isConverged(v) {
+		t.Fatal("same config digest with stale config version must not be converged")
+	}
+	v.RunningConfig.Version = "c2"
+	if !isConverged(v) {
+		t.Fatal("matching config digest + version should be converged")
+	}
+}
+
 func TestAssignmentLivePrefersLiveCondition(t *testing.T) {
 	v := &pb.StrategyView{
 		Pid: 99,

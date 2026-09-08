@@ -26,6 +26,7 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/health"
 	"github.com/bullionbear/strategon/internal/agent/supervisor"
 	"github.com/bullionbear/strategon/internal/clock"
+	"google.golang.org/protobuf/proto"
 )
 
 var placeholderRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
@@ -306,10 +307,14 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 	}
 	switch {
 	case versionMatches(spec, st) && st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY && st.proc != nil:
+		// Same bytes, possibly a new version/uri (http→s3 retag). Do not
+		// re-fetch; just advance the running label so status matches desired.
+		r.promoteRunningLabels(spec, st)
 		st.observedGen = r.generation
 		return // steady state
 
 	case versionMatches(spec, st) && st.proc == nil:
+		r.promoteRunningLabels(spec, st)
 		if !r.awaitSharedReady(st) {
 			return
 		}
@@ -793,7 +798,8 @@ func (r *Reconciler) shutdown() {
 }
 
 // versionMatches compares desired vs actual by content digest (artifact +
-// config). Content addressing is the only trustworthy equality.
+// config). Content addressing is the only trustworthy equality for "same
+// bytes"; version/uri labels are promoted separately by promoteRunningLabels.
 func versionMatches(spec *pb.StrategyAssignmentSpec, st *strategyState) bool {
 	if st.runningArtifact == nil {
 		return false
@@ -802,6 +808,34 @@ func versionMatches(spec *pb.StrategyAssignmentSpec, st *strategyState) bool {
 		return false
 	}
 	return spec.GetConfig().GetDigest() == st.runningConfig.GetDigest()
+}
+
+// promoteRunningLabels copies desired artifact/config refs onto running when
+// the digest already matches but version or uri differ (re-register of the
+// same bytes under a new catalog name, typically http(s)/file → s3). No
+// download, no process restart. Idempotent: a second tick is a no-op.
+func (r *Reconciler) promoteRunningLabels(spec *pb.StrategyAssignmentSpec, st *strategyState) {
+	if artifactLabelsEqual(spec.GetArtifact(), st.runningArtifact) &&
+		artifactLabelsEqual(spec.GetConfig(), st.runningConfig) {
+		return
+	}
+	oldVer := st.runningArtifact.GetVersion()
+	oldURI := st.runningArtifact.GetUri()
+	st.runningArtifact = cloneArtifactRef(spec.GetArtifact())
+	st.runningConfig = cloneArtifactRef(spec.GetConfig())
+	r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_INFO, "VersionRelabeled",
+		fmt.Sprintf("%s (%s) → %s (%s)", oldVer, oldURI, st.runningArtifact.GetVersion(), st.runningArtifact.GetUri()))
+}
+
+func artifactLabelsEqual(want, have *pb.ArtifactRef) bool {
+	return want.GetVersion() == have.GetVersion() && want.GetUri() == have.GetUri()
+}
+
+func cloneArtifactRef(ref *pb.ArtifactRef) *pb.ArtifactRef {
+	if ref == nil {
+		return nil
+	}
+	return proto.Clone(ref).(*pb.ArtifactRef)
 }
 
 func healthWindow(spec *pb.StrategyAssignmentSpec) time.Duration {

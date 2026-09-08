@@ -3,6 +3,7 @@ package reconciler
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/driver"
 	"github.com/bullionbear/strategon/internal/agent/health"
 	"github.com/bullionbear/strategon/internal/clock"
+	"google.golang.org/protobuf/proto"
 )
 
 func artRef(version, digest string) *pb.ArtifactRef {
@@ -80,6 +82,174 @@ func TestReconcileIdempotentSteadyState(t *testing.T) {
 	}
 	if st.observedGen != 7 {
 		t.Fatalf("observedGen = %d, want 7", st.observedGen)
+	}
+}
+
+type countFetcher struct{ n int }
+
+func (c *countFetcher) Fetch(context.Context, *pb.ArtifactRef, string) error {
+	c.n++
+	return fmt.Errorf("fetch must not run on same-digest retag")
+}
+
+func TestSameDigestPromotesVersionAndURI(t *testing.T) {
+	r, fd, mgr, _, out := newTestReconciler(t, time.Unix(1000, 0))
+	cf := &countFetcher{}
+	mgr.Fetcher = cf
+
+	running := &pb.ArtifactRef{
+		Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Name: "mftik-sym",
+		Version: "v2", Digest: "sha256:aaa", Uri: "http://100.65.26.119:8899/mftik-sym.tar",
+	}
+	desired := proto.Clone(running).(*pb.ArtifactRef)
+	desired.Version = "v3"
+	desired.Uri = "s3://strategon-artifacts/artifacts/mftik-sym/v3/aaa"
+
+	spec := &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: desired, DeployPolicy: &pb.DeployPolicy{Startsecs: 5}}
+	r.generation = 20
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = running
+	st.proc = mustStart(t, fd)
+	r.actual["s"] = st
+	starts := fd.starts()
+
+	r.reconcile()
+	if cf.n != 0 {
+		t.Fatalf("same-digest retag must not fetch; calls=%d", cf.n)
+	}
+	if st.inflight != nil {
+		t.Fatal("same-digest retag must not beginDeploy")
+	}
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		t.Fatalf("phase = %s, want HEALTHY", st.phase)
+	}
+	if fd.starts() != starts {
+		t.Fatalf("must not restart the process; starts=%d", fd.starts())
+	}
+	if st.runningArtifact.GetVersion() != "v3" || st.runningArtifact.GetUri() != desired.GetUri() {
+		t.Fatalf("running = %+v, want v3 / s3 uri", st.runningArtifact)
+	}
+	if st.observedGen != 20 {
+		t.Fatalf("observedGen = %d, want 20", st.observedGen)
+	}
+	if !sawEvent(out, "VersionRelabeled") {
+		t.Fatal("expected VersionRelabeled event")
+	}
+
+	drainEvents(out)
+	r.reconcile()
+	if sawEvent(out, "VersionRelabeled") {
+		t.Fatal("second tick must not emit VersionRelabeled again")
+	}
+	if cf.n != 0 || st.inflight != nil {
+		t.Fatal("second tick must stay idle")
+	}
+}
+
+func TestDifferentDigestStillBeginsDeploy(t *testing.T) {
+	r, fd, _, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	spec := assignment("s", "v3", "sha256:bbb", &pb.DeployPolicy{Startsecs: 5})
+	spec.Artifact.Uri = "s3://bucket/v3"
+	r.generation = 3
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = &pb.ArtifactRef{
+		Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY, Name: "strat",
+		Version: "v2", Digest: "sha256:aaa", Uri: "http://old/v2",
+	}
+	st.proc = mustStart(t, fd)
+	r.actual["s"] = st
+
+	r.reconcile()
+	if st.inflight == nil {
+		t.Fatal("different digest must beginDeploy")
+	}
+	if st.runningArtifact.GetVersion() != "v2" {
+		t.Fatalf("running version should stay v2 until deploy finishes, got %q", st.runningArtifact.GetVersion())
+	}
+	waitWorkerPhase(t, r, pb.DeployPhase_DEPLOY_PHASE_FAILED)
+}
+
+func TestSameDigestConfigLabelPromotes(t *testing.T) {
+	r, fd, mgr, _, out := newTestReconciler(t, time.Unix(1000, 0))
+	cf := &countFetcher{}
+	mgr.Fetcher = cf
+
+	art := artRef("v1", "sha256:aaa")
+	art.Uri = "s3://bucket/bin"
+	oldCfg := &pb.ArtifactRef{Name: "s-config", Version: "c1", Digest: "sha256:cfg", Uri: "file:///tmp/c1.yml"}
+	newCfg := &pb.ArtifactRef{Name: "s-config", Version: "c2", Digest: "sha256:cfg", Uri: "s3://bucket/c2.yml"}
+
+	spec := &pb.StrategyAssignmentSpec{
+		Strategy: "s", Artifact: art, Config: newCfg,
+		DeployPolicy: &pb.DeployPolicy{Startsecs: 5},
+	}
+	r.generation = 9
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = proto.Clone(art).(*pb.ArtifactRef)
+	st.runningConfig = oldCfg
+	st.proc = mustStart(t, fd)
+	r.actual["s"] = st
+
+	r.reconcile()
+	if cf.n != 0 || st.inflight != nil {
+		t.Fatal("config-only label change must not fetch or deploy")
+	}
+	if st.runningConfig.GetVersion() != "c2" || st.runningConfig.GetUri() != newCfg.GetUri() {
+		t.Fatalf("runningConfig = %+v", st.runningConfig)
+	}
+	if st.runningArtifact.GetVersion() != "v1" {
+		t.Fatalf("artifact version should stay v1, got %q", st.runningArtifact.GetVersion())
+	}
+	if st.observedGen != 9 {
+		t.Fatalf("observedGen = %d, want 9", st.observedGen)
+	}
+	if !sawEvent(out, "VersionRelabeled") {
+		t.Fatal("expected VersionRelabeled for config retag")
+	}
+}
+
+func TestCrashRestartPromotesLabels(t *testing.T) {
+	r, fd, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	cf := &countFetcher{}
+	mgr.Fetcher = cf
+	seedRelease(t, mgr, "s", "v2")
+	if err := mgr.SwitchTo("s", "v2"); err != nil {
+		t.Fatal(err)
+	}
+
+	desired := &pb.ArtifactRef{
+		Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY, Name: "strat",
+		Version: "v3", Digest: "sha256:aaa", Uri: "s3://bucket/v3",
+	}
+	spec := &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: desired, DeployPolicy: &pb.DeployPolicy{Startsecs: 5}}
+	r.generation = 4
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = &pb.ArtifactRef{
+		Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY, Name: "strat",
+		Version: "v2", Digest: "sha256:aaa", Uri: "http://old/v2",
+	}
+	r.actual["s"] = st
+
+	r.reconcile()
+	if cf.n != 0 || st.inflight != nil {
+		t.Fatal("crash-restart same-digest retag must not fetch or deploy")
+	}
+	if st.runningArtifact.GetVersion() != "v3" {
+		t.Fatalf("running version = %q, want v3", st.runningArtifact.GetVersion())
+	}
+	if st.proc == nil {
+		t.Fatal("expected crash-restart to start a process")
+	}
+	if fd.starts() != 1 {
+		t.Fatalf("starts = %d, want 1", fd.starts())
 	}
 }
 
