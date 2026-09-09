@@ -336,3 +336,50 @@ func TestApplyExampleNatsManifest(t *testing.T) {
 		t.Fatalf("endpoint = %q", got.Endpoint)
 	}
 }
+
+func TestApplyExampleNatsSingleHostManifest(t *testing.T) {
+	data, err := os.ReadFile("../../examples/nats/single-host.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc yamlDoc
+	if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&doc); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var spec setSpecYAML
+	if err := doc.Spec.Decode(&spec); err != nil {
+		t.Fatal(err)
+	}
+	if len(spec.Members) != 3 {
+		t.Fatalf("members=%d", len(spec.Members))
+	}
+	host := spec.Members[0].Machine
+	seen := map[string]struct{}{}
+	for _, m := range spec.Members {
+		if m.Machine != host {
+			t.Fatalf("expected one machine, got %q and %q", host, m.Machine)
+		}
+		if _, dup := seen[m.Name]; dup {
+			t.Fatalf("duplicate member name %q", m.Name)
+		}
+		seen[m.Name] = struct{}{}
+	}
+	set := &pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: doc.Metadata.Name},
+		Spec: &pb.AssignmentSetSpec{
+			Strategy: spec.Strategy,
+			Template: &pb.MemberTemplate{
+				Args:      spec.Template.Args,
+				Env:       spec.Template.Env,
+				Readiness: &pb.ReadinessProbe{Endpoint: spec.Template.Readiness.Endpoint},
+				Peers:     &pb.PeerList{Format: spec.Template.Peers.Format, Separator: spec.Template.Peers.Separator},
+			},
+		},
+	}
+	for _, m := range spec.Members {
+		set.Spec.Members = append(set.Spec.Members, &pb.SetMember{Machine: m.Machine, Name: m.Name, Vars: m.Vars})
+	}
+	if err := assignmentset.Validate(set); err != nil {
+		t.Fatalf("single-host manifest does not render: %v", err)
+	}
+}

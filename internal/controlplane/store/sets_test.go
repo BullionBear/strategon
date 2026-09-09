@@ -89,7 +89,14 @@ func TestMemoryAssignmentSetReservation(t *testing.T) {
 	}
 	owner, ok := s.ReservedBy("m1", "nats")
 	if !ok || owner != "trading" {
-		t.Fatalf("reserved = %q ok=%v", owner, ok)
+		t.Fatalf("reserved family = %q ok=%v", owner, ok)
+	}
+	owner, ok = s.ReservedBy("m1", "n1")
+	if !ok || owner != "trading" {
+		t.Fatalf("reserved member = %q ok=%v", owner, ok)
+	}
+	if slots := s.ReservedSlots("m1"); len(slots) != 2 {
+		t.Fatalf("ReservedSlots = %v", slots)
 	}
 	if _, ok := s.ReservedBy("m2", "nats"); ok {
 		t.Fatal("m2 should not be reserved")
@@ -225,4 +232,50 @@ func TestMemoryAssignmentSetConcurrentApplyRejectsOverlap(t *testing.T) {
 
 func TestMemoryAssignmentSetReapplyAndGrowth(t *testing.T) {
 	assertReapplyAndGrowth(t, NewMemory(nil))
+}
+
+func TestMemoryAssignmentSetSameMachineDifferentNamesAfterFlip(t *testing.T) {
+	s := NewMemory(nil)
+	if _, err := applySet(s, "alpha", &pb.AssignmentSetSpec{
+		Strategy: "nats",
+		Members:  []*pb.SetMember{{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "h"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applySet(s, "beta", &pb.AssignmentSetSpec{
+		Strategy: "nats",
+		Members:  []*pb.SetMember{{Machine: "m1", Name: "n2", Vars: map[string]string{"route_host": "h"}}},
+	}); err == nil {
+		t.Fatal("two new sets must still conflict on the family name")
+	}
+	if err := s.UpdateAssignmentSetStatus("alpha", &pb.AssignmentSetStatus{
+		Phase: "Ready", AssignmentKey: AssignmentKeyMember,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := s.ReservedBy("m1", "nats"); ok {
+		t.Fatal("family name must be free after assignment_key=member")
+	}
+	if _, err := applySet(s, "beta", &pb.AssignmentSetSpec{
+		Strategy: "nats",
+		Members:  []*pb.SetMember{{Machine: "m1", Name: "n2", Vars: map[string]string{"route_host": "h"}}},
+	}); err != nil {
+		t.Fatalf("same machine, different member names after flip: %v", err)
+	}
+}
+
+func TestMemoryAssignmentSetCrossCatalogSameMemberName(t *testing.T) {
+	s := NewMemory(nil)
+	if _, err := applySet(s, "alpha", &pb.AssignmentSetSpec{
+		Strategy: "nats",
+		Members:  []*pb.SetMember{{Machine: "m1", Name: "foo", Vars: map[string]string{"route_host": "h"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applySet(s, "beta", &pb.AssignmentSetSpec{
+		Strategy: "feed",
+		Members:  []*pb.SetMember{{Machine: "m1", Name: "foo", Vars: map[string]string{"route_host": "h"}}},
+	}); err == nil {
+		t.Fatal("same member name on the same machine must conflict across catalogs")
+	}
 }

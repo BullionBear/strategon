@@ -26,7 +26,7 @@ func (s *Server) ApplyAssignmentSet(ctx context.Context, req *connect.Request[pb
 		return nil, err
 	}
 	strategy := store.SetStrategy(&pb.AssignmentSet{Spec: spec})
-	if err := s.rejectUnownedStrategy(in.GetMetadata().GetName(), strategy, spec.GetMembers()); err != nil {
+	if err := s.rejectUnownedSlots(in.GetMetadata().GetName(), spec); err != nil {
 		return nil, err
 	}
 	next := &pb.AssignmentSet{
@@ -116,7 +116,6 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 	}
 
 	seenName := map[string]struct{}{}
-	seenMachine := map[string]struct{}{}
 	for i, srv := range spec.GetMembers() {
 		if srv.GetMachine() == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: machine is required", i))
@@ -124,17 +123,16 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 		if srv.GetName() == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: name is required", i))
 		}
+		if err := assignmentset.ValidateMemberName(srv.GetName()); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: %w", i, err))
+		}
 		if _, ok := s.store.GetMachine(srv.GetMachine()); !ok {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: machine %q not registered", i, srv.GetMachine()))
 		}
 		if _, dup := seenName[srv.GetName()]; dup {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate member name %q", srv.GetName()))
 		}
-		if _, dup := seenMachine[srv.GetMachine()]; dup {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate machine %q", srv.GetMachine()))
-		}
 		seenName[srv.GetName()] = struct{}{}
-		seenMachine[srv.GetMachine()] = struct{}{}
 	}
 
 	// Render every member now so an unknown ${...} is rejected here rather than
@@ -173,21 +171,47 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 	return spec, nil
 }
 
-func (s *Server) rejectUnownedStrategy(clusterName, strategy string, servers []*pb.SetMember) error {
-	for _, srv := range servers {
-		owner, reserved := s.store.ReservedBy(srv.GetMachine(), strategy)
-		if reserved && owner != clusterName {
-			return connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("machine %q strategy %q is owned by AssignmentSet %q", srv.GetMachine(), strategy, owner))
+func (s *Server) rejectUnownedSlots(clusterName string, spec *pb.AssignmentSetSpec) error {
+	for _, srv := range spec.GetMembers() {
+		if err := s.rejectSlot(clusterName, srv.GetMachine(), srv.GetName()); err != nil {
+			return err
 		}
-		rec, ok := s.store.GetMachine(srv.GetMachine())
-		if !ok || rec.Assignments[strategy] == nil {
+	}
+	existing, ok := s.store.GetAssignmentSet(clusterName)
+	checkFamily := !ok || existing.GetStatus().GetAssignmentKey() == ""
+	if !checkFamily {
+		return nil
+	}
+	cat := spec.GetStrategy()
+	seen := map[string]struct{}{}
+	for _, srv := range spec.GetMembers() {
+		if srv.GetName() == cat {
 			continue
 		}
-		if !reserved {
-			return connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("machine %q already has an unowned %q assignment", srv.GetMachine(), strategy))
+		if _, dup := seen[srv.GetMachine()]; dup {
+			continue
 		}
+		seen[srv.GetMachine()] = struct{}{}
+		if err := s.rejectSlot(clusterName, srv.GetMachine(), cat); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) rejectSlot(clusterName, machine, strategy string) error {
+	owner, reserved := s.store.ReservedBy(machine, strategy)
+	if reserved && owner != clusterName {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("machine %q strategy %q is owned by AssignmentSet %q", machine, strategy, owner))
+	}
+	rec, ok := s.store.GetMachine(machine)
+	if !ok || rec.Assignments[strategy] == nil {
+		return nil
+	}
+	if !reserved {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("machine %q already has an unowned %q assignment", machine, strategy))
 	}
 	return nil
 }

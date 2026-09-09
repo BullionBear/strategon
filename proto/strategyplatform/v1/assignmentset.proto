@@ -7,15 +7,19 @@ option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;st
 import "strategyplatform/v1/common.proto";
 import "strategyplatform/v1/spec.proto";
 
-// AssignmentSet places one assignment of a strategy on each of several
-// machines and rolls changes across them, at most max_unavailable at a time.
+// AssignmentSet places one assignment per member and rolls changes across
+// them, at most max_unavailable members at a time.
+//
+// spec.strategy is the catalog / artifact family (e.g. "nats"). The
+// assignment slot — WorkDir, status, reservation after transition — is
+// member.name. Members on the same machine are allowed when names differ.
 //
 // The control plane knows nothing about what the members run. Per-member
 // identity and any peer list live in the template as placeholders, so a NATS
-// cluster, a sharded feed handler, or anything else that needs "N machines
+// cluster, a sharded feed handler, or anything else that needs "N processes
 // that know about each other" is a manifest, not new server code.
 //
-// Apply persists spec only; a controller writes the per-machine assignments
+// Apply persists spec only; a controller writes the per-member assignments
 // over time.
 message AssignmentSet {
   ObjectMeta metadata = 1;
@@ -24,8 +28,8 @@ message AssignmentSet {
 }
 
 message AssignmentSetSpec {
-  // Strategy name this set owns on every member machine. The set is the sole
-  // writer of that name: human verbs are rejected on machines it owns.
+  // Catalog / artifact family (binary name and {strategy}-config fallback).
+  // After status.assignment_key="member" this is not an assignment slot.
   string strategy = 1;
   string artifact_version = 2;
   string config_version = 3; // optional
@@ -71,7 +75,8 @@ message PeerList {
 
 message SetMember {
   string machine = 1;
-  // Member identity, unique within the set (e.g. "nats-m1").
+  // Member identity, unique within the set (e.g. "nats-m1"). This is the
+  // assignment strategy name and WorkDir segment. Renaming is recreate.
   string name = 2;
   // Free-form per-member values referenced as ${member.vars.KEY} and, from
   // PeerList.format, ${peer.vars.KEY}.
@@ -91,6 +96,10 @@ message AssignmentSetStatus {
   string message = 4;
   repeated MemberStatus members = 5;
   bool deleting = 6;
+  // empty = still on the legacy family slot (spec.strategy); "member" means
+  // every live assignment is keyed by member.name and the family name is
+  // no longer reserved or auto-undeployed.
+  string assignment_key = 7;
 }
 
 message MemberStatus {

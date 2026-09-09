@@ -270,6 +270,55 @@ func TestApplyAssignmentSetRejectsOverlappingMembership(t *testing.T) {
 	}
 }
 
+func TestApplyAssignmentExplicitArtifact(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	if _, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId:       "m1",
+		Strategy:        "nats-m4",
+		Artifact:        "nats",
+		ArtifactVersion: "v1",
+		Stopped:         false,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	got := rec.Assignments["nats-m4"]
+	if got == nil || got.GetArtifact().GetName() != "nats" {
+		t.Fatalf("assignment = %+v", got)
+	}
+}
+
+func TestApplyAssignmentSetRejectsBadMemberName(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	if _, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "trading"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Members:         []*pb.SetMember{{Machine: "m1", Name: "nats/m1", Vars: map[string]string{"route_host": "10.0.0.1"}}},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("bad member name: %v", err)
+	}
+}
+
 func TestApplyAssignmentSetRejectsOCIOnExecOnlyMachine(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()

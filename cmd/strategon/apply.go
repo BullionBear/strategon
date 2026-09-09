@@ -87,6 +87,7 @@ type assignmentSpecYAML struct {
 	MachineID          string            `yaml:"machineId"`
 	MachineIDAlt       string            `yaml:"machine_id"`
 	Strategy           string            `yaml:"strategy"`
+	Artifact           string            `yaml:"artifact"`
 	ArtifactVersion    string            `yaml:"artifactVersion"`
 	ArtifactVersionAlt string            `yaml:"artifact_version"`
 	ConfigVersion      string            `yaml:"configVersion"`
@@ -287,6 +288,7 @@ func applyAssignment(ctx context.Context, client strategyplatformv1connect.Contr
 	req := &pb.ApplyAssignmentRequest{
 		MachineId:       machine,
 		Strategy:        name,
+		Artifact:        spec.Artifact,
 		ArtifactVersion: artVer,
 		ConfigVersion:   firstNonEmpty(spec.ConfigVersion, spec.ConfigVersionAlt),
 		Stopped:         spec.Stopped,

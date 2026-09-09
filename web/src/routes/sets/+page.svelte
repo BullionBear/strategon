@@ -63,8 +63,8 @@
 	{:else if sets.length === 0}
 		<p class="muted" style="margin-top:1.25rem">
 			No AssignmentSets yet. Apply <span class="mono">examples/nats/cluster.yaml</span> with the
-			CLI. The controller — not this page — writes each machine's
-			<span class="mono">nats</span> assignment.
+			CLI. The controller — not this page — writes each member's assignment
+			(<span class="mono">member.name</span>).
 		</p>
 	{:else}
 		<div class="list" style="margin-top:1.25rem">

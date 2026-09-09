@@ -152,6 +152,12 @@ func (m *Memory) ReservedBy(machineID, strategy string) (string, bool) {
 	return reservedByLocked(m.clusters, machineID, strategy)
 }
 
+func (m *Memory) ReservedSlots(machineID string) []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return reservedSlotsLocked(m.clusters, machineID)
+}
+
 // ReservationConflictError reports that a machine+strategy is already owned by
 // a different AssignmentSet. Callers map it to FailedPrecondition.
 type ReservationConflictError struct {
@@ -165,8 +171,8 @@ func (e *ReservationConflictError) Error() string {
 		e.MachineID, e.Strategy, e.Owner)
 }
 
-// reservationConflict reports whether any machine in next's spec is already
-// claimed by a different, non-deleting cluster in existing.
+// reservationConflict reports whether any slot next claims is already claimed
+// by a different, non-deleting cluster in existing.
 //
 // This is the authoritative ownership guard and must run under the same lock
 // (memory) or transaction (Postgres) as the write: an admission check in the
@@ -175,29 +181,80 @@ func (e *ReservationConflictError) Error() string {
 // every tick. existing is expected in a stable order so the reported owner is
 // deterministic when several clusters conflict.
 func reservationConflict(existing []*pb.AssignmentSet, next *pb.AssignmentSet) error {
-	strategy := SetStrategy(next)
 	name := next.GetMetadata().GetName()
-	for _, srv := range next.GetSpec().GetMembers() {
-		for _, c := range existing {
-			if c.GetMetadata().GetName() == name || c.GetStatus().GetDeleting() {
+	effective := withPersistedAssignmentKey(existing, next)
+	nextClaims := claimedSlots(effective)
+	for _, c := range existing {
+		if c.GetMetadata().GetName() == name || c.GetStatus().GetDeleting() {
+			continue
+		}
+		for s := range claimedSlots(c) {
+			if _, ok := nextClaims[s]; !ok {
 				continue
 			}
-			if SetStrategy(c) != strategy {
-				continue
-			}
-			for _, es := range c.GetSpec().GetMembers() {
-				if es.GetMachine() != srv.GetMachine() {
-					continue
-				}
-				return &ReservationConflictError{
-					MachineID: srv.GetMachine(),
-					Strategy:  strategy,
-					Owner:     c.GetMetadata().GetName(),
-				}
+			return &ReservationConflictError{
+				MachineID: s.machine,
+				Strategy:  s.strategy,
+				Owner:     c.GetMetadata().GetName(),
 			}
 		}
 	}
 	return nil
+}
+
+// withPersistedAssignmentKey copies the stored assignment_key onto next so an
+// Apply that only sends spec does not look like a brand-new legacy set.
+func withPersistedAssignmentKey(existing []*pb.AssignmentSet, next *pb.AssignmentSet) *pb.AssignmentSet {
+	effective := proto.Clone(next).(*pb.AssignmentSet)
+	if effective.GetStatus() == nil {
+		effective.Status = &pb.AssignmentSetStatus{}
+	}
+	if effective.GetStatus().GetAssignmentKey() != "" {
+		return effective
+	}
+	name := next.GetMetadata().GetName()
+	for _, c := range existing {
+		if c.GetMetadata().GetName() != name {
+			continue
+		}
+		if k := c.GetStatus().GetAssignmentKey(); k != "" {
+			effective.Status.AssignmentKey = k
+		}
+		break
+	}
+	return effective
+}
+
+type assignmentSlot struct {
+	machine, strategy string
+}
+
+const AssignmentKeyMember = "member"
+
+// claimedSlots is every (machine, strategy) this set currently owns.
+// Member names are always claimed. While assignment_key is empty the catalog
+// family name is also claimed on each member machine (unless a member is
+// already named that).
+func claimedSlots(c *pb.AssignmentSet) map[assignmentSlot]struct{} {
+	out := map[assignmentSlot]struct{}{}
+	add := func(machine, strategy string) {
+		if machine == "" || strategy == "" {
+			return
+		}
+		out[assignmentSlot{machine: machine, strategy: strategy}] = struct{}{}
+	}
+	for _, srv := range c.GetSpec().GetMembers() {
+		add(srv.GetMachine(), srv.GetName())
+	}
+	if c.GetStatus().GetAssignmentKey() == "" {
+		cat := SetStrategy(c)
+		for _, srv := range c.GetSpec().GetMembers() {
+			if srv.GetName() != cat {
+				add(srv.GetMachine(), cat)
+			}
+		}
+	}
+	return out
 }
 
 // clustersByName returns the cluster map as a name-sorted slice.
@@ -213,21 +270,48 @@ func clustersByName(clusters map[string]*pb.AssignmentSet) []*pb.AssignmentSet {
 }
 
 func reservedByLocked(clusters map[string]*pb.AssignmentSet, machineID, strategy string) (string, bool) {
-	for _, c := range clusters {
+	for _, name := range clusterNames(clusters) {
+		c := clusters[name]
 		if c.GetStatus().GetDeleting() {
 			continue
 		}
-		strat := SetStrategy(c)
-		if strat != strategy {
-			continue
-		}
-		for _, srv := range c.GetSpec().GetMembers() {
-			if srv.GetMachine() == machineID {
-				return c.GetMetadata().GetName(), true
-			}
+		if _, ok := claimedSlots(c)[assignmentSlot{machine: machineID, strategy: strategy}]; ok {
+			return c.GetMetadata().GetName(), true
 		}
 	}
 	return "", false
+}
+
+func reservedSlotsLocked(clusters map[string]*pb.AssignmentSet, machineID string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, name := range clusterNames(clusters) {
+		c := clusters[name]
+		if c.GetStatus().GetDeleting() {
+			continue
+		}
+		for s := range claimedSlots(c) {
+			if s.machine != machineID {
+				continue
+			}
+			if _, ok := seen[s.strategy]; ok {
+				continue
+			}
+			seen[s.strategy] = struct{}{}
+			out = append(out, s.strategy)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func clusterNames(clusters map[string]*pb.AssignmentSet) []string {
+	out := make([]string, 0, len(clusters))
+	for n := range clusters {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // preserveDeleting keeps a concurrent MarkAssignmentSetDeleting from being
@@ -245,10 +329,13 @@ func preserveDeleting(cur, incoming *pb.AssignmentSetStatus) *pb.AssignmentSetSt
 			next.Phase = "Deleting"
 		}
 	}
+	if cur != nil && next.GetAssignmentKey() == "" && cur.GetAssignmentKey() != "" {
+		next.AssignmentKey = cur.GetAssignmentKey()
+	}
 	return next
 }
 
-// SetStrategy returns the owned strategy name (default nats).
+// SetStrategy returns the catalog / artifact family name (default nats).
 func SetStrategy(c *pb.AssignmentSet) string {
 	if s := c.GetSpec().GetStrategy(); s != "" {
 		return s

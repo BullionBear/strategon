@@ -11,9 +11,10 @@ spec:
     maxUnavailable: 1
     waitReadySeconds: 60
 
-  # Everything NATS-specific lives here. The control plane substitutes its own
-  # ${set.*} / ${member.*} / ${peers} placeholders and leaves ${CONFIG} for the
-  # agent to resolve to the materialised config artifact.
+  # Everything NATS-specific lives here. spec.strategy is the catalog family.
+  # The assignment slot is members[].name. The control plane substitutes its
+  # own ${set.*} / ${member.*} / ${peers} placeholders and leaves ${CONFIG}
+  # for the agent to resolve to the materialised config artifact.
   template:
     args: ["-c", "${CONFIG}", "--routes", "${peers}"]
 
@@ -49,6 +50,8 @@ spec:
       # than staying dead. Either way the roll stops.
       enableAutoRollback: true
 
+  # member.name is the assignment slot and WorkDir. Same machine is allowed
+  # when names (and ports) differ — see single-host.yaml.
   members:
     - machine: m1
       name: nats-m1

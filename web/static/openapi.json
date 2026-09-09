@@ -1515,6 +1515,11 @@
           "readiness": {
             "title": "readiness",
             "$ref": "#/components/schemas/strategyplatform.v1.ReadinessProbe"
+          },
+          "artifact": {
+            "type": "string",
+            "title": "artifact",
+            "description": "Optional catalog artifact name. Empty uses strategy (or, on update, the\n name already stored on the assignment). Set this to deploy a slot whose\n name differs from the binary, e.g. strategy=nats-m4 artifact=nats."
           }
         },
         "title": "ApplyAssignmentRequest",
@@ -1657,7 +1662,7 @@
         },
         "title": "AssignmentSet",
         "additionalProperties": false,
-        "description": "AssignmentSet places one assignment of a strategy on each of several\n machines and rolls changes across them, at most max_unavailable at a time.\n\n The control plane knows nothing about what the members run. Per-member\n identity and any peer list live in the template as placeholders, so a NATS\n cluster, a sharded feed handler, or anything else that needs \"N machines\n that know about each other\" is a manifest, not new server code.\n\n Apply persists spec only; a controller writes the per-machine assignments\n over time."
+        "description": "AssignmentSet places one assignment per member and rolls changes across\n them, at most max_unavailable members at a time.\n\n spec.strategy is the catalog / artifact family (e.g. \"nats\"). The\n assignment slot — WorkDir, status, reservation after transition — is\n member.name. Members on the same machine are allowed when names differ.\n\n The control plane knows nothing about what the members run. Per-member\n identity and any peer list live in the template as placeholders, so a NATS\n cluster, a sharded feed handler, or anything else that needs \"N processes\n that know about each other\" is a manifest, not new server code.\n\n Apply persists spec only; a controller writes the per-member assignments\n over time."
       },
       "strategyplatform.v1.AssignmentSetSpec": {
         "type": "object",
@@ -1665,7 +1670,7 @@
           "strategy": {
             "type": "string",
             "title": "strategy",
-            "description": "Strategy name this set owns on every member machine. The set is the sole\n writer of that name: human verbs are rejected on machines it owns."
+            "description": "Catalog / artifact family (binary name and {strategy}-config fallback).\n After status.assignment_key=\"member\" this is not an assignment slot."
           },
           "artifactVersion": {
             "type": "string",
@@ -1729,6 +1734,11 @@
           "deleting": {
             "type": "boolean",
             "title": "deleting"
+          },
+          "assignmentKey": {
+            "type": "string",
+            "title": "assignment_key",
+            "description": "empty = still on the legacy family slot (spec.strategy); \"member\" means\n every live assignment is keyed by member.name and the family name is\n no longer reserved or auto-undeployed."
           }
         },
         "title": "AssignmentSetStatus",
@@ -3019,7 +3029,7 @@
           "name": {
             "type": "string",
             "title": "name",
-            "description": "Member identity, unique within the set (e.g. \"nats-m1\")."
+            "description": "Member identity, unique within the set (e.g. \"nats-m1\"). This is the\n assignment strategy name and WorkDir segment. Renaming is recreate."
           },
           "vars": {
             "type": "object",

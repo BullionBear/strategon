@@ -12,9 +12,10 @@ the shipped code and this document disagree, the code is right — see
 Strategon already reconciles **per-machine desired assignments**. This epic
 adds a Kubernetes-style **human apply surface** and a **control-plane
 orchestrator** that writes those assignments over time. The orchestrated
-object is a generic `AssignmentSet`: N machines running one strategy, each
-member with its own identity and an optional peer list, rolled
-`maxUnavailable` at a time.
+object is a generic `AssignmentSet`: N members, each an assignment slot
+named `member.name` (same primitive as a trading process), rolled
+`maxUnavailable` at a time. `spec.strategy` is the catalog family, not the
+process name. Members on the same machine are allowed when names differ.
 
 A NATS cluster is the first *user* of that object, not a `kind` of its own.
 Everything NATS-specific — `NATS_SERVER_NAME`, the `nats://host:port` route
@@ -79,7 +80,7 @@ trading-process supervision to infrastructure topology.
    controller is the only writer of the `nats` (or configured) assignments
    it owns.
 4. Creating or upgrading a cluster rolls **at most `maxUnavailable`
-   machines at a time**, advancing only when the in-flight nodes are
+   members at a time**, advancing only when the in-flight members are
    Ready.
 5. Per-node NATS identity comes from **assignment `env`** and routes from
    **assignment `args`** — one shared config artifact, not a catalog
@@ -95,8 +96,9 @@ trading-process supervision to infrastructure topology.
 - Generic workflow / DAG engine (no user-defined steps, sleeps, or scripts
   in the agent).
 - Kubernetes SSA / field managers (single writer per object for now).
-- Scheduler, replicas, or running three NATS servers on one machine under
-  one strategy name.
+- Scheduler, replicas, or automatic port allocation. Same-host packing is
+  allowed (distinct `member.name` + distinct `vars` ports) but the operator
+  chooses the ports.
 - Using fencing leases to serialize NATS (leases mean “only one trader”).
 - Teaching the agent cluster membership, JetStream meta, or route gossip.
 - Changing the single-slot Recreate pipeline (`download → verify → drain
@@ -308,10 +310,13 @@ membership itself, so cluster edits do not churn subscriptions.
 
 ### NATS as a manifest, not a `kind`
 
-One set → one strategy name, which the set owns exclusively. One process slot
-per machine. The control plane substitutes `${set.*}`, `${member.*}` and
-`${peers}` and leaves `${CONFIG}` for the agent; an unknown placeholder is
-rejected at apply time. Shared `nats.conf` in the catalog uses `$ENV` substitution:
+One set → one catalog family (`spec.strategy`). Each member is its own
+assignment slot (`member.name` → WorkDir `<base>/<member.name>`). After
+`status.assignment_key=member` the set owns those names only; the family
+name is an ordinary strategy again. Same-host members are allowed. The
+control plane substitutes `${set.*}`, `${member.*}` and `${peers}` and
+leaves `${CONFIG}` for the agent; an unknown placeholder is rejected at
+apply time. Shared `nats.conf` in the catalog uses `$ENV` substitution:
 
 ```conf
 server_name: $NATS_SERVER_NAME
@@ -881,6 +886,26 @@ for Postgres, inside the apply transaction behind `pg_advisory_xact_lock` —
 row locks cannot guard it, because the conflicting set may not exist yet and
 `FOR UPDATE` does not block a concurrent `INSERT`.
 
+**The assignment slot is `member.name`, not `spec.strategy`.** A machine can
+run several members of one set (or several sets) the same way it runs several
+trading processes: same binary, different names, different config/env. The
+catalog family stays on `spec.strategy`. Existing sets that still have
+assignments keyed by the family name migrate with a paired undeploy+write
+that shares one `maxUnavailable` slot, gated by `status.assignment_key`
+(empty = legacy; `member` = done). Delete lists the same slots, so an
+unmigrated set cannot vanish and leave `nats` processes behind. Human
+`Deploy nats` is rejected only while `assignment_key` is empty.
+
+**`member.name` is a disk identity.** The agent has no cross-strategy blob
+cache: three members on one host fetch and unpack the artifact three times.
+Renaming a member is recreate — new empty WorkDir; undeploy does not delete
+the old directory. File browse / logs / status address
+`<base>/<member.name>`, which is the point of the split. Audit `Strategy`
+changes from `nats` to `nats-m1`.
+
+**ApplyAssignment takes an optional `artifact` name** so a human can create
+`nats-m4` from catalog `nats` without going through the controller.
+
 Still unverified: no three-node cluster has been run end to end. Everything
 here is covered by unit tests, fake agents, and a Postgres container; the only
 contact with a real `nats-server` was checking its flag behaviour.
@@ -899,8 +924,10 @@ contact with a real `nats-server` was checking its flag behaviour.
 | Same config blob cannot hold `server_name` | env substitution; required `routeHost` |
 | `routes: [ $NATS_ROUTES ]` silently produces one malformed route | Routes ride on `--routes` in `args`; E4 and E6 both assert no `NATS_ROUTES` env var is emitted |
 | Config never reaches nats-server because `${CONFIG}` was only put in `env` | Placeholders expand in `args` only; E4 asserts `-c ${CONFIG}` in generated args |
-| Delete cluster wipes an unrelated `nats` — and `SetAssignment(nil)` drops the status too, so the evidence goes with it | E3 rejects Apply when a member already has an unowned assignment for that strategy name, and blocks human verbs on owned ones; `ownerReferences` later |
-| Trading `Deploy` to the same strategy name | E3 admission, not convention |
+| Delete cluster wipes an unrelated `nats` — and `SetAssignment(nil)` drops the status too, so the evidence goes with it | While `assignment_key` is empty, Apply still rejects an unowned family assignment and reserve includes the family name. After the flip, only `member.name` is reserved. |
+| Trading `Deploy` to the same strategy name | E3 admission on the owned slot (`member.name`, plus family during transition) |
+| Control-plane upgrade drains all family slots before writing member names, taking NATS below quorum | Paired replace: undeploy family + write member.name share one `maxUnavailable` slot |
+| Sort-by-machine then `computeAssignment(cl, i)` writes the wrong member's env onto a machine | `orderedSpecMembers` keeps the original spec index; sort key is `(machine, name)` |
 | Second definition of "converged" drifts from the agent's equality check | `isConverged` moves to `internal/controlplane/view` in E1; UI, CLI and controller share it |
 
 ---

@@ -14,18 +14,22 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/assignmentset.proto.
  */
 export const file_strategyplatform_v1_assignmentset: GenFile = /*@__PURE__*/
-  fileDesc("CidzdHJhdGVneXBsYXRmb3JtL3YxL2Fzc2lnbm1lbnRzZXQucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEisgEKDUFzc2lnbm1lbnRTZXQSMQoIbWV0YWRhdGEYASABKAsyHy5zdHJhdGVneXBsYXRmb3JtLnYxLk9iamVjdE1ldGESNAoEc3BlYxgCIAEoCzImLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXNzaWdubWVudFNldFNwZWMSOAoGc3RhdHVzGAMgASgLMiguc3RyYXRlZ3lwbGF0Zm9ybS52MS5Bc3NpZ25tZW50U2V0U3RhdHVzIvMBChFBc3NpZ25tZW50U2V0U3BlYxIQCghzdHJhdGVneRgBIAEoCRIYChBhcnRpZmFjdF92ZXJzaW9uGAIgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAMgASgJEjUKCHRlbXBsYXRlGAQgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5NZW1iZXJUZW1wbGF0ZRIvCgdtZW1iZXJzGAUgAygLMh4uc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXRNZW1iZXISMgoGdXBkYXRlGAYgASgLMiIuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Sb2xsaW5nVXBkYXRlItoCCg5NZW1iZXJUZW1wbGF0ZRIMCgRhcmdzGAEgAygJEjkKA2VudhgCIAMoCzIsLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWVtYmVyVGVtcGxhdGUuRW52RW50cnkSOAoNZGVwbG95X3BvbGljeRgDIAEoCzIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuRGVwbG95UG9saWN5EjYKCXJlYWRpbmVzcxgEIAEoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVhZGluZXNzUHJvYmUSMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxIsCgVwZWVycxgGIAEoCzIdLnN0cmF0ZWd5cGxhdGZvcm0udjEuUGVlckxpc3QaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJDCghQZWVyTGlzdBIOCgZmb3JtYXQYASABKAkSEQoJc2VwYXJhdG9yGAIgASgJEhQKDGluY2x1ZGVfc2VsZhgDIAEoCCKPAQoJU2V0TWVtYmVyEg8KB21hY2hpbmUYASABKAkSDAoEbmFtZRgCIAEoCRI2CgR2YXJzGAMgAygLMiguc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXRNZW1iZXIuVmFyc0VudHJ5GisKCVZhcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkQKDVJvbGxpbmdVcGRhdGUSFwoPbWF4X3VuYXZhaWxhYmxlGAEgASgFEhoKEndhaXRfcmVhZHlfc2Vjb25kcxgCIAEoBSKoAQoTQXNzaWdubWVudFNldFN0YXR1cxINCgVwaGFzZRgBIAEoCRIbChNvYnNlcnZlZF9nZW5lcmF0aW9uGAIgASgDEg4KBnJlYXNvbhgDIAEoCRIPCgdtZXNzYWdlGAQgASgJEjIKB21lbWJlcnMYBSADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLk1lbWJlclN0YXR1cxIQCghkZWxldGluZxgGIAEoCCJeCgxNZW1iZXJTdGF0dXMSDwoHbWFjaGluZRgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBXJlYWR5GAMgASgIEg0KBXBoYXNlGAQgASgJEhEKCWNvbnZlcmdlZBgFIAEoCCJMChlBcHBseUFzc2lnbm1lbnRTZXRSZXF1ZXN0Ei8KA3NldBgBIAEoCzIiLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXNzaWdubWVudFNldCJNChpBcHBseUFzc2lnbm1lbnRTZXRSZXNwb25zZRIvCgNzZXQYASABKAsyIi5zdHJhdGVneXBsYXRmb3JtLnYxLkFzc2lnbm1lbnRTZXQiJwoXR2V0QXNzaWdubWVudFNldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIbChlMaXN0QXNzaWdubWVudFNldHNSZXF1ZXN0Ik4KGkxpc3RBc3NpZ25tZW50U2V0c1Jlc3BvbnNlEjAKBHNldHMYASADKAsyIi5zdHJhdGVneXBsYXRmb3JtLnYxLkFzc2lnbm1lbnRTZXQiKgoaRGVsZXRlQXNzaWdubWVudFNldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIdChtEZWxldGVBc3NpZ25tZW50U2V0UmVzcG9uc2VCTVpLZ2l0aHViLmNvbS9idWxsaW9uYmVhci9zdHJhdGVnb24vZ2VuL3N0cmF0ZWd5cGxhdGZvcm0vdjE7c3RyYXRlZ3lwbGF0Zm9ybXYxYgZwcm90bzM", [file_strategyplatform_v1_common, file_strategyplatform_v1_spec]);
+  fileDesc("CidzdHJhdGVneXBsYXRmb3JtL3YxL2Fzc2lnbm1lbnRzZXQucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEisgEKDUFzc2lnbm1lbnRTZXQSMQoIbWV0YWRhdGEYASABKAsyHy5zdHJhdGVneXBsYXRmb3JtLnYxLk9iamVjdE1ldGESNAoEc3BlYxgCIAEoCzImLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXNzaWdubWVudFNldFNwZWMSOAoGc3RhdHVzGAMgASgLMiguc3RyYXRlZ3lwbGF0Zm9ybS52MS5Bc3NpZ25tZW50U2V0U3RhdHVzIvMBChFBc3NpZ25tZW50U2V0U3BlYxIQCghzdHJhdGVneRgBIAEoCRIYChBhcnRpZmFjdF92ZXJzaW9uGAIgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAMgASgJEjUKCHRlbXBsYXRlGAQgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5NZW1iZXJUZW1wbGF0ZRIvCgdtZW1iZXJzGAUgAygLMh4uc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXRNZW1iZXISMgoGdXBkYXRlGAYgASgLMiIuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Sb2xsaW5nVXBkYXRlItoCCg5NZW1iZXJUZW1wbGF0ZRIMCgRhcmdzGAEgAygJEjkKA2VudhgCIAMoCzIsLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWVtYmVyVGVtcGxhdGUuRW52RW50cnkSOAoNZGVwbG95X3BvbGljeRgDIAEoCzIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuRGVwbG95UG9saWN5EjYKCXJlYWRpbmVzcxgEIAEoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVhZGluZXNzUHJvYmUSMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxIsCgVwZWVycxgGIAEoCzIdLnN0cmF0ZWd5cGxhdGZvcm0udjEuUGVlckxpc3QaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJDCghQZWVyTGlzdBIOCgZmb3JtYXQYASABKAkSEQoJc2VwYXJhdG9yGAIgASgJEhQKDGluY2x1ZGVfc2VsZhgDIAEoCCKPAQoJU2V0TWVtYmVyEg8KB21hY2hpbmUYASABKAkSDAoEbmFtZRgCIAEoCRI2CgR2YXJzGAMgAygLMiguc3RyYXRlZ3lwbGF0Zm9ybS52MS5TZXRNZW1iZXIuVmFyc0VudHJ5GisKCVZhcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkQKDVJvbGxpbmdVcGRhdGUSFwoPbWF4X3VuYXZhaWxhYmxlGAEgASgFEhoKEndhaXRfcmVhZHlfc2Vjb25kcxgCIAEoBSLAAQoTQXNzaWdubWVudFNldFN0YXR1cxINCgVwaGFzZRgBIAEoCRIbChNvYnNlcnZlZF9nZW5lcmF0aW9uGAIgASgDEg4KBnJlYXNvbhgDIAEoCRIPCgdtZXNzYWdlGAQgASgJEjIKB21lbWJlcnMYBSADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLk1lbWJlclN0YXR1cxIQCghkZWxldGluZxgGIAEoCBIWCg5hc3NpZ25tZW50X2tleRgHIAEoCSJeCgxNZW1iZXJTdGF0dXMSDwoHbWFjaGluZRgBIAEoCRIMCgRuYW1lGAIgASgJEg0KBXJlYWR5GAMgASgIEg0KBXBoYXNlGAQgASgJEhEKCWNvbnZlcmdlZBgFIAEoCCJMChlBcHBseUFzc2lnbm1lbnRTZXRSZXF1ZXN0Ei8KA3NldBgBIAEoCzIiLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXNzaWdubWVudFNldCJNChpBcHBseUFzc2lnbm1lbnRTZXRSZXNwb25zZRIvCgNzZXQYASABKAsyIi5zdHJhdGVneXBsYXRmb3JtLnYxLkFzc2lnbm1lbnRTZXQiJwoXR2V0QXNzaWdubWVudFNldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIbChlMaXN0QXNzaWdubWVudFNldHNSZXF1ZXN0Ik4KGkxpc3RBc3NpZ25tZW50U2V0c1Jlc3BvbnNlEjAKBHNldHMYASADKAsyIi5zdHJhdGVneXBsYXRmb3JtLnYxLkFzc2lnbm1lbnRTZXQiKgoaRGVsZXRlQXNzaWdubWVudFNldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIdChtEZWxldGVBc3NpZ25tZW50U2V0UmVzcG9uc2VCTVpLZ2l0aHViLmNvbS9idWxsaW9uYmVhci9zdHJhdGVnb24vZ2VuL3N0cmF0ZWd5cGxhdGZvcm0vdjE7c3RyYXRlZ3lwbGF0Zm9ybXYxYgZwcm90bzM", [file_strategyplatform_v1_common, file_strategyplatform_v1_spec]);
 
 /**
- * AssignmentSet places one assignment of a strategy on each of several
- * machines and rolls changes across them, at most max_unavailable at a time.
+ * AssignmentSet places one assignment per member and rolls changes across
+ * them, at most max_unavailable members at a time.
+ *
+ * spec.strategy is the catalog / artifact family (e.g. "nats"). The
+ * assignment slot — WorkDir, status, reservation after transition — is
+ * member.name. Members on the same machine are allowed when names differ.
  *
  * The control plane knows nothing about what the members run. Per-member
  * identity and any peer list live in the template as placeholders, so a NATS
- * cluster, a sharded feed handler, or anything else that needs "N machines
+ * cluster, a sharded feed handler, or anything else that needs "N processes
  * that know about each other" is a manifest, not new server code.
  *
- * Apply persists spec only; a controller writes the per-machine assignments
+ * Apply persists spec only; a controller writes the per-member assignments
  * over time.
  *
  * @generated from message strategyplatform.v1.AssignmentSet
@@ -59,8 +63,8 @@ export const AssignmentSetSchema: GenMessage<AssignmentSet> = /*@__PURE__*/
  */
 export type AssignmentSetSpec = Message<"strategyplatform.v1.AssignmentSetSpec"> & {
   /**
-   * Strategy name this set owns on every member machine. The set is the sole
-   * writer of that name: human verbs are rejected on machines it owns.
+   * Catalog / artifact family (binary name and {strategy}-config fallback).
+   * After status.assignment_key="member" this is not an assignment slot.
    *
    * @generated from field: string strategy = 1;
    */
@@ -208,7 +212,8 @@ export type SetMember = Message<"strategyplatform.v1.SetMember"> & {
   machine: string;
 
   /**
-   * Member identity, unique within the set (e.g. "nats-m1").
+   * Member identity, unique within the set (e.g. "nats-m1"). This is the
+   * assignment strategy name and WorkDir segment. Renaming is recreate.
    *
    * @generated from field: string name = 2;
    */
@@ -291,6 +296,15 @@ export type AssignmentSetStatus = Message<"strategyplatform.v1.AssignmentSetStat
    * @generated from field: bool deleting = 6;
    */
   deleting: boolean;
+
+  /**
+   * empty = still on the legacy family slot (spec.strategy); "member" means
+   * every live assignment is keyed by member.name and the family name is
+   * no longer reserved or auto-undeployed.
+   *
+   * @generated from field: string assignment_key = 7;
+   */
+  assignmentKey: string;
 };
 
 /**

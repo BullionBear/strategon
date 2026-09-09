@@ -1,0 +1,46 @@
+apiVersion: strategyplatform.v1
+kind: AssignmentSet
+metadata:
+  name: trading-lab
+spec:
+  strategy: nats
+  artifactVersion: v2.10.24
+  configVersion: v1
+
+  update:
+    maxUnavailable: 1
+    waitReadySeconds: 60
+
+  template:
+    args: ["-c", "${CONFIG}", "--routes", "${peers}"]
+    env:
+      NATS_SERVER_NAME: "${member.name}"
+      NATS_CLUSTER_NAME: "${set.name}"
+      NATS_CLIENT_PORT: "${member.vars.client_port}"
+      NATS_CLUSTER_PORT: "${member.vars.cluster_port}"
+      NATS_MONITOR_PORT: "${member.vars.monitor_port}"
+    readiness:
+      endpoint: "http://127.0.0.1:${member.vars.monitor_port}/healthz"
+    peers:
+      format: "nats://${peer.vars.route_host}:${peer.vars.cluster_port}"
+      separator: ","
+    deployPolicy:
+      startsecs: 2
+      healthWindowSeconds: 60
+      maxCrashesInWindow: 3
+      stopGraceSeconds: 10
+      enableAutoRollback: true
+
+  # Three NATS nodes on one agent. Ports must not collide. This is a lab
+  # topology: one host dying takes the whole cluster with it.
+  # member.name is the assignment slot and WorkDir; renaming is recreate.
+  members:
+    - machine: m1
+      name: nats-a
+      vars: { route_host: "127.0.0.1", client_port: "4222", cluster_port: "6222", monitor_port: "8222" }
+    - machine: m1
+      name: nats-b
+      vars: { route_host: "127.0.0.1", client_port: "4223", cluster_port: "6223", monitor_port: "8223" }
+    - machine: m1
+      name: nats-c
+      vars: { route_host: "127.0.0.1", client_port: "4224", cluster_port: "6224", monitor_port: "8224" }

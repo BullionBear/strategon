@@ -234,12 +234,19 @@ func (p *Postgres) DeleteAssignmentSet(name string) error {
 }
 
 func (p *Postgres) ReservedBy(machineID, strategy string) (string, bool) {
-	for _, c := range p.ListAssignmentSets() {
-		if name, ok := reservedByLocked(map[string]*pb.AssignmentSet{c.GetMetadata().GetName(): c}, machineID, strategy); ok {
-			return name, true
-		}
+	return reservedByLocked(setsByName(p.ListAssignmentSets()), machineID, strategy)
+}
+
+func (p *Postgres) ReservedSlots(machineID string) []string {
+	return reservedSlotsLocked(setsByName(p.ListAssignmentSets()), machineID)
+}
+
+func setsByName(sets []*pb.AssignmentSet) map[string]*pb.AssignmentSet {
+	out := make(map[string]*pb.AssignmentSet, len(sets))
+	for _, c := range sets {
+		out[c.GetMetadata().GetName()] = c
 	}
-	return "", false
+	return out
 }
 
 func upsertAssignmentSet(ctx context.Context, q querier, c *pb.AssignmentSet) error {

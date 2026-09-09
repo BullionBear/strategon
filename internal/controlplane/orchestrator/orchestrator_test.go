@@ -2,6 +2,8 @@ package orchestrator
 
 import (
 	"context"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +11,7 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/controlplane/assign"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"google.golang.org/protobuf/proto"
 )
 
 func setupCluster(t *testing.T, n int) (*Controller, *store.Memory, *assign.Service) {
@@ -85,38 +88,62 @@ func loadCluster(t *testing.T, st store.Store) *pb.AssignmentSet {
 	return c
 }
 
+func slotName(machine string) string { return "nats-" + machine }
+
 func assigned(st store.Store, machine string) bool {
+	return assignedSlot(st, machine, slotName(machine))
+}
+
+func assignedSlot(st store.Store, machine, strategy string) bool {
 	rec, ok := st.GetMachine(machine)
-	return ok && rec.Assignments["nats"] != nil
+	return ok && rec.Assignments[strategy] != nil
 }
 
 func markReady(t *testing.T, st store.Store, machine string, ready bool, phase pb.DeployPhase) {
+	t.Helper()
+	markReadySlot(t, st, machine, slotName(machine), ready, phase)
+}
+
+func markReadySlot(t *testing.T, st store.Store, machine, strategy string, ready bool, phase pb.DeployPhase) {
 	t.Helper()
 	rec, ok := st.GetMachine(machine)
 	if !ok {
 		t.Fatal("machine", machine)
 	}
-	spec := rec.Assignments["nats"]
+	spec := rec.Assignments[strategy]
 	if spec == nil {
-		t.Fatal("no assignment on", machine)
+		t.Fatal("no assignment", strategy, "on", machine)
 	}
 	readyStatus := pb.ConditionStatus_CONDITION_STATUS_FALSE
 	if ready {
 		readyStatus = pb.ConditionStatus_CONDITION_STATUS_TRUE
 	}
-	if err := st.ApplyStatus(machine, &pb.StatusReport{
-		ObservedGeneration: rec.Generation,
-		Assignments: []*pb.StrategyAssignmentStatus{{
-			Strategy:           "nats",
-			Phase:              phase,
-			RunningArtifact:    spec.GetArtifact(),
-			RunningConfig:      spec.GetConfig(),
+	statuses := make([]*pb.StrategyAssignmentStatus, 0, len(rec.Assignments))
+	for name, as := range rec.Assignments {
+		stName := name
+		stSpec := as
+		phaseOut := pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+		readyOut := pb.ConditionStatus_CONDITION_STATUS_TRUE
+		if name == strategy {
+			phaseOut = phase
+			readyOut = readyStatus
+			stSpec = spec
+		}
+		statuses = append(statuses, &pb.StrategyAssignmentStatus{
+			Strategy:           stName,
+			Phase:              phaseOut,
+			RunningArtifact:    stSpec.GetArtifact(),
+			RunningConfig:      stSpec.GetConfig(),
 			ObservedGeneration: rec.Generation,
 			Conditions: []*pb.Condition{
 				{Type: "Live", Status: pb.ConditionStatus_CONDITION_STATUS_TRUE},
-				{Type: "Ready", Status: readyStatus},
+				{Type: "Ready", Status: readyOut},
 			},
-		}},
+		})
+	}
+	if err := st.ApplyStatus(machine, &pb.StatusReport{
+		ObservedGeneration: rec.Generation,
+		Assignments:        statuses,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +238,7 @@ func TestGeneratedArgsAndEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec, _ := st.GetMachine("m1")
-	spec := rec.Assignments["nats"]
+	spec := rec.Assignments[slotName("m1")]
 	if spec == nil {
 		t.Fatal("missing assignment")
 	}
@@ -270,7 +297,7 @@ func TestVersionBumpRollsOneAtATime(t *testing.T) {
 	v2 := 0
 	for _, m := range []string{"m1", "m2", "m3"} {
 		rec, _ := st.GetMachine(m)
-		if rec.Assignments["nats"].GetArtifact().GetVersion() == "v2" {
+		if rec.Assignments[slotName(m)].GetArtifact().GetVersion() == "v2" {
 			v2++
 		}
 	}
@@ -297,7 +324,7 @@ func TestRestartOnlyWritesRemaining(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, _, err := asg.Apply(ctx, assign.Request{
-			MachineID: srv.GetMachine(), Strategy: "nats", Spec: spec, AllowReserved: true,
+			MachineID: srv.GetMachine(), Strategy: srv.GetName(), Spec: spec, AllowReserved: true,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -319,7 +346,7 @@ func TestPrunedStatusTreatedAsAbsent(t *testing.T) {
 	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.SetAssignment("m1", "nats", nil); err != nil {
+	if _, _, err := st.SetAssignment("m1", slotName("m1"), nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.ApplyStatus("m1", &pb.StatusReport{ObservedGeneration: 1}); err != nil {
@@ -399,9 +426,9 @@ func TestNoConfigOmitsConfigArg(t *testing.T) {
 		t.Fatal(err)
 	}
 	rec, _ := st.GetMachine("m1")
-	joined := strings.Join(rec.Assignments["nats"].GetArgs(), " ")
+	joined := strings.Join(rec.Assignments[slotName("m1")].GetArgs(), " ")
 	if strings.Contains(joined, "${CONFIG}") || strings.Contains(joined, "-c") {
-		t.Fatalf("args = %v, want no -c ${CONFIG}", rec.Assignments["nats"].GetArgs())
+		t.Fatalf("args = %v, want no -c ${CONFIG}", rec.Assignments[slotName("m1")].GetArgs())
 	}
 }
 
@@ -537,4 +564,306 @@ func TestComputeAssignmentCreatedAtStable(t *testing.T) {
 	if rec.Generation != gen {
 		t.Fatalf("matching node rewritten: %d → %d", gen, rec.Generation)
 	}
+}
+
+func TestReconcileUsesSpecIndexNotSortOrder(t *testing.T) {
+	st := store.NewMemory(nil)
+	registerNATSArtifacts(t, st)
+	for _, id := range []string{"m1", "m2", "m3"} {
+		if _, err := st.UpsertMachine(&pb.Register{MachineId: id}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.AssignmentSetSpec{
+			ArtifactVersion: "v1",
+			ConfigVersion:   "c1",
+			Strategy:        "nats",
+			Template:        natsTemplate(),
+			Members: []*pb.SetMember{
+				{Machine: "m3", Name: "nats-m3", Vars: map[string]string{"route_host": "10.0.0.3", "cluster_port": "6222", "monitor_port": "8223"}},
+				{Machine: "m1", Name: "nats-m1", Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8221"}},
+				{Machine: "m2", Name: "nats-m2", Vars: map[string]string{"route_host": "10.0.0.2", "cluster_port": "6222", "monitor_port": "8222"}},
+			},
+			Update: &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctrl := New(st, assign.New(st, nil), nil, nil)
+	if err := ctrl.Reconcile(context.Background(), loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	spec := rec.Assignments["nats-m1"]
+	if spec == nil {
+		t.Fatal("m1 should receive the nats-m1 slot, not a sorted-index neighbor")
+	}
+	if spec.GetEnv()["NATS_SERVER_NAME"] != "nats-m1" {
+		t.Fatalf("NATS_SERVER_NAME=%q", spec.GetEnv()["NATS_SERVER_NAME"])
+	}
+	if spec.GetReadiness().GetEndpoint() != "http://127.0.0.1:8221/healthz" {
+		t.Fatalf("endpoint=%q", spec.GetReadiness().GetEndpoint())
+	}
+}
+
+func TestSameHostMembersRollInStableNameOrder(t *testing.T) {
+	ctrl, st := setupSameHost(t, []string{"nats-z", "nats-a"})
+	ctx := context.Background()
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["nats-a"] == nil || rec.Assignments["nats-z"] != nil {
+		t.Fatalf("first write should be nats-a, got %v", assignmentNames(rec))
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["nats-z"] != nil {
+		t.Fatal("second reconcile must not flip to nats-z while nats-a is in-flight")
+	}
+}
+
+func TestSameHostThreeMembersOneAtATime(t *testing.T) {
+	ctrl, st := setupSameHost(t, []string{"nats-a", "nats-b", "nats-c"})
+	ctx := context.Background()
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["nats-a"] == nil || rec.Assignments["nats-b"] != nil || rec.Assignments["nats-c"] != nil {
+		t.Fatalf("first pass: %v", assignmentNames(rec))
+	}
+	markReadySlot(t, st, "m1", "nats-a", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["nats-b"] == nil || rec.Assignments["nats-c"] != nil {
+		t.Fatalf("second pass: %v", assignmentNames(rec))
+	}
+}
+
+func TestSameHostDropOneMemberLeavesTheOther(t *testing.T) {
+	ctrl, st := setupSameHost(t, []string{"nats-a", "nats-b"})
+	ctx := context.Background()
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	markReadySlot(t, st, "m1", "nats-a", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	markReadySlot(t, st, "m1", "nats-b", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+
+	keep := []*pb.SetMember{{
+		Machine: "m1", Name: "nats-a",
+		Vars: map[string]string{"route_host": "127.0.0.1", "cluster_port": "6222", "monitor_port": "8222"},
+	}}
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.AssignmentSetSpec{
+			ArtifactVersion: "v1", ConfigVersion: "c1", Strategy: "nats",
+			Template: natsTemplate(), Members: keep,
+			Update: &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["nats-a"] == nil {
+		t.Fatal("kept member undeployed")
+	}
+	if rec.Assignments["nats-b"] != nil {
+		t.Fatal("dropped same-host member still assigned")
+	}
+}
+
+func TestLegacyMigrateKeepsQuorum(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 3)
+	ctx := context.Background()
+	cl := loadCluster(t, st)
+	seedLegacyFamily(t, st, cl)
+
+	if liveProcessCount(st, "m1", "m2", "m3") != 3 {
+		t.Fatal("seed")
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if n := liveProcessCount(st, "m1", "m2", "m3"); n < 2 {
+		t.Fatalf("after first migrate live=%d, want >= 2", n)
+	}
+	if !assignedSlot(st, "m1", "nats-m1") || assignedSlot(st, "m1", "nats") {
+		t.Fatal("m1 should have swapped nats → nats-m1 in one tick")
+	}
+	if !assignedSlot(st, "m2", "nats") || assignedSlot(st, "m2", "nats-m2") {
+		t.Fatal("m2 must still be on the family slot")
+	}
+
+	markReady(t, st, "m1", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if n := liveProcessCount(st, "m1", "m2", "m3"); n < 2 {
+		t.Fatalf("after second migrate live=%d", n)
+	}
+}
+
+func TestDeleteUnmigratedSetDrainsFamilySlots(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 3)
+	ctx := context.Background()
+	seedLegacyFamily(t, st, loadCluster(t, st))
+	if _, err := st.MarkAssignmentSetDeleting("trading"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.GetAssignmentSet("trading"); !ok {
+		t.Fatal("must not delete the row while family slots remain")
+	}
+	if liveProcessCount(st, "m1", "m2", "m3") != 2 {
+		t.Fatalf("delete should undeploy one family slot, live=%d", liveProcessCount(st, "m1", "m2", "m3"))
+	}
+	for i := 0; i < 3; i++ {
+		cl, ok := st.GetAssignmentSet("trading")
+		if !ok {
+			break
+		}
+		if err := ctrl.Reconcile(ctx, cl); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ok := st.GetAssignmentSet("trading"); ok {
+		t.Fatal("set row should be gone after family slots drain")
+	}
+	if liveProcessCount(st, "m1", "m2", "m3") != 0 {
+		t.Fatal("legacy nats assignments leaked after delete")
+	}
+}
+
+func TestAssignmentKeyFlipStopsFamilyDrain(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 1)
+	ctx := context.Background()
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	markReady(t, st, "m1", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if loadCluster(t, st).GetStatus().GetAssignmentKey() != store.AssignmentKeyMember {
+		t.Fatalf("assignment_key=%q", loadCluster(t, st).GetStatus().GetAssignmentKey())
+	}
+	if _, _, err := st.SetAssignment("m1", "nats", &pb.StrategyAssignmentSpec{
+		Strategy: "nats", Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats1"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if !assignedSlot(st, "m1", "nats") {
+		t.Fatal("after flip, a human nats assignment must not be auto-undeployed")
+	}
+	if !assignedSlot(st, "m1", "nats-m1") {
+		t.Fatal("member slot disappeared")
+	}
+}
+
+func registerNATSArtifacts(t *testing.T, st *store.Memory) {
+	t.Helper()
+	for _, ref := range []*pb.ArtifactRef{
+		{Name: "nats", Version: "v1", Digest: "sha256:nats1", Uri: "file:///nats-v1"},
+		{Name: "nats-config", Version: "c1", Digest: "sha256:cfg1", Uri: "file:///nats.conf"},
+		{Name: "nats", Version: "v2", Digest: "sha256:nats2", Uri: "file:///nats-v2"},
+	} {
+		if err := st.RegisterArtifact(ref); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func setupSameHost(t *testing.T, names []string) (*Controller, *store.Memory) {
+	t.Helper()
+	st := store.NewMemory(nil)
+	registerNATSArtifacts(t, st)
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	members := make([]*pb.SetMember, 0, len(names))
+	for i, name := range names {
+		port := 8222 + i
+		members = append(members, &pb.SetMember{
+			Machine: "m1", Name: name,
+			Vars: map[string]string{
+				"route_host": "127.0.0.1", "cluster_port": strconv.Itoa(6222 + i), "monitor_port": strconv.Itoa(port),
+			},
+		})
+	}
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.AssignmentSetSpec{
+			ArtifactVersion: "v1", ConfigVersion: "c1", Strategy: "nats",
+			Template: natsTemplate(), Members: members,
+			Update: &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return New(st, assign.New(st, nil), nil, nil), st
+}
+
+func seedLegacyFamily(t *testing.T, st store.Store, cl *pb.AssignmentSet) {
+	t.Helper()
+	art, cfg, err := resolveClusterArtifacts(st, cl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, srv := range cl.GetSpec().GetMembers() {
+		spec, err := computeAssignment(cl, i, art, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		spec = proto.Clone(spec).(*pb.StrategyAssignmentSpec)
+		spec.Strategy = "nats"
+		if _, _, err := st.SetAssignment(srv.GetMachine(), "nats", spec); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func liveProcessCount(st store.Store, machines ...string) int {
+	n := 0
+	for _, m := range machines {
+		rec, ok := st.GetMachine(m)
+		if !ok {
+			continue
+		}
+		for name := range rec.Assignments {
+			if name == "nats" || strings.HasPrefix(name, "nats-") {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func assignmentNames(rec *store.MachineRecord) []string {
+	var out []string
+	for n := range rec.Assignments {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }

@@ -1,13 +1,15 @@
 # Declarative NATS cluster
 
 A NATS cluster is not a Strategon concept. It is an `AssignmentSet` — N
-machines running one strategy, rolled `maxUnavailable` at a time — plus a
-manifest that says what NATS wants. Nothing in the control plane knows the
-string `NATS_SERVER_NAME`; `cluster.yaml` does.
+members, each an assignment named `member.name`, rolled `maxUnavailable` at
+a time — plus a manifest that says what NATS wants. `spec.strategy` is the
+catalog family (`nats` binary / `nats-config`). Nothing in the control plane
+knows the string `NATS_SERVER_NAME`; `cluster.yaml` does.
 
 Apply the document. The control plane **only persists the set object** — it
-does not write per-machine assignments on apply. A rolling controller later
-writes one `nats` assignment at a time.
+does not write member assignments on apply. A rolling controller later
+writes one `member.name` assignment at a time. Same-host members are
+allowed; see `single-host.yaml`.
 
 ## Where the NATS knowledge lives
 
@@ -37,6 +39,9 @@ export STRATEGON_ADDR=http://127.0.0.1:8081
 strategon apply -f examples/nats/cluster.yaml
 strategon get assignmentset trading
 strategon wait assignmentset trading --for=ready --timeout=5m
+
+# Lab: three nodes on one agent (ports 4222/4223/4224).
+# strategon apply -f examples/nats/single-host.yaml
 ```
 
 `apply` calls `ApplyAssignmentSet`. It does **not** loop `Deploy` on the client.
@@ -67,8 +72,9 @@ Re-applying the same file is a no-op (cluster generation does not bump).
      -d "{\"artifact\":{\"name\":\"nats-config\",\"version\":\"v1\",\"digest\":\"$DIGEST\",\"uri\":\"file://$(pwd)/examples/nats/nats.conf\",\"type\":\"ARTIFACT_TYPE_BINARY\"}}"
    ```
 
-Machines listed in `spec.servers[].machine` must already be registered
-(agent connected at least once).
+Machines listed in `spec.members[].machine` must already be registered
+(agent connected at least once). The same machine may appear more than
+once when `member.name` values differ.
 
 ## Routes and `routeHost`
 
@@ -96,9 +102,17 @@ The agent treats a configured probe as a hard health-window deadline: if
 `/healthz` is not Ready before `waitReadySeconds`, it rolls back or fails
 instead of marking HEALTHY. That is what makes a production roll safe.
 
-Human `Deploy` / `ApplyAssignment` / `Rollback` of `nats` onto a member
-machine is rejected (`FailedPrecondition`) while the cluster owns that
-slot.
+Human `Deploy` / `ApplyAssignment` / `Rollback` of a **member name**
+(`nats-m1`) onto that machine is rejected while the set owns the slot.
+`Deploy nats` (the catalog family) is rejected only until
+`status.assignment_key` flips to `member`. After that, `nats` is an
+ordinary strategy name again.
+
+`member.name` is the WorkDir (`<base>/<name>`). The agent does not share a
+blob cache across names: three members on one host unpack the artifact
+three times. Renaming a member is recreate (new empty dir; undeploy does
+not delete the old one). To apply a human slot whose name is not the
+artifact name, set `spec.artifact` on `kind: StrategyAssignment`.
 
 ## Edit `cluster.yaml`
 
