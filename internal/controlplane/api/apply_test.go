@@ -128,7 +128,7 @@ func TestApplyAssignmentErrorClasses(t *testing.T) {
 	}
 }
 
-func TestApplyNatsClusterPersistOnlyAndReservation(t *testing.T) {
+func TestApplyAssignmentSetPersistOnlyAndReservation(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
 	st.UpsertMachine(&pb.Register{MachineId: "m1"})
@@ -137,14 +137,15 @@ func TestApplyNatsClusterPersistOnlyAndReservation(t *testing.T) {
 		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
 	}))
 
-	resp, err := client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
-		Cluster: &pb.NatsCluster{
+	resp, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
 			Metadata: &pb.ObjectMeta{Name: "trading"},
-			Spec: &pb.NatsClusterSpec{
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
 				ArtifactVersion: "v1",
-				Servers: []*pb.NatsServer{
-					{Machine: "m1", ServerName: "n1", RouteHost: "10.0.0.1"},
-					{Machine: "m2", ServerName: "n2", RouteHost: "10.0.0.2"},
+				Members: []*pb.SetMember{
+					{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"}},
+					{Machine: "m2", Name: "n2", Vars: map[string]string{"route_host": "10.0.0.2", "cluster_port": "6222", "monitor_port": "8222"}},
 				},
 			},
 		},
@@ -152,13 +153,13 @@ func TestApplyNatsClusterPersistOnlyAndReservation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := resp.Msg.GetCluster()
+	c := resp.Msg.GetSet()
 	if c.GetMetadata().GetUid() == "" || c.GetMetadata().GetGeneration() != 1 || c.GetStatus().GetPhase() != "Pending" {
 		t.Fatalf("cluster = %+v", c)
 	}
 	rec, _ := st.GetMachine("m1")
 	if rec.Assignments["nats"] != nil {
-		t.Fatal("ApplyNatsCluster must not write assignments")
+		t.Fatal("ApplyAssignmentSet must not write assignments")
 	}
 
 	// Human deploy to an owned slot is rejected.
@@ -169,18 +170,28 @@ func TestApplyNatsClusterPersistOnlyAndReservation(t *testing.T) {
 		t.Fatalf("owned deploy: %v", err)
 	}
 
-	// Invalid routeHost.
-	_, err = client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
-		Cluster: &pb.NatsCluster{
+	// A template referencing a var the member does not declare is the generic
+	// replacement for the old "empty routeHost" check: the control plane has no
+	// opinion about route hosts, but it will not write a spec it cannot render.
+	st.UpsertMachine(&pb.Register{MachineId: "m9"})
+	_, err = client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
 			Metadata: &pb.ObjectMeta{Name: "bad"},
-			Spec: &pb.NatsClusterSpec{
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
 				ArtifactVersion: "v1",
-				Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "x", RouteHost: ""}},
+				Template: &pb.MemberTemplate{
+					Args: []string{"--host", "${member.vars.route_host}"},
+				},
+				Members: []*pb.SetMember{{Machine: "m9", Name: "x"}},
 			},
 		},
 	}))
 	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("empty route_host: %v", err)
+		t.Fatalf("unknown placeholder: %v", err)
+	}
+	if _, ok := st.GetAssignmentSet("bad"); ok {
+		t.Fatal("rejected apply wrote a row")
 	}
 
 	// Unowned existing assignment blocks apply.
@@ -190,36 +201,37 @@ func TestApplyNatsClusterPersistOnlyAndReservation(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
-		Cluster: &pb.NatsCluster{
+	_, err = client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
 			Metadata: &pb.ObjectMeta{Name: "other"},
-			Spec: &pb.NatsClusterSpec{
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
 				ArtifactVersion: "v1",
-				Servers:         []*pb.NatsServer{{Machine: "m3", ServerName: "n3", RouteHost: "10.0.0.3"}},
+				Members:         []*pb.SetMember{{Machine: "m3", Name: "n3", Vars: map[string]string{"route_host": "10.0.0.3", "cluster_port": "6222", "monitor_port": "8222"}}},
 			},
 		},
 	}))
 	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("unowned assignment: %v", err)
 	}
-	if _, ok := st.GetNatsCluster("other"); ok {
+	if _, ok := st.GetAssignmentSet("other"); ok {
 		t.Fatal("rejected apply wrote a row")
 	}
 
-	got, err := client.GetNatsCluster(ctx, connect.NewRequest(&pb.GetNatsClusterRequest{Name: "trading"}))
+	got, err := client.GetAssignmentSet(ctx, connect.NewRequest(&pb.GetAssignmentSetRequest{Name: "trading"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Msg.GetMetadata().GetName() != "trading" {
 		t.Fatalf("get = %+v", got.Msg)
 	}
-	list, err := client.ListNatsClusters(ctx, connect.NewRequest(&pb.ListNatsClustersRequest{}))
-	if err != nil || len(list.Msg.GetClusters()) != 1 {
-		t.Fatalf("list err=%v n=%d", err, len(list.Msg.GetClusters()))
+	list, err := client.ListAssignmentSets(ctx, connect.NewRequest(&pb.ListAssignmentSetsRequest{}))
+	if err != nil || len(list.Msg.GetSets()) != 1 {
+		t.Fatalf("list err=%v n=%d", err, len(list.Msg.GetSets()))
 	}
 }
 
-func TestApplyNatsClusterRejectsOverlappingMembership(t *testing.T) {
+func TestApplyAssignmentSetRejectsOverlappingMembership(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
 	st.UpsertMachine(&pb.Register{MachineId: "m1"})
@@ -227,36 +239,38 @@ func TestApplyNatsClusterRejectsOverlappingMembership(t *testing.T) {
 		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
 	}))
 
-	if _, err := client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
-		Cluster: &pb.NatsCluster{
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
 			Metadata: &pb.ObjectMeta{Name: "alpha"},
-			Spec: &pb.NatsClusterSpec{
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
 				ArtifactVersion: "v1",
-				Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "10.0.0.1"}},
+				Members:         []*pb.SetMember{{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"}}},
 			},
 		},
 	})); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
-		Cluster: &pb.NatsCluster{
+	_, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
 			Metadata: &pb.ObjectMeta{Name: "beta"},
-			Spec: &pb.NatsClusterSpec{
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
 				ArtifactVersion: "v1",
-				Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "n2", RouteHost: "10.0.0.1"}},
+				Members:         []*pb.SetMember{{Machine: "m1", Name: "n2", Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"}}},
 			},
 		},
 	}))
 	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("overlapping apply: %v", err)
 	}
-	if _, ok := st.GetNatsCluster("beta"); ok {
+	if _, ok := st.GetAssignmentSet("beta"); ok {
 		t.Fatal("rejected overlapping apply wrote a row")
 	}
 }
 
-func TestApplyNatsClusterRejectsOCIOnExecOnlyMachine(t *testing.T) {
+func TestApplyAssignmentSetRejectsOCIOnExecOnlyMachine(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
 	if _, err := st.UpsertMachine(&pb.Register{
@@ -275,19 +289,20 @@ func TestApplyNatsClusterRejectsOCIOnExecOnlyMachine(t *testing.T) {
 	})); err != nil {
 		t.Fatal(err)
 	}
-	_, err := client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
-		Cluster: &pb.NatsCluster{
+	_, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
 			Metadata: &pb.ObjectMeta{Name: "trading"},
-			Spec: &pb.NatsClusterSpec{
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
 				ArtifactVersion: "v1",
-				Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "10.0.0.1"}},
+				Members:         []*pb.SetMember{{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"}}},
 			},
 		},
 	}))
 	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("oci admission: %v", err)
 	}
-	if _, ok := st.GetNatsCluster("trading"); ok {
+	if _, ok := st.GetAssignmentSet("trading"); ok {
 		t.Fatal("rejected OCI apply wrote a row")
 	}
 }

@@ -1,21 +1,61 @@
 apiVersion: strategyplatform.v1
-kind: NatsCluster
+kind: AssignmentSet
 metadata:
   name: trading
 spec:
+  strategy: nats
   artifactVersion: v2.10.24
   configVersion: v1
-  strategy: nats
-  servers:
-    - machine: m1
-      serverName: nats-m1
-      routeHost: 10.0.0.1
-    - machine: m2
-      serverName: nats-m2
-      routeHost: 10.0.0.2
-    - machine: m3
-      serverName: nats-m3
-      routeHost: 10.0.0.3
+
   update:
     maxUnavailable: 1
     waitReadySeconds: 60
+
+  # Everything NATS-specific lives here. The control plane substitutes its own
+  # ${set.*} / ${member.*} / ${peers} placeholders and leaves ${CONFIG} for the
+  # agent to resolve to the materialised config artifact.
+  template:
+    args: ["-c", "${CONFIG}", "--routes", "${peers}"]
+
+    # NATS expands $VAR in nats.conf from the process environment.
+    env:
+      NATS_SERVER_NAME: "${member.name}"
+      NATS_CLUSTER_NAME: "${set.name}"
+      NATS_CLIENT_PORT: "${member.vars.client_port}"
+      NATS_CLUSTER_PORT: "${member.vars.cluster_port}"
+      NATS_MONITOR_PORT: "${member.vars.monitor_port}"
+
+    # NATS serves /healthz on http_port. Until this returns 2xx the member is
+    # not Ready and the roll does not advance.
+    readiness:
+      endpoint: "http://127.0.0.1:${member.vars.monitor_port}/healthz"
+
+    # Peers are passed on the command line: NATS cannot expand an environment
+    # variable into a config array, so `routes:` cannot live in nats.conf.
+    # A single-member set renders ${peers} empty, giving `--routes ""`.
+    # nats-server accepts that: it keeps cluster mode and listens for route
+    # connections, with no peers to dial until the set grows.
+    peers:
+      format: "nats://${peer.vars.route_host}:${peer.vars.cluster_port}"
+      separator: ","
+
+    deployPolicy:
+      startsecs: 2
+      healthWindowSeconds: 60
+      maxCrashesInWindow: 3
+      stopGraceSeconds: 10
+      # On a first roll there is no previous version, so a failure surfaces as
+      # FAILED. On an upgrade the member returns on the previous version rather
+      # than staying dead. Either way the roll stops.
+      enableAutoRollback: true
+
+  members:
+    - machine: m1
+      name: nats-m1
+      vars: { route_host: "10.0.0.1", client_port: "4222", cluster_port: "6222", monitor_port: "8222" }
+    - machine: m2
+      name: nats-m2
+      vars: { route_host: "10.0.0.2", client_port: "4222", cluster_port: "6222", monitor_port: "8222" }
+    - machine: m3
+      name: nats-m3
+      vars: { route_host: "10.0.0.3", client_port: "4222", cluster_port: "6222", monitor_port: "8222" }

@@ -123,7 +123,7 @@
 			items: [
 				{ href: '/', label: 'Machines', icon: 'machines' as const },
 				{ href: '/assignments', label: 'Assignments', icon: 'assignments' as const },
-				{ href: '/clusters', label: 'Clusters', icon: 'clusters' as const }
+				{ href: '/sets', label: 'Sets', icon: 'sets' as const }
 			]
 		},
 		{
@@ -270,7 +270,7 @@
 											stroke-linecap="round"
 										/>
 									</svg>
-								{:else if item.icon === 'clusters'}
+								{:else if item.icon === 'sets'}
 									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">
 										<circle cx="5" cy="10" r="2.25" stroke="currentColor" stroke-width="1.5" />
 										<circle cx="15" cy="5.5" r="2.25" stroke="currentColor" stroke-width="1.5" />

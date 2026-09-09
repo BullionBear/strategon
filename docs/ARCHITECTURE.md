@@ -2,7 +2,9 @@
 
 This document is a map of the Strategon repository: what the pieces are, how
 they talk, and where to look in the tree. For a runnable walkthrough, see the
-root [README](../README.md).
+root [README](../README.md). For the apply surface and the AssignmentSet
+orchestrator, see
+[EPIC-declarative-orchestration.md](EPIC-declarative-orchestration.md).
 
 ## Idea in one paragraph
 
@@ -65,7 +67,7 @@ gen/                         Generated Go + Connect code (buf generate)
 web/                         SvelteKit SPA (Connect-ES client)
 sdk/lease/                   Strategy-side fencing lease client
 deploy/                      Production compose + agent install script
-examples/nats/               Declarative NatsCluster YAML + server config
+examples/nats/               A NATS cluster as an AssignmentSet manifest
 ```
 
 Generated code under `gen/` and `web/src/lib/gen/` is produced by `make generate`

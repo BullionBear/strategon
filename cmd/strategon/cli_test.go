@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"github.com/bullionbear/strategon/internal/controlplane/assignmentset"
+	"gopkg.in/yaml.v3"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -74,7 +76,7 @@ func exampleClusterYAML(t *testing.T) string {
 	return p
 }
 
-func TestApplyExampleHitsApplyNatsClusterNotDeploy(t *testing.T) {
+func TestApplyExampleHitsApplyAssignmentSetNotDeploy(t *testing.T) {
 	client, st, agents := startCLIAPI(t)
 	seedNATSExample(t, client, st)
 	ctx := context.Background()
@@ -84,14 +86,14 @@ func TestApplyExampleHitsApplyNatsClusterNotDeploy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].RPC != "ApplyNatsCluster" || results[0].Name != "trading" {
+	if len(results) != 1 || results[0].RPC != "ApplyAssignmentSet" || results[0].Name != "trading" {
 		t.Fatalf("results = %+v", results)
 	}
 	if results[0].Generation != 1 {
 		t.Fatalf("generation = %d", results[0].Generation)
 	}
 	if agents.n != n {
-		t.Fatalf("ApplyNatsCluster must not notify agents (got %d, want %d)", agents.n, n)
+		t.Fatalf("ApplyAssignmentSet must not notify agents (got %d, want %d)", agents.n, n)
 	}
 	for _, id := range []string{"m1", "m2", "m3"} {
 		rec, _ := st.GetMachine(id)
@@ -99,7 +101,7 @@ func TestApplyExampleHitsApplyNatsClusterNotDeploy(t *testing.T) {
 			t.Fatalf("member %s got a nats assignment from apply", id)
 		}
 	}
-	c, ok := st.GetNatsCluster("trading")
+	c, ok := st.GetAssignmentSet("trading")
 	if !ok {
 		t.Fatal("cluster not persisted")
 	}
@@ -145,7 +147,7 @@ func TestApplyStrategyAssignment(t *testing.T) {
 	}
 }
 
-func TestGetAndWaitNatsCluster(t *testing.T) {
+func TestGetAndWaitAssignmentSet(t *testing.T) {
 	client, st, _ := startCLIAPI(t)
 	seedNATSExample(t, client, st)
 	ctx := context.Background()
@@ -154,20 +156,20 @@ func TestGetAndWaitNatsCluster(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := getNatsCluster(ctx, client, "trading", &buf); err != nil {
+	if err := getAssignmentSet(ctx, client, "trading", &buf); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(buf.String(), "NatsCluster trading") || !strings.Contains(buf.String(), "m1") {
+	if !strings.Contains(buf.String(), "AssignmentSet trading") || !strings.Contains(buf.String(), "m1") {
 		t.Fatalf("get output = %s", buf.String())
 	}
 
-	if err := st.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+	if err := st.UpdateAssignmentSetStatus("trading", &pb.AssignmentSetStatus{
 		Phase:              "Ready",
 		ObservedGeneration: 1,
-		Servers: []*pb.NatsServerStatus{
-			{Machine: "m1", ServerName: "nats-m1", Ready: true, Converged: true, Phase: "HEALTHY"},
-			{Machine: "m2", ServerName: "nats-m2", Ready: true, Converged: true, Phase: "HEALTHY"},
-			{Machine: "m3", ServerName: "nats-m3", Ready: true, Converged: true, Phase: "HEALTHY"},
+		Members: []*pb.MemberStatus{
+			{Machine: "m1", Name: "nats-m1", Ready: true, Converged: true, Phase: "HEALTHY"},
+			{Machine: "m2", Name: "nats-m2", Ready: true, Converged: true, Phase: "HEALTHY"},
+			{Machine: "m3", Name: "nats-m3", Ready: true, Converged: true, Phase: "HEALTHY"},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -176,7 +178,7 @@ func TestGetAndWaitNatsCluster(t *testing.T) {
 	old := waitPoll
 	waitPoll = 10 * time.Millisecond
 	t.Cleanup(func() { waitPoll = old })
-	if err := waitNatsCluster(ctx, client, "trading", "ready", 2*time.Second); err != nil {
+	if err := waitAssignmentSet(ctx, client, "trading", "ready", 2*time.Second); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -193,15 +195,15 @@ func TestWaitTimeoutAndFailed(t *testing.T) {
 	waitPoll = 10 * time.Millisecond
 	t.Cleanup(func() { waitPoll = old })
 
-	err := waitNatsCluster(ctx, client, "trading", "ready", 40*time.Millisecond)
+	err := waitAssignmentSet(ctx, client, "trading", "ready", 40*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("want timeout, got %v", err)
 	}
 
-	if err := st.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{Phase: "Failed", Message: "rolled back"}); err != nil {
+	if err := st.UpdateAssignmentSetStatus("trading", &pb.AssignmentSetStatus{Phase: "Failed", Message: "rolled back"}); err != nil {
 		t.Fatal(err)
 	}
-	err = waitNatsCluster(ctx, client, "trading", "ready", time.Second)
+	err = waitAssignmentSet(ctx, client, "trading", "ready", time.Second)
 	if err == nil || !strings.Contains(err.Error(), "Failed") {
 		t.Fatalf("want Failed, got %v", err)
 	}
@@ -214,7 +216,7 @@ func TestWaitStaleReadyDoesNotSucceed(t *testing.T) {
 	if _, err := applyFile(ctx, client, exampleClusterYAML(t)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+	if err := st.UpdateAssignmentSetStatus("trading", &pb.AssignmentSetStatus{
 		Phase:              "Ready",
 		ObservedGeneration: 0,
 	}); err != nil {
@@ -224,7 +226,7 @@ func TestWaitStaleReadyDoesNotSucceed(t *testing.T) {
 	old := waitPoll
 	waitPoll = 10 * time.Millisecond
 	t.Cleanup(func() { waitPoll = old })
-	err := waitNatsCluster(ctx, client, "trading", "ready", 40*time.Millisecond)
+	err := waitAssignmentSet(ctx, client, "trading", "ready", 40*time.Millisecond)
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("stale Ready must time out, got %v", err)
 	}
@@ -237,7 +239,7 @@ func TestWaitDegradedFailsFast(t *testing.T) {
 	if _, err := applyFile(ctx, client, exampleClusterYAML(t)); err != nil {
 		t.Fatal(err)
 	}
-	if err := st.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+	if err := st.UpdateAssignmentSetStatus("trading", &pb.AssignmentSetStatus{
 		Phase:   "Degraded",
 		Message: "waitReadySeconds elapsed",
 	}); err != nil {
@@ -247,7 +249,7 @@ func TestWaitDegradedFailsFast(t *testing.T) {
 	old := waitPoll
 	waitPoll = 10 * time.Millisecond
 	t.Cleanup(func() { waitPoll = old })
-	err := waitNatsCluster(ctx, client, "trading", "ready", time.Second)
+	err := waitAssignmentSet(ctx, client, "trading", "ready", time.Second)
 	if err == nil || !strings.Contains(err.Error(), "Degraded") {
 		t.Fatalf("want Degraded, got %v", err)
 	}
@@ -272,5 +274,65 @@ func TestRunUnknownCommandAndKind(t *testing.T) {
 	err := run([]string{"apply", "-f", filepath.Join("testdata", "does-not-exist.yaml")})
 	if err == nil {
 		t.Fatal("missing file should fail")
+	}
+}
+
+// The shipped example must survive the real YAML decoder and the control
+// plane's template validation. It is the only place NATS knowledge exists.
+func TestApplyExampleNatsManifest(t *testing.T) {
+	data, err := os.ReadFile("../../examples/nats/cluster.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc yamlDoc
+	if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&doc); err != nil {
+		t.Fatalf("decode example: %v", err)
+	}
+	if !strings.EqualFold(doc.Kind, "AssignmentSet") {
+		t.Fatalf("kind = %q", doc.Kind)
+	}
+	var spec setSpecYAML
+	if err := doc.Spec.Decode(&spec); err != nil {
+		t.Fatalf("decode spec: %v", err)
+	}
+	if spec.Strategy != "nats" || len(spec.Members) != 3 {
+		t.Fatalf("strategy=%q members=%d", spec.Strategy, len(spec.Members))
+	}
+	if len(spec.Template.Args) == 0 || spec.Template.Peers.Format == "" {
+		t.Fatalf("template did not decode: %+v", spec.Template)
+	}
+	// Render it the way the control plane will.
+	set := &pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: doc.Metadata.Name},
+		Spec:     &pb.AssignmentSetSpec{Strategy: spec.Strategy},
+	}
+	set.Spec.Template = &pb.MemberTemplate{
+		Args:      spec.Template.Args,
+		Env:       spec.Template.Env,
+		Readiness: &pb.ReadinessProbe{Endpoint: spec.Template.Readiness.Endpoint},
+		Peers: &pb.PeerList{
+			Format:    spec.Template.Peers.Format,
+			Separator: spec.Template.Peers.Separator,
+		},
+	}
+	for _, m := range spec.Members {
+		set.Spec.Members = append(set.Spec.Members, &pb.SetMember{Machine: m.Machine, Name: m.Name, Vars: m.Vars})
+	}
+	if err := assignmentset.Validate(set); err != nil {
+		t.Fatalf("example manifest does not render: %v", err)
+	}
+	got, err := assignmentset.Expand(set, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "nats://10.0.0.2:6222,nats://10.0.0.3:6222"
+	if got.Args[3] != want {
+		t.Fatalf("routes = %q, want %q", got.Args[3], want)
+	}
+	if got.Env["NATS_CLUSTER_NAME"] != "trading" {
+		t.Fatalf("cluster name = %q", got.Env["NATS_CLUSTER_NAME"])
+	}
+	if got.Endpoint != "http://127.0.0.1:8222/healthz" {
+		t.Fatalf("endpoint = %q", got.Endpoint)
 	}
 }

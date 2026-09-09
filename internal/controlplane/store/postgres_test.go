@@ -23,7 +23,7 @@ func newTestPostgres(t *testing.T, hub *Hub) *Postgres {
 	if err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
-	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases, api_tokens, resource_samples, nats_clusters RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases, api_tokens, resource_samples, assignment_sets RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	t.Cleanup(p.Close)
@@ -248,30 +248,30 @@ func TestPostgresAPITokens(t *testing.T) {
 	}
 }
 
-func TestPostgresNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
+func TestPostgresAssignmentSetConcurrentApplyRejectsOverlap(t *testing.T) {
 	assertConcurrentOverlapRejected(t, newTestPostgres(t, nil))
 }
 
-func TestPostgresNatsClusterReapplyAndGrowth(t *testing.T) {
+func TestPostgresAssignmentSetReapplyAndGrowth(t *testing.T) {
 	assertReapplyAndGrowth(t, newTestPostgres(t, nil))
 }
 
-func TestPostgresNatsClusterStatusPreservesDeleting(t *testing.T) {
+func TestPostgresAssignmentSetStatusPreservesDeleting(t *testing.T) {
 	p := newTestPostgres(t, nil)
-	if _, err := applyCluster(p, "trading", clusterSpec("m1")); err != nil {
+	if _, err := applySet(p, "trading", setSpec("m1")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.MarkNatsClusterDeleting("trading"); err != nil {
+	if _, err := p.MarkAssignmentSetDeleting("trading"); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+	if err := p.UpdateAssignmentSetStatus("trading", &pb.AssignmentSetStatus{
 		Phase:              "Ready",
 		ObservedGeneration: 1,
-		Servers:            []*pb.NatsServerStatus{{Machine: "m1", Ready: true}},
+		Members:            []*pb.MemberStatus{{Machine: "m1", Ready: true}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	got, ok := p.GetNatsCluster("trading")
+	got, ok := p.GetAssignmentSet("trading")
 	if !ok {
 		t.Fatal("missing cluster")
 	}

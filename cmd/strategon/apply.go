@@ -33,28 +33,47 @@ type yamlMeta struct {
 	Labels map[string]string `yaml:"labels"`
 }
 
-type natsSpecYAML struct {
-	ArtifactVersion    string           `yaml:"artifactVersion"`
-	ArtifactVersionAlt string           `yaml:"artifact_version"`
-	ConfigVersion      string           `yaml:"configVersion"`
-	ConfigVersionAlt   string           `yaml:"config_version"`
-	Strategy           string           `yaml:"strategy"`
-	Servers            []natsServerYAML `yaml:"servers"`
-	Update             natsUpdateYAML   `yaml:"update"`
+type setSpecYAML struct {
+	ArtifactVersion    string          `yaml:"artifactVersion"`
+	ArtifactVersionAlt string          `yaml:"artifact_version"`
+	ConfigVersion      string          `yaml:"configVersion"`
+	ConfigVersionAlt   string          `yaml:"config_version"`
+	Strategy           string          `yaml:"strategy"`
+	Template           memberTmplYAML  `yaml:"template"`
+	Members            []setMemberYAML `yaml:"members"`
+	Update             natsUpdateYAML  `yaml:"update"`
 }
 
-type natsServerYAML struct {
-	Machine        string `yaml:"machine"`
-	ServerName     string `yaml:"serverName"`
-	ServerNameAlt  string `yaml:"server_name"`
-	RouteHost      string `yaml:"routeHost"`
-	RouteHostAlt   string `yaml:"route_host"`
-	ClientPort     int32  `yaml:"clientPort"`
-	ClientPortAlt  int32  `yaml:"client_port"`
-	ClusterPort    int32  `yaml:"clusterPort"`
-	ClusterPortAlt int32  `yaml:"cluster_port"`
-	MonitorPort    int32  `yaml:"monitorPort"`
-	MonitorPortAlt int32  `yaml:"monitor_port"`
+type memberTmplYAML struct {
+	Args         []string          `yaml:"args"`
+	Env          map[string]string `yaml:"env"`
+	Readiness    readinessYAML     `yaml:"readiness"`
+	DeployPolicy *deployPolicyYAML `yaml:"deployPolicy"`
+	Peers        peersYAML         `yaml:"peers"`
+}
+
+type readinessYAML struct {
+	Endpoint string `yaml:"endpoint"`
+}
+
+type deployPolicyYAML struct {
+	Startsecs           int32 `yaml:"startsecs"`
+	HealthWindowSeconds int32 `yaml:"healthWindowSeconds"`
+	MaxCrashesInWindow  int32 `yaml:"maxCrashesInWindow"`
+	StopGraceSeconds    int32 `yaml:"stopGraceSeconds"`
+	EnableAutoRollback  *bool `yaml:"enableAutoRollback"`
+}
+
+type peersYAML struct {
+	Format      string `yaml:"format"`
+	Separator   string `yaml:"separator"`
+	IncludeSelf bool   `yaml:"includeSelf"`
+}
+
+type setMemberYAML struct {
+	Machine string            `yaml:"machine"`
+	Name    string            `yaml:"name"`
+	Vars    map[string]string `yaml:"vars"`
 }
 
 type natsUpdateYAML struct {
@@ -122,10 +141,6 @@ type leaseYAML struct {
 	TTLSecondsAlt int32 `yaml:"ttl_seconds"`
 }
 
-type readinessYAML struct {
-	Endpoint string `yaml:"endpoint"`
-}
-
 func applyFile(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, path string) ([]ApplyResult, error) {
 	var r io.Reader
 	if path == "-" {
@@ -170,61 +185,82 @@ func applyReader(ctx context.Context, client strategyplatformv1connect.ControlPl
 func applyDoc(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, doc yamlDoc) (ApplyResult, error) {
 	kind := strings.TrimSpace(doc.Kind)
 	switch strings.ToLower(kind) {
-	case "natscluster":
-		return applyNatsCluster(ctx, client, doc)
+	case "assignmentset":
+		return applyAssignmentSet(ctx, client, doc)
 	case "strategyassignment":
 		return applyAssignment(ctx, client, doc)
 	case "":
 		return ApplyResult{}, fmt.Errorf("missing kind")
 	default:
-		return ApplyResult{}, fmt.Errorf("unknown kind %q: expected NatsCluster or StrategyAssignment", kind)
+		return ApplyResult{}, fmt.Errorf("unknown kind %q: expected AssignmentSet or StrategyAssignment", kind)
 	}
 }
 
-func applyNatsCluster(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, doc yamlDoc) (ApplyResult, error) {
+func applyAssignmentSet(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, doc yamlDoc) (ApplyResult, error) {
 	name := strings.TrimSpace(doc.Metadata.Name)
 	if name == "" {
-		return ApplyResult{}, fmt.Errorf("NatsCluster metadata.name is required")
+		return ApplyResult{}, fmt.Errorf("AssignmentSet metadata.name is required")
 	}
-	var spec natsSpecYAML
+	var spec setSpecYAML
 	if err := doc.Spec.Decode(&spec); err != nil {
-		return ApplyResult{}, fmt.Errorf("NatsCluster spec: %w", err)
+		return ApplyResult{}, fmt.Errorf("AssignmentSet spec: %w", err)
 	}
-	servers := make([]*pb.NatsServer, 0, len(spec.Servers))
-	for _, s := range spec.Servers {
-		servers = append(servers, &pb.NatsServer{
-			Machine:     s.Machine,
-			ServerName:  firstNonEmpty(s.ServerName, s.ServerNameAlt),
-			RouteHost:   firstNonEmpty(s.RouteHost, s.RouteHostAlt),
-			ClientPort:  pickInt32(s.ClientPort, s.ClientPortAlt),
-			ClusterPort: pickInt32(s.ClusterPort, s.ClusterPortAlt),
-			MonitorPort: pickInt32(s.MonitorPort, s.MonitorPortAlt),
+	members := make([]*pb.SetMember, 0, len(spec.Members))
+	for _, m := range spec.Members {
+		members = append(members, &pb.SetMember{
+			Machine: m.Machine,
+			Name:    m.Name,
+			Vars:    m.Vars,
 		})
 	}
-	req := &pb.ApplyNatsClusterRequest{
-		Cluster: &pb.NatsCluster{
+	tmpl := &pb.MemberTemplate{
+		Args: spec.Template.Args,
+		Env:  spec.Template.Env,
+	}
+	if spec.Template.Readiness.Endpoint != "" {
+		tmpl.Readiness = &pb.ReadinessProbe{Endpoint: spec.Template.Readiness.Endpoint}
+	}
+	if spec.Template.Peers.Format != "" {
+		tmpl.Peers = &pb.PeerList{
+			Format:      spec.Template.Peers.Format,
+			Separator:   spec.Template.Peers.Separator,
+			IncludeSelf: spec.Template.Peers.IncludeSelf,
+		}
+	}
+	if p := spec.Template.DeployPolicy; p != nil {
+		tmpl.DeployPolicy = &pb.DeployPolicy{
+			Startsecs:           p.Startsecs,
+			HealthWindowSeconds: p.HealthWindowSeconds,
+			MaxCrashesInWindow:  p.MaxCrashesInWindow,
+			StopGraceSeconds:    p.StopGraceSeconds,
+			EnableAutoRollback:  p.EnableAutoRollback == nil || *p.EnableAutoRollback,
+		}
+	}
+	req := &pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
 			Metadata: &pb.ObjectMeta{Name: name, Labels: doc.Metadata.Labels},
-			Spec: &pb.NatsClusterSpec{
+			Spec: &pb.AssignmentSetSpec{
 				ArtifactVersion: firstNonEmpty(spec.ArtifactVersion, spec.ArtifactVersionAlt),
 				ConfigVersion:   firstNonEmpty(spec.ConfigVersion, spec.ConfigVersionAlt),
 				Strategy:        spec.Strategy,
-				Servers:         servers,
-				Update: &pb.NatsClusterUpdate{
+				Template:        tmpl,
+				Members:         members,
+				Update: &pb.RollingUpdate{
 					MaxUnavailable:   pickInt32(spec.Update.MaxUnavailable, spec.Update.MaxUnavailableAlt),
 					WaitReadySeconds: pickInt32(spec.Update.WaitReadySeconds, spec.Update.WaitReadySecondsAlt),
 				},
 			},
 		},
 	}
-	resp, err := client.ApplyNatsCluster(ctx, connect.NewRequest(req))
+	resp, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(req))
 	if err != nil {
-		return ApplyResult{}, fmt.Errorf("ApplyNatsCluster %s: %w", name, err)
+		return ApplyResult{}, fmt.Errorf("ApplyAssignmentSet %s: %w", name, err)
 	}
 	return ApplyResult{
-		Kind:       "NatsCluster",
+		Kind:       "AssignmentSet",
 		Name:       name,
-		RPC:        "ApplyNatsCluster",
-		Generation: resp.Msg.GetCluster().GetMetadata().GetGeneration(),
+		RPC:        "ApplyAssignmentSet",
+		Generation: resp.Msg.GetSet().GetMetadata().GetGeneration(),
 	}, nil
 }
 

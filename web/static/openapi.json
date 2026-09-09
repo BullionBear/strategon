@@ -70,13 +70,13 @@
         }
       }
     },
-    "/strategyplatform.v1.ControlPlaneService/ApplyNatsCluster": {
+    "/strategyplatform.v1.ControlPlaneService/ApplyAssignmentSet": {
       "post": {
         "tags": [
           "ControlPlaneService"
         ],
-        "summary": "ApplyNatsCluster",
-        "operationId": "strategyplatform.v1.ControlPlaneService.ApplyNatsCluster",
+        "summary": "ApplyAssignmentSet",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ApplyAssignmentSet",
         "parameters": [
           {
             "name": "Connect-Protocol-Version",
@@ -98,7 +98,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/strategyplatform.v1.ApplyNatsClusterRequest"
+                "$ref": "#/components/schemas/strategyplatform.v1.ApplyAssignmentSetRequest"
               }
             }
           },
@@ -120,7 +120,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/strategyplatform.v1.ApplyNatsClusterResponse"
+                  "$ref": "#/components/schemas/strategyplatform.v1.ApplyAssignmentSetResponse"
                 }
               }
             }
@@ -245,13 +245,13 @@
         }
       }
     },
-    "/strategyplatform.v1.ControlPlaneService/DeleteNatsCluster": {
+    "/strategyplatform.v1.ControlPlaneService/DeleteAssignmentSet": {
       "post": {
         "tags": [
           "ControlPlaneService"
         ],
-        "summary": "DeleteNatsCluster",
-        "operationId": "strategyplatform.v1.ControlPlaneService.DeleteNatsCluster",
+        "summary": "DeleteAssignmentSet",
+        "operationId": "strategyplatform.v1.ControlPlaneService.DeleteAssignmentSet",
         "parameters": [
           {
             "name": "Connect-Protocol-Version",
@@ -273,7 +273,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/strategyplatform.v1.DeleteNatsClusterRequest"
+                "$ref": "#/components/schemas/strategyplatform.v1.DeleteAssignmentSetRequest"
               }
             }
           },
@@ -295,7 +295,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/strategyplatform.v1.DeleteNatsClusterResponse"
+                  "$ref": "#/components/schemas/strategyplatform.v1.DeleteAssignmentSetResponse"
                 }
               }
             }
@@ -362,6 +362,64 @@
       }
     },
     "/strategyplatform.v1.ControlPlaneService/DownloadFiles": {},
+    "/strategyplatform.v1.ControlPlaneService/GetAssignmentSet": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "GetAssignmentSet",
+        "operationId": "strategyplatform.v1.ControlPlaneService.GetAssignmentSet",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.GetAssignmentSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.AssignmentSet"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/GetControlPlaneVersion": {
       "post": {
         "tags": [
@@ -538,64 +596,6 @@
         }
       }
     },
-    "/strategyplatform.v1.ControlPlaneService/GetNatsCluster": {
-      "post": {
-        "tags": [
-          "ControlPlaneService"
-        ],
-        "summary": "GetNatsCluster",
-        "operationId": "strategyplatform.v1.ControlPlaneService.GetNatsCluster",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/strategyplatform.v1.GetNatsClusterRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/strategyplatform.v1.ControlPlaneService/ListArtifacts": {
       "post": {
         "tags": [
@@ -647,6 +647,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/strategyplatform.v1.ListArtifactsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ListAssignmentSets": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ListAssignmentSets",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ListAssignmentSets",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ListAssignmentSetsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ListAssignmentSetsResponse"
                 }
               }
             }
@@ -763,64 +821,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/strategyplatform.v1.ListMachinesResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/strategyplatform.v1.ControlPlaneService/ListNatsClusters": {
-      "post": {
-        "tags": [
-          "ControlPlaneService"
-        ],
-        "summary": "ListNatsClusters",
-        "operationId": "strategyplatform.v1.ControlPlaneService.ListNatsClusters",
-        "parameters": [
-          {
-            "name": "Connect-Protocol-Version",
-            "in": "header",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/connect-protocol-version"
-            }
-          },
-          {
-            "name": "Connect-Timeout-Ms",
-            "in": "header",
-            "schema": {
-              "$ref": "#/components/schemas/connect-timeout-header"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/strategyplatform.v1.ListNatsClustersRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "default": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/connect.error"
-                }
-              }
-            }
-          },
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/strategyplatform.v1.ListNatsClustersResponse"
                 }
               }
             }
@@ -1551,26 +1551,26 @@
         "title": "ApplyAssignmentResponse",
         "additionalProperties": false
       },
-      "strategyplatform.v1.ApplyNatsClusterRequest": {
+      "strategyplatform.v1.ApplyAssignmentSetRequest": {
         "type": "object",
         "properties": {
-          "cluster": {
-            "title": "cluster",
-            "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
+          "set": {
+            "title": "set",
+            "$ref": "#/components/schemas/strategyplatform.v1.AssignmentSet"
           }
         },
-        "title": "ApplyNatsClusterRequest",
+        "title": "ApplyAssignmentSetRequest",
         "additionalProperties": false
       },
-      "strategyplatform.v1.ApplyNatsClusterResponse": {
+      "strategyplatform.v1.ApplyAssignmentSetResponse": {
         "type": "object",
         "properties": {
-          "cluster": {
-            "title": "cluster",
-            "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
+          "set": {
+            "title": "set",
+            "$ref": "#/components/schemas/strategyplatform.v1.AssignmentSet"
           }
         },
-        "title": "ApplyNatsClusterResponse",
+        "title": "ApplyAssignmentSetResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.ArtifactCatalogEntry": {
@@ -1638,6 +1638,101 @@
           "ARTIFACT_TYPE_BINARY",
           "ARTIFACT_TYPE_OCI_IMAGE"
         ]
+      },
+      "strategyplatform.v1.AssignmentSet": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "title": "metadata",
+            "$ref": "#/components/schemas/strategyplatform.v1.ObjectMeta"
+          },
+          "spec": {
+            "title": "spec",
+            "$ref": "#/components/schemas/strategyplatform.v1.AssignmentSetSpec"
+          },
+          "status": {
+            "title": "status",
+            "$ref": "#/components/schemas/strategyplatform.v1.AssignmentSetStatus"
+          }
+        },
+        "title": "AssignmentSet",
+        "additionalProperties": false,
+        "description": "AssignmentSet places one assignment of a strategy on each of several\n machines and rolls changes across them, at most max_unavailable at a time.\n\n The control plane knows nothing about what the members run. Per-member\n identity and any peer list live in the template as placeholders, so a NATS\n cluster, a sharded feed handler, or anything else that needs \"N machines\n that know about each other\" is a manifest, not new server code.\n\n Apply persists spec only; a controller writes the per-machine assignments\n over time."
+      },
+      "strategyplatform.v1.AssignmentSetSpec": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "title": "strategy",
+            "description": "Strategy name this set owns on every member machine. The set is the sole\n writer of that name: human verbs are rejected on machines it owns."
+          },
+          "artifactVersion": {
+            "type": "string",
+            "title": "artifact_version"
+          },
+          "configVersion": {
+            "type": "string",
+            "title": "config_version",
+            "description": "optional"
+          },
+          "template": {
+            "title": "template",
+            "$ref": "#/components/schemas/strategyplatform.v1.MemberTemplate"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.SetMember"
+            },
+            "title": "members"
+          },
+          "update": {
+            "title": "update",
+            "$ref": "#/components/schemas/strategyplatform.v1.RollingUpdate"
+          }
+        },
+        "title": "AssignmentSetSpec",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.AssignmentSetStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "title": "phase",
+            "description": "Pending | Rolling | Ready | Degraded | Failed | Deleting"
+          },
+          "observedGeneration": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "observed_generation",
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "message": {
+            "type": "string",
+            "title": "message"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.MemberStatus"
+            },
+            "title": "members"
+          },
+          "deleting": {
+            "type": "boolean",
+            "title": "deleting"
+          }
+        },
+        "title": "AssignmentSetStatus",
+        "additionalProperties": false
       },
       "strategyplatform.v1.AuditEntry": {
         "type": "object",
@@ -1871,7 +1966,7 @@
         "title": "CronSchedule",
         "additionalProperties": false
       },
-      "strategyplatform.v1.DeleteNatsClusterRequest": {
+      "strategyplatform.v1.DeleteAssignmentSetRequest": {
         "type": "object",
         "properties": {
           "name": {
@@ -1879,12 +1974,12 @@
             "title": "name"
           }
         },
-        "title": "DeleteNatsClusterRequest",
+        "title": "DeleteAssignmentSetRequest",
         "additionalProperties": false
       },
-      "strategyplatform.v1.DeleteNatsClusterResponse": {
+      "strategyplatform.v1.DeleteAssignmentSetResponse": {
         "type": "object",
-        "title": "DeleteNatsClusterResponse",
+        "title": "DeleteAssignmentSetResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.DeployPhase": {
@@ -2070,6 +2165,17 @@
           "EXECUTION_DRIVER_OCI"
         ]
       },
+      "strategyplatform.v1.GetAssignmentSetRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          }
+        },
+        "title": "GetAssignmentSetRequest",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.GetControlPlaneVersionRequest": {
         "type": "object",
         "title": "GetControlPlaneVersionRequest",
@@ -2126,17 +2232,6 @@
         "title": "GetMachineRequest",
         "additionalProperties": false
       },
-      "strategyplatform.v1.GetNatsClusterRequest": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "name"
-          }
-        },
-        "title": "GetNatsClusterRequest",
-        "additionalProperties": false
-      },
       "strategyplatform.v1.LeaseSpec": {
         "type": "object",
         "properties": {
@@ -2188,6 +2283,25 @@
           }
         },
         "title": "ListArtifactsResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListAssignmentSetsRequest": {
+        "type": "object",
+        "title": "ListAssignmentSetsRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListAssignmentSetsResponse": {
+        "type": "object",
+        "properties": {
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.AssignmentSet"
+            },
+            "title": "sets"
+          }
+        },
+        "title": "ListAssignmentSetsResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.ListAuditRequest": {
@@ -2264,25 +2378,6 @@
           }
         },
         "title": "ListMachinesResponse",
-        "additionalProperties": false
-      },
-      "strategyplatform.v1.ListNatsClustersRequest": {
-        "type": "object",
-        "title": "ListNatsClustersRequest",
-        "additionalProperties": false
-      },
-      "strategyplatform.v1.ListNatsClustersResponse": {
-        "type": "object",
-        "properties": {
-          "clusters": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
-            },
-            "title": "clusters"
-          }
-        },
-        "title": "ListNatsClustersResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.ListSharedFilesRequest": {
@@ -2501,163 +2596,16 @@
         "title": "MachineStatusEvent",
         "additionalProperties": false
       },
-      "strategyplatform.v1.NatsCluster": {
-        "type": "object",
-        "properties": {
-          "metadata": {
-            "title": "metadata",
-            "$ref": "#/components/schemas/strategyplatform.v1.ObjectMeta"
-          },
-          "spec": {
-            "title": "spec",
-            "$ref": "#/components/schemas/strategyplatform.v1.NatsClusterSpec"
-          },
-          "status": {
-            "title": "status",
-            "$ref": "#/components/schemas/strategyplatform.v1.NatsClusterStatus"
-          }
-        },
-        "title": "NatsCluster",
-        "additionalProperties": false,
-        "description": "NatsCluster is a control-plane object. Apply persists spec only; a\n controller writes the per-machine assignments over time."
-      },
-      "strategyplatform.v1.NatsClusterSpec": {
-        "type": "object",
-        "properties": {
-          "artifactVersion": {
-            "type": "string",
-            "title": "artifact_version"
-          },
-          "configVersion": {
-            "type": "string",
-            "title": "config_version"
-          },
-          "strategy": {
-            "type": "string",
-            "title": "strategy",
-            "description": "Strategy name owned by this cluster. Default \"nats\"."
-          },
-          "servers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/strategyplatform.v1.NatsServer"
-            },
-            "title": "servers"
-          },
-          "update": {
-            "title": "update",
-            "$ref": "#/components/schemas/strategyplatform.v1.NatsClusterUpdate"
-          }
-        },
-        "title": "NatsClusterSpec",
-        "additionalProperties": false
-      },
-      "strategyplatform.v1.NatsClusterStatus": {
-        "type": "object",
-        "properties": {
-          "phase": {
-            "type": "string",
-            "title": "phase",
-            "description": "Pending | Rolling | Ready | Degraded | Failed | Deleting"
-          },
-          "observedGeneration": {
-            "type": [
-              "integer",
-              "string"
-            ],
-            "title": "observed_generation",
-            "format": "int64"
-          },
-          "reason": {
-            "type": "string",
-            "title": "reason"
-          },
-          "message": {
-            "type": "string",
-            "title": "message"
-          },
-          "servers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/strategyplatform.v1.NatsServerStatus"
-            },
-            "title": "servers"
-          },
-          "deleting": {
-            "type": "boolean",
-            "title": "deleting"
-          }
-        },
-        "title": "NatsClusterStatus",
-        "additionalProperties": false
-      },
-      "strategyplatform.v1.NatsClusterUpdate": {
-        "type": "object",
-        "properties": {
-          "maxUnavailable": {
-            "type": "integer",
-            "title": "max_unavailable",
-            "format": "int32",
-            "description": "must be \u003e= 1"
-          },
-          "waitReadySeconds": {
-            "type": "integer",
-            "title": "wait_ready_seconds",
-            "format": "int32",
-            "description": "controller deadline per in-flight node"
-          }
-        },
-        "title": "NatsClusterUpdate",
-        "additionalProperties": false
-      },
-      "strategyplatform.v1.NatsServer": {
+      "strategyplatform.v1.MemberStatus": {
         "type": "object",
         "properties": {
           "machine": {
             "type": "string",
             "title": "machine"
           },
-          "serverName": {
+          "name": {
             "type": "string",
-            "title": "server_name"
-          },
-          "routeHost": {
-            "type": "string",
-            "title": "route_host",
-            "description": "Address other members use in --routes. Required; do not guess hostname."
-          },
-          "clientPort": {
-            "type": "integer",
-            "title": "client_port",
-            "format": "int32",
-            "description": "default 4222"
-          },
-          "clusterPort": {
-            "type": "integer",
-            "title": "cluster_port",
-            "format": "int32",
-            "description": "default 6222"
-          },
-          "monitorPort": {
-            "type": "integer",
-            "title": "monitor_port",
-            "format": "int32",
-            "description": "default 8222"
-          }
-        },
-        "title": "NatsServer",
-        "additionalProperties": false
-      },
-      "strategyplatform.v1.NatsServerStatus": {
-        "type": "object",
-        "properties": {
-          "machine": {
-            "type": "string",
-            "title": "machine"
-          },
-          "serverName": {
-            "type": "string",
-            "title": "server_name"
+            "title": "name"
           },
           "ready": {
             "type": "boolean",
@@ -2672,7 +2620,62 @@
             "title": "converged"
           }
         },
-        "title": "NatsServerStatus",
+        "title": "MemberStatus",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.MemberTemplate": {
+        "type": "object",
+        "properties": {
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "args",
+            "description": "Process args, rendered in place: nothing is added, reordered or dropped.\n An arg that expands to the empty string is passed through as an empty\n argument — a single-member set renders ${peers} empty and the workload\n decides what that means. The control plane does not infer that an arg\n belongs to the flag before it."
+          },
+          "env": {
+            "type": "object",
+            "title": "env",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            }
+          },
+          "deployPolicy": {
+            "title": "deploy_policy",
+            "$ref": "#/components/schemas/strategyplatform.v1.DeployPolicy"
+          },
+          "readiness": {
+            "title": "readiness",
+            "$ref": "#/components/schemas/strategyplatform.v1.ReadinessProbe"
+          },
+          "limits": {
+            "title": "limits",
+            "$ref": "#/components/schemas/strategyplatform.v1.ResourceLimits"
+          },
+          "peers": {
+            "title": "peers",
+            "$ref": "#/components/schemas/strategyplatform.v1.PeerList"
+          }
+        },
+        "title": "MemberTemplate",
+        "additionalProperties": false,
+        "description": "MemberTemplate is shared by every member. Strings in args, env values, and\n the readiness endpoint may contain placeholders the control plane expands\n per member before writing the assignment:\n\n\t${set.name}            the AssignmentSet's metadata.name\n\t${member.name}         this member's name\n\t${member.machine}      this member's machine id\n\t${member.vars.KEY}     this member's vars[KEY]\n\t${peers}               peers rendered and joined, see PeerList\n\n Agent-side placeholders (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) are left\n untouched and expanded later by the agent. Any other ${...} is rejected at\n apply time rather than surfacing as an agent start failure."
+      },
+      "strategyplatform.v1.MemberTemplate.EnvEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "EnvEntry",
         "additionalProperties": false
       },
       "strategyplatform.v1.ObjectMeta": {
@@ -2726,6 +2729,29 @@
         },
         "title": "LabelsEntry",
         "additionalProperties": false
+      },
+      "strategyplatform.v1.PeerList": {
+        "type": "object",
+        "properties": {
+          "format": {
+            "type": "string",
+            "title": "format",
+            "description": "Per-peer template. Use ${peer.name}, ${peer.machine}, ${peer.vars.KEY}."
+          },
+          "separator": {
+            "type": "string",
+            "title": "separator",
+            "description": "default \",\""
+          },
+          "includeSelf": {
+            "type": "boolean",
+            "title": "include_self",
+            "description": "default false"
+          }
+        },
+        "title": "PeerList",
+        "additionalProperties": false,
+        "description": "PeerList renders ${peers} for one member."
       },
       "strategyplatform.v1.ProcessMetrics": {
         "type": "object",
@@ -2890,6 +2916,25 @@
         "title": "RollbackResponse",
         "additionalProperties": false
       },
+      "strategyplatform.v1.RollingUpdate": {
+        "type": "object",
+        "properties": {
+          "maxUnavailable": {
+            "type": "integer",
+            "title": "max_unavailable",
+            "format": "int32",
+            "description": "must be \u003e= 1"
+          },
+          "waitReadySeconds": {
+            "type": "integer",
+            "title": "wait_ready_seconds",
+            "format": "int32",
+            "description": "controller deadline per in-flight member"
+          }
+        },
+        "title": "RollingUpdate",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.SetDeploymentRequest": {
         "type": "object",
         "properties": {
@@ -2962,6 +3007,46 @@
           }
         },
         "title": "SetDeploymentResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.SetMember": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "type": "string",
+            "title": "machine"
+          },
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "Member identity, unique within the set (e.g. \"nats-m1\")."
+          },
+          "vars": {
+            "type": "object",
+            "title": "vars",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            },
+            "description": "Free-form per-member values referenced as ${member.vars.KEY} and, from\n PeerList.format, ${peer.vars.KEY}."
+          }
+        },
+        "title": "SetMember",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.SetMember.VarsEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "VarsEntry",
         "additionalProperties": false
       },
       "strategyplatform.v1.SetScheduleRequest": {

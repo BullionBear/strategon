@@ -76,12 +76,12 @@ const usageText = `Usage: strategon <command> [flags]
 
 Commands:
   apply -f FILE                 Apply a YAML document
-  get natscluster NAME          Show one NatsCluster
-  get natsclusters              List NatsClusters
-  wait natscluster NAME         Block until a condition holds
+  get assignmentset NAME        Show one AssignmentSet
+  get assignmentsets            List AssignmentSets
+  wait assignmentset NAME       Block until a condition holds
 
 Apply dispatches on kind:
-  NatsCluster         → ApplyNatsCluster (does not Deploy members)
+  AssignmentSet       → ApplyAssignmentSet (does not Deploy members)
   StrategyAssignment  → ApplyAssignment
 
 Unknown kinds exit non-zero.
@@ -129,21 +129,21 @@ func cmdGet(args []string) error {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		return usageError{msg: "get requires a resource (natscluster)"}
+		return usageError{msg: "get requires a resource (assignmentset)"}
 	}
 	res := strings.ToLower(rest[0])
 	client := newClient(cfg)
 	ctx := context.Background()
 	switch res {
-	case "natsclusters":
-		return listNatsClusters(ctx, client, os.Stdout)
-	case "natscluster", "nc":
+	case "assignmentsets":
+		return listAssignmentSets(ctx, client, os.Stdout)
+	case "assignmentset", "as":
 		if len(rest) < 2 || strings.TrimSpace(rest[1]) == "" {
-			return usageError{msg: "get natscluster requires a name"}
+			return usageError{msg: "get assignmentset requires a name"}
 		}
-		return getNatsCluster(ctx, client, rest[1], os.Stdout)
+		return getAssignmentSet(ctx, client, rest[1], os.Stdout)
 	default:
-		return usageError{msg: fmt.Sprintf("unknown resource %q (want natscluster)", rest[0])}
+		return usageError{msg: fmt.Sprintf("unknown resource %q (want assignmentset)", rest[0])}
 	}
 }
 
@@ -159,16 +159,16 @@ func cmdWait(args []string) error {
 	}
 	rest := fs.Args()
 	if len(rest) < 2 {
-		return usageError{msg: "wait natscluster NAME is required"}
+		return usageError{msg: "wait assignmentset NAME is required"}
 	}
-	if strings.ToLower(rest[0]) != "natscluster" && strings.ToLower(rest[0]) != "nc" {
-		return usageError{msg: fmt.Sprintf("unknown resource %q (want natscluster)", rest[0])}
+	if strings.ToLower(rest[0]) != "assignmentset" && strings.ToLower(rest[0]) != "as" {
+		return usageError{msg: fmt.Sprintf("unknown resource %q (want assignmentset)", rest[0])}
 	}
 	name := strings.TrimSpace(rest[1])
 	if name == "" {
-		return usageError{msg: "wait natscluster requires a name"}
+		return usageError{msg: "wait assignmentset requires a name"}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout+time.Second)
 	defer cancel()
-	return waitNatsCluster(ctx, newClient(cfg), name, *forCond, *timeout)
+	return waitAssignmentSet(ctx, newClient(cfg), name, *forCond, *timeout)
 }

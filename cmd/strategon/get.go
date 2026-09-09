@@ -11,8 +11,8 @@ import (
 	"github.com/bullionbear/strategon/gen/strategyplatform/v1/strategyplatformv1connect"
 )
 
-func getNatsCluster(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, name string, w io.Writer) error {
-	resp, err := client.GetNatsCluster(ctx, connect.NewRequest(&pb.GetNatsClusterRequest{Name: name}))
+func getAssignmentSet(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, name string, w io.Writer) error {
+	resp, err := client.GetAssignmentSet(ctx, connect.NewRequest(&pb.GetAssignmentSetRequest{Name: name}))
 	if err != nil {
 		return err
 	}
@@ -20,16 +20,16 @@ func getNatsCluster(ctx context.Context, client strategyplatformv1connect.Contro
 	return nil
 }
 
-func listNatsClusters(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, w io.Writer) error {
-	resp, err := client.ListNatsClusters(ctx, connect.NewRequest(&pb.ListNatsClustersRequest{}))
+func listAssignmentSets(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, w io.Writer) error {
+	resp, err := client.ListAssignmentSets(ctx, connect.NewRequest(&pb.ListAssignmentSetsRequest{}))
 	if err != nil {
 		return err
 	}
-	if len(resp.Msg.GetClusters()) == 0 {
-		fmt.Fprintln(w, "No NatsClusters.")
+	if len(resp.Msg.GetSets()) == 0 {
+		fmt.Fprintln(w, "No AssignmentSets.")
 		return nil
 	}
-	for i, c := range resp.Msg.GetClusters() {
+	for i, c := range resp.Msg.GetSets() {
 		if i > 0 {
 			fmt.Fprintln(w)
 		}
@@ -38,11 +38,11 @@ func listNatsClusters(ctx context.Context, client strategyplatformv1connect.Cont
 	return nil
 }
 
-func printCluster(w io.Writer, c *pb.NatsCluster) {
+func printCluster(w io.Writer, c *pb.AssignmentSet) {
 	meta := c.GetMetadata()
 	spec := c.GetSpec()
 	st := c.GetStatus()
-	fmt.Fprintf(w, "NatsCluster %s\n", meta.GetName())
+	fmt.Fprintf(w, "AssignmentSet %s\n", meta.GetName())
 	fmt.Fprintf(w, "  uid: %s\n", meta.GetUid())
 	fmt.Fprintf(w, "  generation: %d\n", meta.GetGeneration())
 	fmt.Fprintf(w, "  observedGeneration: %d\n", st.GetObservedGeneration())
@@ -61,12 +61,12 @@ func printCluster(w io.Writer, c *pb.NatsCluster) {
 	if u := spec.GetUpdate(); u != nil {
 		fmt.Fprintf(w, "  update: maxUnavailable=%d waitReadySeconds=%d\n", u.GetMaxUnavailable(), u.GetWaitReadySeconds())
 	}
-	statusByMachine := map[string]*pb.NatsServerStatus{}
-	for _, s := range st.GetServers() {
+	statusByMachine := map[string]*pb.MemberStatus{}
+	for _, s := range st.GetMembers() {
 		statusByMachine[s.GetMachine()] = s
 	}
 	fmt.Fprintf(w, "  servers:\n")
-	for _, srv := range spec.GetServers() {
+	for _, srv := range spec.GetMembers() {
 		ss := statusByMachine[srv.GetMachine()]
 		phase, ready, conv := "—", false, false
 		if ss != nil {
@@ -74,8 +74,8 @@ func printCluster(w io.Writer, c *pb.NatsCluster) {
 			ready = ss.GetReady()
 			conv = ss.GetConverged()
 		}
-		fmt.Fprintf(w, "    %s  %s  %s  phase=%s ready=%t converged=%t\n",
-			srv.GetMachine(), srv.GetServerName(), srv.GetRouteHost(), phase, ready, conv)
+		fmt.Fprintf(w, "    %s  %s  phase=%s ready=%t converged=%t\n",
+			srv.GetMachine(), srv.GetName(), phase, ready, conv)
 	}
 }
 

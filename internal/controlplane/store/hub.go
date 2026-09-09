@@ -88,7 +88,7 @@ func (h *Hub) Notify(machineID string) {
 	}
 }
 
-// SubscribeClusters signals any NatsCluster spec/status write.
+// SubscribeClusters signals any AssignmentSet spec/status write.
 func (h *Hub) SubscribeClusters() (<-chan struct{}, func()) {
 	ch := make(chan struct{}, 1)
 	h.mu.Lock()

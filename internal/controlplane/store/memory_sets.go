@@ -17,7 +17,7 @@ func (m *Memory) notifyClusters() {
 	}
 }
 
-func (m *Memory) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, bool, error) {
+func (m *Memory) ApplyAssignmentSet(cluster *pb.AssignmentSet) (*pb.AssignmentSet, bool, error) {
 	if cluster == nil || cluster.GetMetadata().GetName() == "" {
 		return nil, false, fmt.Errorf("apply nats cluster: name is required")
 	}
@@ -37,20 +37,20 @@ func (m *Memory) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, boo
 		}
 	}
 	if cur == nil {
-		uid, err := newClusterUID()
+		uid, err := newSetUID()
 		if err != nil {
 			m.mu.Unlock()
 			return nil, false, err
 		}
-		next := proto.Clone(cluster).(*pb.NatsCluster)
+		next := proto.Clone(cluster).(*pb.AssignmentSet)
 		next.Metadata.Uid = uid
 		next.Metadata.Generation = 1
 		next.Metadata.CreatedAt = timestamppb.New(m.now())
 		if next.Status == nil {
-			next.Status = &pb.NatsClusterStatus{Phase: "Pending"}
+			next.Status = &pb.AssignmentSetStatus{Phase: "Pending"}
 		}
 		m.clusters[name] = next
-		out := proto.Clone(next).(*pb.NatsCluster)
+		out := proto.Clone(next).(*pb.AssignmentSet)
 		m.mu.Unlock()
 		m.notifyClusters()
 		return out, true, nil
@@ -58,12 +58,12 @@ func (m *Memory) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, boo
 	specChanged := !proto.Equal(cur.GetSpec(), cluster.GetSpec())
 	labelsChanged := !labelsEqual(cur.GetMetadata().GetLabels(), cluster.GetMetadata().GetLabels())
 	if !specChanged && !labelsChanged {
-		out := proto.Clone(cur).(*pb.NatsCluster)
+		out := proto.Clone(cur).(*pb.AssignmentSet)
 		m.mu.Unlock()
 		return out, false, nil
 	}
-	next := proto.Clone(cur).(*pb.NatsCluster)
-	next.Spec = proto.Clone(cluster.GetSpec()).(*pb.NatsClusterSpec)
+	next := proto.Clone(cur).(*pb.AssignmentSet)
+	next.Spec = proto.Clone(cluster.GetSpec()).(*pb.AssignmentSetSpec)
 	if next.Metadata == nil {
 		next.Metadata = &pb.ObjectMeta{Name: name}
 	}
@@ -72,23 +72,23 @@ func (m *Memory) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, boo
 		next.Metadata.Generation++
 	}
 	m.clusters[name] = next
-	out := proto.Clone(next).(*pb.NatsCluster)
+	out := proto.Clone(next).(*pb.AssignmentSet)
 	m.mu.Unlock()
 	m.notifyClusters()
 	return out, true, nil
 }
 
-func (m *Memory) GetNatsCluster(name string) (*pb.NatsCluster, bool) {
+func (m *Memory) GetAssignmentSet(name string) (*pb.AssignmentSet, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	c, ok := m.clusters[name]
 	if !ok {
 		return nil, false
 	}
-	return proto.Clone(c).(*pb.NatsCluster), true
+	return proto.Clone(c).(*pb.AssignmentSet), true
 }
 
-func (m *Memory) ListNatsClusters() []*pb.NatsCluster {
+func (m *Memory) ListAssignmentSets() []*pb.AssignmentSet {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	names := make([]string, 0, len(m.clusters))
@@ -96,14 +96,14 @@ func (m *Memory) ListNatsClusters() []*pb.NatsCluster {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	out := make([]*pb.NatsCluster, 0, len(names))
+	out := make([]*pb.AssignmentSet, 0, len(names))
 	for _, n := range names {
-		out = append(out, proto.Clone(m.clusters[n]).(*pb.NatsCluster))
+		out = append(out, proto.Clone(m.clusters[n]).(*pb.AssignmentSet))
 	}
 	return out
 }
 
-func (m *Memory) UpdateNatsClusterStatus(name string, status *pb.NatsClusterStatus) error {
+func (m *Memory) UpdateAssignmentSetStatus(name string, status *pb.AssignmentSetStatus) error {
 	m.mu.Lock()
 	cur, ok := m.clusters[name]
 	if !ok {
@@ -116,7 +116,7 @@ func (m *Memory) UpdateNatsClusterStatus(name string, status *pb.NatsClusterStat
 	return nil
 }
 
-func (m *Memory) MarkNatsClusterDeleting(name string) (*pb.NatsCluster, error) {
+func (m *Memory) MarkAssignmentSetDeleting(name string) (*pb.AssignmentSet, error) {
 	m.mu.Lock()
 	cur, ok := m.clusters[name]
 	if !ok {
@@ -124,17 +124,17 @@ func (m *Memory) MarkNatsClusterDeleting(name string) (*pb.NatsCluster, error) {
 		return nil, fmt.Errorf("delete nats cluster: %q not found", name)
 	}
 	if cur.Status == nil {
-		cur.Status = &pb.NatsClusterStatus{}
+		cur.Status = &pb.AssignmentSetStatus{}
 	}
 	cur.Status.Deleting = true
 	cur.Status.Phase = "Deleting"
-	out := proto.Clone(cur).(*pb.NatsCluster)
+	out := proto.Clone(cur).(*pb.AssignmentSet)
 	m.mu.Unlock()
 	m.notifyClusters()
 	return out, nil
 }
 
-func (m *Memory) DeleteNatsCluster(name string) error {
+func (m *Memory) DeleteAssignmentSet(name string) error {
 	m.mu.Lock()
 	if _, ok := m.clusters[name]; !ok {
 		m.mu.Unlock()
@@ -153,7 +153,7 @@ func (m *Memory) ReservedBy(machineID, strategy string) (string, bool) {
 }
 
 // ReservationConflictError reports that a machine+strategy is already owned by
-// a different NatsCluster. Callers map it to FailedPrecondition.
+// a different AssignmentSet. Callers map it to FailedPrecondition.
 type ReservationConflictError struct {
 	MachineID string
 	Strategy  string
@@ -161,7 +161,7 @@ type ReservationConflictError struct {
 }
 
 func (e *ReservationConflictError) Error() string {
-	return fmt.Sprintf("machine %q strategy %q is owned by NatsCluster %q",
+	return fmt.Sprintf("machine %q strategy %q is owned by AssignmentSet %q",
 		e.MachineID, e.Strategy, e.Owner)
 }
 
@@ -174,18 +174,18 @@ func (e *ReservationConflictError) Error() string {
 // both land, leaving two controllers rewriting one machine's assignment on
 // every tick. existing is expected in a stable order so the reported owner is
 // deterministic when several clusters conflict.
-func reservationConflict(existing []*pb.NatsCluster, next *pb.NatsCluster) error {
-	strategy := ClusterStrategy(next)
+func reservationConflict(existing []*pb.AssignmentSet, next *pb.AssignmentSet) error {
+	strategy := SetStrategy(next)
 	name := next.GetMetadata().GetName()
-	for _, srv := range next.GetSpec().GetServers() {
+	for _, srv := range next.GetSpec().GetMembers() {
 		for _, c := range existing {
 			if c.GetMetadata().GetName() == name || c.GetStatus().GetDeleting() {
 				continue
 			}
-			if ClusterStrategy(c) != strategy {
+			if SetStrategy(c) != strategy {
 				continue
 			}
-			for _, es := range c.GetSpec().GetServers() {
+			for _, es := range c.GetSpec().GetMembers() {
 				if es.GetMachine() != srv.GetMachine() {
 					continue
 				}
@@ -201,8 +201,8 @@ func reservationConflict(existing []*pb.NatsCluster, next *pb.NatsCluster) error
 }
 
 // clustersByName returns the cluster map as a name-sorted slice.
-func clustersByName(clusters map[string]*pb.NatsCluster) []*pb.NatsCluster {
-	out := make([]*pb.NatsCluster, 0, len(clusters))
+func clustersByName(clusters map[string]*pb.AssignmentSet) []*pb.AssignmentSet {
+	out := make([]*pb.AssignmentSet, 0, len(clusters))
 	for _, c := range clusters {
 		out = append(out, c)
 	}
@@ -212,16 +212,16 @@ func clustersByName(clusters map[string]*pb.NatsCluster) []*pb.NatsCluster {
 	return out
 }
 
-func reservedByLocked(clusters map[string]*pb.NatsCluster, machineID, strategy string) (string, bool) {
+func reservedByLocked(clusters map[string]*pb.AssignmentSet, machineID, strategy string) (string, bool) {
 	for _, c := range clusters {
 		if c.GetStatus().GetDeleting() {
 			continue
 		}
-		strat := ClusterStrategy(c)
+		strat := SetStrategy(c)
 		if strat != strategy {
 			continue
 		}
-		for _, srv := range c.GetSpec().GetServers() {
+		for _, srv := range c.GetSpec().GetMembers() {
 			if srv.GetMachine() == machineID {
 				return c.GetMetadata().GetName(), true
 			}
@@ -230,14 +230,14 @@ func reservedByLocked(clusters map[string]*pb.NatsCluster, machineID, strategy s
 	return "", false
 }
 
-// preserveDeleting keeps a concurrent MarkNatsClusterDeleting from being
+// preserveDeleting keeps a concurrent MarkAssignmentSetDeleting from being
 // overwritten by a controller status write that omitted the flag.
-func preserveDeleting(cur, incoming *pb.NatsClusterStatus) *pb.NatsClusterStatus {
-	var next *pb.NatsClusterStatus
+func preserveDeleting(cur, incoming *pb.AssignmentSetStatus) *pb.AssignmentSetStatus {
+	var next *pb.AssignmentSetStatus
 	if incoming != nil {
-		next = proto.Clone(incoming).(*pb.NatsClusterStatus)
+		next = proto.Clone(incoming).(*pb.AssignmentSetStatus)
 	} else {
-		next = &pb.NatsClusterStatus{}
+		next = &pb.AssignmentSetStatus{}
 	}
 	if cur != nil && cur.GetDeleting() {
 		next.Deleting = true
@@ -248,15 +248,15 @@ func preserveDeleting(cur, incoming *pb.NatsClusterStatus) *pb.NatsClusterStatus
 	return next
 }
 
-// ClusterStrategy returns the owned strategy name (default nats).
-func ClusterStrategy(c *pb.NatsCluster) string {
+// SetStrategy returns the owned strategy name (default nats).
+func SetStrategy(c *pb.AssignmentSet) string {
 	if s := c.GetSpec().GetStrategy(); s != "" {
 		return s
 	}
 	return "nats"
 }
 
-func newClusterUID() (string, error) {
+func newSetUID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err

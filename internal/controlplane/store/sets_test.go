@@ -9,17 +9,17 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
 
-func TestMemoryNatsClusterUpsertAndGeneration(t *testing.T) {
+func TestMemoryAssignmentSetUpsertAndGeneration(t *testing.T) {
 	s := NewMemory(nil)
-	in := &pb.NatsCluster{
+	in := &pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading", Labels: map[string]string{"env": "dev"}},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			ArtifactVersion: "v1",
 			Strategy:        "nats",
-			Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "10.0.0.1"}},
+			Members:         []*pb.SetMember{{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "10.0.0.1"}}},
 		},
 	}
-	out, changed, err := s.ApplyNatsCluster(in)
+	out, changed, err := s.ApplyAssignmentSet(in)
 	if err != nil || !changed {
 		t.Fatalf("create: changed=%v err=%v", changed, err)
 	}
@@ -31,7 +31,7 @@ func TestMemoryNatsClusterUpsertAndGeneration(t *testing.T) {
 	}
 
 	// Identical re-apply is a no-op.
-	again, changed, err := s.ApplyNatsCluster(&pb.NatsCluster{
+	again, changed, err := s.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading", Labels: map[string]string{"env": "dev"}},
 		Spec:     in.Spec,
 	})
@@ -40,7 +40,7 @@ func TestMemoryNatsClusterUpsertAndGeneration(t *testing.T) {
 	}
 
 	// Labels-only does not bump generation.
-	labeled, changed, err := s.ApplyNatsCluster(&pb.NatsCluster{
+	labeled, changed, err := s.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading", Labels: map[string]string{"env": "prod"}},
 		Spec:     in.Spec,
 	})
@@ -52,12 +52,12 @@ func TestMemoryNatsClusterUpsertAndGeneration(t *testing.T) {
 	}
 
 	// Spec change bumps generation.
-	nextSpec := &pb.NatsClusterSpec{
+	nextSpec := &pb.AssignmentSetSpec{
 		ArtifactVersion: "v2",
 		Strategy:        "nats",
-		Servers:         in.Spec.Servers,
+		Members:         in.Spec.Members,
 	}
-	bumped, changed, err := s.ApplyNatsCluster(&pb.NatsCluster{
+	bumped, changed, err := s.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading", Labels: map[string]string{"env": "prod"}},
 		Spec:     nextSpec,
 	})
@@ -65,23 +65,23 @@ func TestMemoryNatsClusterUpsertAndGeneration(t *testing.T) {
 		t.Fatalf("spec change: gen=%d changed=%v err=%v", bumped.GetMetadata().GetGeneration(), changed, err)
 	}
 
-	got, ok := s.GetNatsCluster("trading")
+	got, ok := s.GetAssignmentSet("trading")
 	if !ok || got.GetSpec().GetArtifactVersion() != "v2" {
 		t.Fatalf("get = %+v ok=%v", got, ok)
 	}
-	list := s.ListNatsClusters()
+	list := s.ListAssignmentSets()
 	if len(list) != 1 || list[0].GetMetadata().GetName() != "trading" {
 		t.Fatalf("list = %+v", list)
 	}
 }
 
-func TestMemoryNatsClusterReservation(t *testing.T) {
+func TestMemoryAssignmentSetReservation(t *testing.T) {
 	s := NewMemory(nil)
-	_, _, err := s.ApplyNatsCluster(&pb.NatsCluster{
+	_, _, err := s.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading"},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			Strategy: "nats",
-			Servers:  []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "h"}},
+			Members:  []*pb.SetMember{{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "h"}}},
 		},
 	})
 	if err != nil {
@@ -94,42 +94,42 @@ func TestMemoryNatsClusterReservation(t *testing.T) {
 	if _, ok := s.ReservedBy("m2", "nats"); ok {
 		t.Fatal("m2 should not be reserved")
 	}
-	if _, err := s.MarkNatsClusterDeleting("trading"); err != nil {
+	if _, err := s.MarkAssignmentSetDeleting("trading"); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := s.ReservedBy("m1", "nats"); ok {
 		t.Fatal("deleting cluster should release reservation")
 	}
-	if err := s.DeleteNatsCluster("trading"); err != nil {
+	if err := s.DeleteAssignmentSet("trading"); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := s.GetNatsCluster("trading"); ok {
+	if _, ok := s.GetAssignmentSet("trading"); ok {
 		t.Fatal("deleted cluster still present")
 	}
 }
 
-func TestMemoryNatsClusterStatusPreservesDeleting(t *testing.T) {
+func TestMemoryAssignmentSetStatusPreservesDeleting(t *testing.T) {
 	s := NewMemory(nil)
-	if _, _, err := s.ApplyNatsCluster(&pb.NatsCluster{
+	if _, _, err := s.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading"},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			Strategy: "nats",
-			Servers:  []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "h"}},
+			Members:  []*pb.SetMember{{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "h"}}},
 		},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.MarkNatsClusterDeleting("trading"); err != nil {
+	if _, err := s.MarkAssignmentSetDeleting("trading"); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+	if err := s.UpdateAssignmentSetStatus("trading", &pb.AssignmentSetStatus{
 		Phase:              "Ready",
 		ObservedGeneration: 1,
-		Servers:            []*pb.NatsServerStatus{{Machine: "m1", Ready: true}},
+		Members:            []*pb.MemberStatus{{Machine: "m1", Ready: true}},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	got, ok := s.GetNatsCluster("trading")
+	got, ok := s.GetAssignmentSet("trading")
 	if !ok {
 		t.Fatal("missing cluster")
 	}
@@ -138,16 +138,16 @@ func TestMemoryNatsClusterStatusPreservesDeleting(t *testing.T) {
 	}
 }
 
-func clusterSpec(machines ...string) *pb.NatsClusterSpec {
-	out := &pb.NatsClusterSpec{Strategy: "nats"}
+func setSpec(machines ...string) *pb.AssignmentSetSpec {
+	out := &pb.AssignmentSetSpec{Strategy: "nats"}
 	for _, m := range machines {
-		out.Servers = append(out.Servers, &pb.NatsServer{Machine: m, ServerName: m, RouteHost: "h"})
+		out.Members = append(out.Members, &pb.SetMember{Machine: m, Name: m, Vars: map[string]string{"route_host": "h"}})
 	}
 	return out
 }
 
-func applyCluster(s Store, name string, spec *pb.NatsClusterSpec) (*pb.NatsCluster, error) {
-	out, _, err := s.ApplyNatsCluster(&pb.NatsCluster{
+func applySet(s Store, name string, spec *pb.AssignmentSetSpec) (*pb.AssignmentSet, error) {
+	out, _, err := s.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: name}, Spec: spec,
 	})
 	return out, err
@@ -167,7 +167,7 @@ func assertConcurrentOverlapRejected(t *testing.T, s Store) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			_, errs[i] = applyCluster(s, fmt.Sprintf("c%02d", i), clusterSpec("m1"))
+			_, errs[i] = applySet(s, fmt.Sprintf("c%02d", i), setSpec("m1"))
 		}(i)
 	}
 	close(start)
@@ -187,42 +187,42 @@ func assertConcurrentOverlapRejected(t *testing.T, s Store) {
 	if won != 1 {
 		t.Fatalf("concurrent applies for m1: %d winners, want 1", won)
 	}
-	if got := len(s.ListNatsClusters()); got != 1 {
+	if got := len(s.ListAssignmentSets()); got != 1 {
 		t.Fatalf("stored clusters = %d, want 1", got)
 	}
 	owner, ok := s.ReservedBy("m1", "nats")
 	if !ok {
 		t.Fatal("m1 should be reserved by the winner")
 	}
-	if _, present := s.GetNatsCluster(owner); !present {
+	if _, present := s.GetAssignmentSet(owner); !present {
 		t.Fatalf("reservation owner %q has no row", owner)
 	}
 }
 
 func assertReapplyAndGrowth(t *testing.T, s Store) {
 	t.Helper()
-	if _, err := applyCluster(s, "trading", clusterSpec("m1")); err != nil {
+	if _, err := applySet(s, "trading", setSpec("m1")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := applyCluster(s, "trading", clusterSpec("m1")); err != nil {
+	if _, err := applySet(s, "trading", setSpec("m1")); err != nil {
 		t.Fatalf("re-apply own spec: %v", err)
 	}
-	out, err := applyCluster(s, "trading", clusterSpec("m1", "m2"))
+	out, err := applySet(s, "trading", setSpec("m1", "m2"))
 	if err != nil {
 		t.Fatalf("grow: %v", err)
 	}
 	if out.GetMetadata().GetGeneration() != 2 {
 		t.Fatalf("generation = %d, want 2", out.GetMetadata().GetGeneration())
 	}
-	if _, err := applyCluster(s, "other", clusterSpec("m2")); err == nil {
+	if _, err := applySet(s, "other", setSpec("m2")); err == nil {
 		t.Fatal("overlapping apply should fail")
 	}
 }
 
-func TestMemoryNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
+func TestMemoryAssignmentSetConcurrentApplyRejectsOverlap(t *testing.T) {
 	assertConcurrentOverlapRejected(t, NewMemory(nil))
 }
 
-func TestMemoryNatsClusterReapplyAndGrowth(t *testing.T) {
+func TestMemoryAssignmentSetReapplyAndGrowth(t *testing.T) {
 	assertReapplyAndGrowth(t, NewMemory(nil))
 }

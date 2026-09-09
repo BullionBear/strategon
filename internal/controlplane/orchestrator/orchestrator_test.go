@@ -29,25 +29,26 @@ func setupCluster(t *testing.T, n int) (*Controller, *store.Memory, *assign.Serv
 	}); err != nil {
 		t.Fatal(err)
 	}
-	servers := make([]*pb.NatsServer, 0, n)
+	servers := make([]*pb.SetMember, 0, n)
 	for i := 1; i <= n; i++ {
 		id := machineID(i)
 		if _, err := st.UpsertMachine(&pb.Register{MachineId: id}); err != nil {
 			t.Fatal(err)
 		}
-		servers = append(servers, &pb.NatsServer{
-			Machine: id, ServerName: "nats-" + id, RouteHost: "10.0.0." + strings.TrimPrefix(id, "m"),
-			ClientPort: 4222, ClusterPort: 6222, MonitorPort: 8222,
+		servers = append(servers, &pb.SetMember{
+			Machine: id, Name: "nats-" + id,
+			Vars: map[string]string{"route_host": "10.0.0." + strings.TrimPrefix(id, "m"), "cluster_port": "6222", "monitor_port": "8222"},
 		})
 	}
-	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading"},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			ArtifactVersion: "v1",
 			ConfigVersion:   "c1",
 			Strategy:        "nats",
-			Servers:         servers,
-			Update:          &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+			Template:        natsTemplate(),
+			Members:         servers,
+			Update:          &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -57,11 +58,27 @@ func setupCluster(t *testing.T, n int) (*Controller, *store.Memory, *assign.Serv
 	return ctrl, st, asg
 }
 
+// natsTemplate mirrors examples/nats/cluster.yaml: every NATS-specific name
+// lives in the manifest, not in the controller.
+func natsTemplate() *pb.MemberTemplate {
+	return &pb.MemberTemplate{
+		Args: []string{"-c", "${CONFIG}", "--routes", "${peers}"},
+		Env: map[string]string{
+			"NATS_SERVER_NAME":  "${member.name}",
+			"NATS_CLUSTER_NAME": "${set.name}",
+			"NATS_CLUSTER_PORT": "${member.vars.cluster_port}",
+			"NATS_MONITOR_PORT": "${member.vars.monitor_port}",
+		},
+		Readiness: &pb.ReadinessProbe{Endpoint: "http://127.0.0.1:${member.vars.monitor_port}/healthz"},
+		Peers:     &pb.PeerList{Format: "nats://${peer.vars.route_host}:${peer.vars.cluster_port}"},
+	}
+}
+
 func machineID(i int) string { return "m" + string(rune('0'+i)) } // m1..m9
 
-func loadCluster(t *testing.T, st store.Store) *pb.NatsCluster {
+func loadCluster(t *testing.T, st store.Store) *pb.AssignmentSet {
 	t.Helper()
-	c, ok := st.GetNatsCluster("trading")
+	c, ok := st.GetAssignmentSet("trading")
 	if !ok {
 		t.Fatal("cluster missing")
 	}
@@ -235,14 +252,14 @@ func TestVersionBumpRollsOneAtATime(t *testing.T) {
 		t.Fatalf("phase=%s", loadCluster(t, st).GetStatus().GetPhase())
 	}
 
-	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading"},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			ArtifactVersion: "v2",
 			ConfigVersion:   "c1",
 			Strategy:        "nats",
-			Servers:         loadCluster(t, st).GetSpec().GetServers(),
-			Update:          &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+			Members:         loadCluster(t, st).GetSpec().GetMembers(),
+			Update:          &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -270,12 +287,15 @@ func TestRestartOnlyWritesRemaining(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	servers := cl.GetSpec().GetServers()
+	servers := cl.GetSpec().GetMembers()
 	for i, srv := range servers {
 		if i == 2 {
 			break
 		}
-		spec := computeAssignment(cl, srv, servers, art, cfg)
+		spec, err := computeAssignment(cl, i, art, cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if _, _, err := asg.Apply(ctx, assign.Request{
 			MachineID: srv.GetMachine(), Strategy: "nats", Spec: spec, AllowReserved: true,
 		}); err != nil {
@@ -360,16 +380,16 @@ func TestNoConfigOmitsConfigArg(t *testing.T) {
 	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading"},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			ArtifactVersion: "v1",
 			Strategy:        "nats",
-			Servers: []*pb.NatsServer{{
-				Machine: "m1", ServerName: "nats-m1", RouteHost: "10.0.0.1",
-				ClientPort: 4222, ClusterPort: 6222, MonitorPort: 8222,
+			Members: []*pb.SetMember{{
+				Machine: "m1", Name: "nats-m1",
+				Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"},
 			}},
-			Update: &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+			Update: &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -401,15 +421,15 @@ func TestShrinkUndeploysDroppedMember(t *testing.T) {
 		t.Fatalf("phase=%s", loadCluster(t, st).GetStatus().GetPhase())
 	}
 
-	keep := loadCluster(t, st).GetSpec().GetServers()[:2]
-	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+	keep := loadCluster(t, st).GetSpec().GetMembers()[:2]
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading"},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			ArtifactVersion: "v1",
 			ConfigVersion:   "c1",
 			Strategy:        "nats",
-			Servers:         keep,
-			Update:          &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+			Members:         keep,
+			Update:          &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -432,15 +452,16 @@ func TestAssignErrorWritesFailedStatus(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
 		Metadata: &pb.ObjectMeta{Name: "trading"},
-		Spec: &pb.NatsClusterSpec{
+		Spec: &pb.AssignmentSetSpec{
 			ArtifactVersion: "v1",
 			Strategy:        "nats",
-			Servers: []*pb.NatsServer{{
-				Machine: "ghost", ServerName: "nats-ghost", RouteHost: "10.0.0.9",
+			Members: []*pb.SetMember{{
+				Machine: "ghost", Name: "nats-ghost",
+				Vars: map[string]string{"route_host": "10.0.0.9", "cluster_port": "6222", "monitor_port": "8222"},
 			}},
-			Update: &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+			Update: &pb.RollingUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -488,13 +509,13 @@ func TestReadyMemberDeadlineDoesNotDegradeLaterFlap(t *testing.T) {
 func TestDeleteNeverAssignedRemovesCluster(t *testing.T) {
 	ctrl, st, _ := setupCluster(t, 2)
 	ctx := context.Background()
-	if _, err := st.MarkNatsClusterDeleting("trading"); err != nil {
+	if _, err := st.MarkAssignmentSetDeleting("trading"); err != nil {
 		t.Fatal(err)
 	}
 	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := st.GetNatsCluster("trading"); ok {
+	if _, ok := st.GetAssignmentSet("trading"); ok {
 		t.Fatal("never-assigned deleting cluster should be removed")
 	}
 }

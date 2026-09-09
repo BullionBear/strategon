@@ -51,18 +51,18 @@ const (
 	// ControlPlaneServiceRollbackProcedure is the fully-qualified name of the ControlPlaneService's
 	// Rollback RPC.
 	ControlPlaneServiceRollbackProcedure = "/strategyplatform.v1.ControlPlaneService/Rollback"
-	// ControlPlaneServiceApplyNatsClusterProcedure is the fully-qualified name of the
-	// ControlPlaneService's ApplyNatsCluster RPC.
-	ControlPlaneServiceApplyNatsClusterProcedure = "/strategyplatform.v1.ControlPlaneService/ApplyNatsCluster"
-	// ControlPlaneServiceGetNatsClusterProcedure is the fully-qualified name of the
-	// ControlPlaneService's GetNatsCluster RPC.
-	ControlPlaneServiceGetNatsClusterProcedure = "/strategyplatform.v1.ControlPlaneService/GetNatsCluster"
-	// ControlPlaneServiceListNatsClustersProcedure is the fully-qualified name of the
-	// ControlPlaneService's ListNatsClusters RPC.
-	ControlPlaneServiceListNatsClustersProcedure = "/strategyplatform.v1.ControlPlaneService/ListNatsClusters"
-	// ControlPlaneServiceDeleteNatsClusterProcedure is the fully-qualified name of the
-	// ControlPlaneService's DeleteNatsCluster RPC.
-	ControlPlaneServiceDeleteNatsClusterProcedure = "/strategyplatform.v1.ControlPlaneService/DeleteNatsCluster"
+	// ControlPlaneServiceApplyAssignmentSetProcedure is the fully-qualified name of the
+	// ControlPlaneService's ApplyAssignmentSet RPC.
+	ControlPlaneServiceApplyAssignmentSetProcedure = "/strategyplatform.v1.ControlPlaneService/ApplyAssignmentSet"
+	// ControlPlaneServiceGetAssignmentSetProcedure is the fully-qualified name of the
+	// ControlPlaneService's GetAssignmentSet RPC.
+	ControlPlaneServiceGetAssignmentSetProcedure = "/strategyplatform.v1.ControlPlaneService/GetAssignmentSet"
+	// ControlPlaneServiceListAssignmentSetsProcedure is the fully-qualified name of the
+	// ControlPlaneService's ListAssignmentSets RPC.
+	ControlPlaneServiceListAssignmentSetsProcedure = "/strategyplatform.v1.ControlPlaneService/ListAssignmentSets"
+	// ControlPlaneServiceDeleteAssignmentSetProcedure is the fully-qualified name of the
+	// ControlPlaneService's DeleteAssignmentSet RPC.
+	ControlPlaneServiceDeleteAssignmentSetProcedure = "/strategyplatform.v1.ControlPlaneService/DeleteAssignmentSet"
 	// ControlPlaneServiceStopProcedure is the fully-qualified name of the ControlPlaneService's Stop
 	// RPC.
 	ControlPlaneServiceStopProcedure = "/strategyplatform.v1.ControlPlaneService/Stop"
@@ -119,10 +119,10 @@ var (
 	controlPlaneServiceSetDeploymentMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("SetDeployment")
 	controlPlaneServiceApplyAssignmentMethodDescriptor        = controlPlaneServiceServiceDescriptor.Methods().ByName("ApplyAssignment")
 	controlPlaneServiceRollbackMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Rollback")
-	controlPlaneServiceApplyNatsClusterMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("ApplyNatsCluster")
-	controlPlaneServiceGetNatsClusterMethodDescriptor         = controlPlaneServiceServiceDescriptor.Methods().ByName("GetNatsCluster")
-	controlPlaneServiceListNatsClustersMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("ListNatsClusters")
-	controlPlaneServiceDeleteNatsClusterMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("DeleteNatsCluster")
+	controlPlaneServiceApplyAssignmentSetMethodDescriptor     = controlPlaneServiceServiceDescriptor.Methods().ByName("ApplyAssignmentSet")
+	controlPlaneServiceGetAssignmentSetMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("GetAssignmentSet")
+	controlPlaneServiceListAssignmentSetsMethodDescriptor     = controlPlaneServiceServiceDescriptor.Methods().ByName("ListAssignmentSets")
+	controlPlaneServiceDeleteAssignmentSetMethodDescriptor    = controlPlaneServiceServiceDescriptor.Methods().ByName("DeleteAssignmentSet")
 	controlPlaneServiceStopMethodDescriptor                   = controlPlaneServiceServiceDescriptor.Methods().ByName("Stop")
 	controlPlaneServiceStartMethodDescriptor                  = controlPlaneServiceServiceDescriptor.Methods().ByName("Start")
 	controlPlaneServiceUndeployMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Undeploy")
@@ -148,10 +148,10 @@ type ControlPlaneServiceClient interface {
 	SetDeployment(context.Context, *connect.Request[v1.SetDeploymentRequest]) (*connect.Response[v1.SetDeploymentResponse], error)
 	ApplyAssignment(context.Context, *connect.Request[v1.ApplyAssignmentRequest]) (*connect.Response[v1.ApplyAssignmentResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
-	ApplyNatsCluster(context.Context, *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error)
-	GetNatsCluster(context.Context, *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error)
-	ListNatsClusters(context.Context, *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error)
-	DeleteNatsCluster(context.Context, *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error)
+	ApplyAssignmentSet(context.Context, *connect.Request[v1.ApplyAssignmentSetRequest]) (*connect.Response[v1.ApplyAssignmentSetResponse], error)
+	GetAssignmentSet(context.Context, *connect.Request[v1.GetAssignmentSetRequest]) (*connect.Response[v1.AssignmentSet], error)
+	ListAssignmentSets(context.Context, *connect.Request[v1.ListAssignmentSetsRequest]) (*connect.Response[v1.ListAssignmentSetsResponse], error)
+	DeleteAssignmentSet(context.Context, *connect.Request[v1.DeleteAssignmentSetRequest]) (*connect.Response[v1.DeleteAssignmentSetResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
@@ -222,28 +222,28 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceRollbackMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		applyNatsCluster: connect.NewClient[v1.ApplyNatsClusterRequest, v1.ApplyNatsClusterResponse](
+		applyAssignmentSet: connect.NewClient[v1.ApplyAssignmentSetRequest, v1.ApplyAssignmentSetResponse](
 			httpClient,
-			baseURL+ControlPlaneServiceApplyNatsClusterProcedure,
-			connect.WithSchema(controlPlaneServiceApplyNatsClusterMethodDescriptor),
+			baseURL+ControlPlaneServiceApplyAssignmentSetProcedure,
+			connect.WithSchema(controlPlaneServiceApplyAssignmentSetMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		getNatsCluster: connect.NewClient[v1.GetNatsClusterRequest, v1.NatsCluster](
+		getAssignmentSet: connect.NewClient[v1.GetAssignmentSetRequest, v1.AssignmentSet](
 			httpClient,
-			baseURL+ControlPlaneServiceGetNatsClusterProcedure,
-			connect.WithSchema(controlPlaneServiceGetNatsClusterMethodDescriptor),
+			baseURL+ControlPlaneServiceGetAssignmentSetProcedure,
+			connect.WithSchema(controlPlaneServiceGetAssignmentSetMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		listNatsClusters: connect.NewClient[v1.ListNatsClustersRequest, v1.ListNatsClustersResponse](
+		listAssignmentSets: connect.NewClient[v1.ListAssignmentSetsRequest, v1.ListAssignmentSetsResponse](
 			httpClient,
-			baseURL+ControlPlaneServiceListNatsClustersProcedure,
-			connect.WithSchema(controlPlaneServiceListNatsClustersMethodDescriptor),
+			baseURL+ControlPlaneServiceListAssignmentSetsProcedure,
+			connect.WithSchema(controlPlaneServiceListAssignmentSetsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
-		deleteNatsCluster: connect.NewClient[v1.DeleteNatsClusterRequest, v1.DeleteNatsClusterResponse](
+		deleteAssignmentSet: connect.NewClient[v1.DeleteAssignmentSetRequest, v1.DeleteAssignmentSetResponse](
 			httpClient,
-			baseURL+ControlPlaneServiceDeleteNatsClusterProcedure,
-			connect.WithSchema(controlPlaneServiceDeleteNatsClusterMethodDescriptor),
+			baseURL+ControlPlaneServiceDeleteAssignmentSetProcedure,
+			connect.WithSchema(controlPlaneServiceDeleteAssignmentSetMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
 		stop: connect.NewClient[v1.StopRequest, v1.StopResponse](
@@ -347,10 +347,10 @@ type controlPlaneServiceClient struct {
 	setDeployment          *connect.Client[v1.SetDeploymentRequest, v1.SetDeploymentResponse]
 	applyAssignment        *connect.Client[v1.ApplyAssignmentRequest, v1.ApplyAssignmentResponse]
 	rollback               *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
-	applyNatsCluster       *connect.Client[v1.ApplyNatsClusterRequest, v1.ApplyNatsClusterResponse]
-	getNatsCluster         *connect.Client[v1.GetNatsClusterRequest, v1.NatsCluster]
-	listNatsClusters       *connect.Client[v1.ListNatsClustersRequest, v1.ListNatsClustersResponse]
-	deleteNatsCluster      *connect.Client[v1.DeleteNatsClusterRequest, v1.DeleteNatsClusterResponse]
+	applyAssignmentSet     *connect.Client[v1.ApplyAssignmentSetRequest, v1.ApplyAssignmentSetResponse]
+	getAssignmentSet       *connect.Client[v1.GetAssignmentSetRequest, v1.AssignmentSet]
+	listAssignmentSets     *connect.Client[v1.ListAssignmentSetsRequest, v1.ListAssignmentSetsResponse]
+	deleteAssignmentSet    *connect.Client[v1.DeleteAssignmentSetRequest, v1.DeleteAssignmentSetResponse]
 	stop                   *connect.Client[v1.StopRequest, v1.StopResponse]
 	start                  *connect.Client[v1.StartRequest, v1.StartResponse]
 	undeploy               *connect.Client[v1.UndeployRequest, v1.UndeployResponse]
@@ -398,24 +398,24 @@ func (c *controlPlaneServiceClient) Rollback(ctx context.Context, req *connect.R
 	return c.rollback.CallUnary(ctx, req)
 }
 
-// ApplyNatsCluster calls strategyplatform.v1.ControlPlaneService.ApplyNatsCluster.
-func (c *controlPlaneServiceClient) ApplyNatsCluster(ctx context.Context, req *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error) {
-	return c.applyNatsCluster.CallUnary(ctx, req)
+// ApplyAssignmentSet calls strategyplatform.v1.ControlPlaneService.ApplyAssignmentSet.
+func (c *controlPlaneServiceClient) ApplyAssignmentSet(ctx context.Context, req *connect.Request[v1.ApplyAssignmentSetRequest]) (*connect.Response[v1.ApplyAssignmentSetResponse], error) {
+	return c.applyAssignmentSet.CallUnary(ctx, req)
 }
 
-// GetNatsCluster calls strategyplatform.v1.ControlPlaneService.GetNatsCluster.
-func (c *controlPlaneServiceClient) GetNatsCluster(ctx context.Context, req *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error) {
-	return c.getNatsCluster.CallUnary(ctx, req)
+// GetAssignmentSet calls strategyplatform.v1.ControlPlaneService.GetAssignmentSet.
+func (c *controlPlaneServiceClient) GetAssignmentSet(ctx context.Context, req *connect.Request[v1.GetAssignmentSetRequest]) (*connect.Response[v1.AssignmentSet], error) {
+	return c.getAssignmentSet.CallUnary(ctx, req)
 }
 
-// ListNatsClusters calls strategyplatform.v1.ControlPlaneService.ListNatsClusters.
-func (c *controlPlaneServiceClient) ListNatsClusters(ctx context.Context, req *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error) {
-	return c.listNatsClusters.CallUnary(ctx, req)
+// ListAssignmentSets calls strategyplatform.v1.ControlPlaneService.ListAssignmentSets.
+func (c *controlPlaneServiceClient) ListAssignmentSets(ctx context.Context, req *connect.Request[v1.ListAssignmentSetsRequest]) (*connect.Response[v1.ListAssignmentSetsResponse], error) {
+	return c.listAssignmentSets.CallUnary(ctx, req)
 }
 
-// DeleteNatsCluster calls strategyplatform.v1.ControlPlaneService.DeleteNatsCluster.
-func (c *controlPlaneServiceClient) DeleteNatsCluster(ctx context.Context, req *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error) {
-	return c.deleteNatsCluster.CallUnary(ctx, req)
+// DeleteAssignmentSet calls strategyplatform.v1.ControlPlaneService.DeleteAssignmentSet.
+func (c *controlPlaneServiceClient) DeleteAssignmentSet(ctx context.Context, req *connect.Request[v1.DeleteAssignmentSetRequest]) (*connect.Response[v1.DeleteAssignmentSetResponse], error) {
+	return c.deleteAssignmentSet.CallUnary(ctx, req)
 }
 
 // Stop calls strategyplatform.v1.ControlPlaneService.Stop.
@@ -502,10 +502,10 @@ type ControlPlaneServiceHandler interface {
 	SetDeployment(context.Context, *connect.Request[v1.SetDeploymentRequest]) (*connect.Response[v1.SetDeploymentResponse], error)
 	ApplyAssignment(context.Context, *connect.Request[v1.ApplyAssignmentRequest]) (*connect.Response[v1.ApplyAssignmentResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
-	ApplyNatsCluster(context.Context, *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error)
-	GetNatsCluster(context.Context, *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error)
-	ListNatsClusters(context.Context, *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error)
-	DeleteNatsCluster(context.Context, *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error)
+	ApplyAssignmentSet(context.Context, *connect.Request[v1.ApplyAssignmentSetRequest]) (*connect.Response[v1.ApplyAssignmentSetResponse], error)
+	GetAssignmentSet(context.Context, *connect.Request[v1.GetAssignmentSetRequest]) (*connect.Response[v1.AssignmentSet], error)
+	ListAssignmentSets(context.Context, *connect.Request[v1.ListAssignmentSetsRequest]) (*connect.Response[v1.ListAssignmentSetsResponse], error)
+	DeleteAssignmentSet(context.Context, *connect.Request[v1.DeleteAssignmentSetRequest]) (*connect.Response[v1.DeleteAssignmentSetResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
@@ -572,28 +572,28 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceRollbackMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	controlPlaneServiceApplyNatsClusterHandler := connect.NewUnaryHandler(
-		ControlPlaneServiceApplyNatsClusterProcedure,
-		svc.ApplyNatsCluster,
-		connect.WithSchema(controlPlaneServiceApplyNatsClusterMethodDescriptor),
+	controlPlaneServiceApplyAssignmentSetHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceApplyAssignmentSetProcedure,
+		svc.ApplyAssignmentSet,
+		connect.WithSchema(controlPlaneServiceApplyAssignmentSetMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	controlPlaneServiceGetNatsClusterHandler := connect.NewUnaryHandler(
-		ControlPlaneServiceGetNatsClusterProcedure,
-		svc.GetNatsCluster,
-		connect.WithSchema(controlPlaneServiceGetNatsClusterMethodDescriptor),
+	controlPlaneServiceGetAssignmentSetHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceGetAssignmentSetProcedure,
+		svc.GetAssignmentSet,
+		connect.WithSchema(controlPlaneServiceGetAssignmentSetMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	controlPlaneServiceListNatsClustersHandler := connect.NewUnaryHandler(
-		ControlPlaneServiceListNatsClustersProcedure,
-		svc.ListNatsClusters,
-		connect.WithSchema(controlPlaneServiceListNatsClustersMethodDescriptor),
+	controlPlaneServiceListAssignmentSetsHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceListAssignmentSetsProcedure,
+		svc.ListAssignmentSets,
+		connect.WithSchema(controlPlaneServiceListAssignmentSetsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
-	controlPlaneServiceDeleteNatsClusterHandler := connect.NewUnaryHandler(
-		ControlPlaneServiceDeleteNatsClusterProcedure,
-		svc.DeleteNatsCluster,
-		connect.WithSchema(controlPlaneServiceDeleteNatsClusterMethodDescriptor),
+	controlPlaneServiceDeleteAssignmentSetHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceDeleteAssignmentSetProcedure,
+		svc.DeleteAssignmentSet,
+		connect.WithSchema(controlPlaneServiceDeleteAssignmentSetMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	controlPlaneServiceStopHandler := connect.NewUnaryHandler(
@@ -700,14 +700,14 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceApplyAssignmentHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceRollbackProcedure:
 			controlPlaneServiceRollbackHandler.ServeHTTP(w, r)
-		case ControlPlaneServiceApplyNatsClusterProcedure:
-			controlPlaneServiceApplyNatsClusterHandler.ServeHTTP(w, r)
-		case ControlPlaneServiceGetNatsClusterProcedure:
-			controlPlaneServiceGetNatsClusterHandler.ServeHTTP(w, r)
-		case ControlPlaneServiceListNatsClustersProcedure:
-			controlPlaneServiceListNatsClustersHandler.ServeHTTP(w, r)
-		case ControlPlaneServiceDeleteNatsClusterProcedure:
-			controlPlaneServiceDeleteNatsClusterHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceApplyAssignmentSetProcedure:
+			controlPlaneServiceApplyAssignmentSetHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceGetAssignmentSetProcedure:
+			controlPlaneServiceGetAssignmentSetHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceListAssignmentSetsProcedure:
+			controlPlaneServiceListAssignmentSetsHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceDeleteAssignmentSetProcedure:
+			controlPlaneServiceDeleteAssignmentSetHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceStopProcedure:
 			controlPlaneServiceStopHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceStartProcedure:
@@ -771,20 +771,20 @@ func (UnimplementedControlPlaneServiceHandler) Rollback(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.Rollback is not implemented"))
 }
 
-func (UnimplementedControlPlaneServiceHandler) ApplyNatsCluster(context.Context, *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ApplyNatsCluster is not implemented"))
+func (UnimplementedControlPlaneServiceHandler) ApplyAssignmentSet(context.Context, *connect.Request[v1.ApplyAssignmentSetRequest]) (*connect.Response[v1.ApplyAssignmentSetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ApplyAssignmentSet is not implemented"))
 }
 
-func (UnimplementedControlPlaneServiceHandler) GetNatsCluster(context.Context, *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.GetNatsCluster is not implemented"))
+func (UnimplementedControlPlaneServiceHandler) GetAssignmentSet(context.Context, *connect.Request[v1.GetAssignmentSetRequest]) (*connect.Response[v1.AssignmentSet], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.GetAssignmentSet is not implemented"))
 }
 
-func (UnimplementedControlPlaneServiceHandler) ListNatsClusters(context.Context, *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListNatsClusters is not implemented"))
+func (UnimplementedControlPlaneServiceHandler) ListAssignmentSets(context.Context, *connect.Request[v1.ListAssignmentSetsRequest]) (*connect.Response[v1.ListAssignmentSetsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListAssignmentSets is not implemented"))
 }
 
-func (UnimplementedControlPlaneServiceHandler) DeleteNatsCluster(context.Context, *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.DeleteNatsCluster is not implemented"))
+func (UnimplementedControlPlaneServiceHandler) DeleteAssignmentSet(context.Context, *connect.Request[v1.DeleteAssignmentSetRequest]) (*connect.Response[v1.DeleteAssignmentSetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.DeleteAssignmentSet is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error) {
