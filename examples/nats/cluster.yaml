@@ -1,0 +1,21 @@
+apiVersion: strategyplatform.v1
+kind: NatsCluster
+metadata:
+  name: trading
+spec:
+  artifactVersion: v2.10.24
+  configVersion: v1
+  strategy: nats
+  servers:
+    - machine: m1
+      serverName: nats-m1
+      routeHost: 10.0.0.1
+    - machine: m2
+      serverName: nats-m2
+      routeHost: 10.0.0.2
+    - machine: m3
+      serverName: nats-m3
+      routeHost: 10.0.0.3
+  update:
+    maxUnavailable: 1
+    waitReadySeconds: 60

@@ -58,9 +58,10 @@
 <section class="fade-in">
 	<h1>API tokens</h1>
 	<p class="muted">
-		Long-lived Bearer tokens for curl/CI. Issued to your Discord (or mock) identity; every
-		mutating call is audited as you. Tokens are stored hashed in the control-plane process and
-		are lost on restart unless durable auth storage is added later.
+		Long-lived Bearer tokens for curl/CI and <span class="mono">strategon apply</span>. Issued to
+		your Discord (or mock) identity; every mutating call is audited as you. Tokens are stored
+		hashed in the control-plane process and are lost on restart unless durable auth storage is
+		added later. Export as <span class="mono">STRATEGON_TOKEN</span> for the CLI.
 	</p>
 	<p class="muted" style="margin-top:0.65rem">
 		Connect JSON reference (standalone):

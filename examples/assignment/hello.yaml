@@ -1,0 +1,8 @@
+apiVersion: strategyplatform.v1
+kind: StrategyAssignment
+metadata:
+  name: hello
+spec:
+  machineId: m1
+  artifactVersion: v1
+  stopped: false
