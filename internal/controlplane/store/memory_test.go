@@ -5,6 +5,7 @@ import (
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestGenerationMonotonicAndDesiredSnapshot(t *testing.T) {
@@ -18,13 +19,16 @@ func TestGenerationMonotonicAndDesiredSnapshot(t *testing.T) {
 		t.Fatalf("fresh machine should have generation 0 and no assignments")
 	}
 
-	g1, err := s.SetAssignment("m1", "s", &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: &pb.ArtifactRef{Version: "v1"}})
+	g1, changed, err := s.SetAssignment("m1", "s", &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: &pb.ArtifactRef{Version: "v1"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	g2, _ := s.SetAssignment("m1", "s", &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: &pb.ArtifactRef{Version: "v2"}})
-	if !(g2 > g1) {
-		t.Fatalf("generation must increase monotonically: g1=%d g2=%d", g1, g2)
+	if !changed {
+		t.Fatal("first write should change")
+	}
+	g2, changed, _ := s.SetAssignment("m1", "s", &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: &pb.ArtifactRef{Version: "v2"}})
+	if !changed || !(g2 > g1) {
+		t.Fatalf("generation must increase monotonically: g1=%d g2=%d changed=%v", g1, g2, changed)
 	}
 
 	ds, _ = s.DesiredState("m1")
@@ -36,8 +40,8 @@ func TestGenerationMonotonicAndDesiredSnapshot(t *testing.T) {
 	}
 
 	// Removing an assignment also bumps generation.
-	g3, _ := s.SetAssignment("m1", "s", nil)
-	if g3 <= g2 {
+	g3, changed, _ := s.SetAssignment("m1", "s", nil)
+	if !changed || g3 <= g2 {
 		t.Fatalf("removal must bump generation")
 	}
 	ds, _ = s.DesiredState("m1")
@@ -108,6 +112,60 @@ func TestSetSharedFilesGenerationAndDesired(t *testing.T) {
 	rec, _ := s.GetMachine("m1")
 	if rec.SharedStatus == nil || len(rec.SharedStatus.GetFiles()) != 1 {
 		t.Fatalf("shared status not persisted: %+v", rec.SharedStatus)
+	}
+}
+
+func TestSetAssignmentIdenticalSpecIsNoop(t *testing.T) {
+	hub := NewHub()
+	s := NewMemory(hub)
+	if _, err := s.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	ch, cancel := hub.Subscribe("m1")
+	defer cancel()
+	// Drain upsert notify.
+	select {
+	case <-ch:
+	default:
+	}
+
+	spec := &pb.StrategyAssignmentSpec{
+		Strategy: "s",
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa"},
+		Env:      map[string]string{"K": "v"},
+	}
+	g1, changed, err := s.SetAssignment("m1", "s", spec)
+	if err != nil || !changed {
+		t.Fatalf("first write: gen=%d changed=%v err=%v", g1, changed, err)
+	}
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Fatal("first write should notify")
+	}
+
+	prev := &pb.ArtifactRef{Version: "old", Digest: "sha256:old"}
+	s.machines["m1"].PreviousArtifacts["s"] = prev
+
+	g2, changed, err := s.SetAssignment("m1", "s", spec)
+	if err != nil || changed || g2 != g1 {
+		t.Fatalf("identical rewrite: gen=%d changed=%v err=%v want gen=%d changed=false", g2, changed, err, g1)
+	}
+	select {
+	case <-ch:
+		t.Fatal("noop must not notify")
+	default:
+	}
+	got, ok := s.PreviousArtifact("m1", "s")
+	if !ok || got.GetDigest() != "sha256:old" {
+		t.Fatalf("PreviousArtifacts mutated by noop: %+v ok=%v", got, ok)
+	}
+
+	spec2 := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
+	spec2.Env["K"] = "v2"
+	g3, changed, err := s.SetAssignment("m1", "s", spec2)
+	if err != nil || !changed || g3 <= g2 {
+		t.Fatalf("env change: gen=%d changed=%v err=%v", g3, changed, err)
 	}
 }
 

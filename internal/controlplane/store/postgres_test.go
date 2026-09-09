@@ -23,7 +23,7 @@ func newTestPostgres(t *testing.T, hub *Hub) *Postgres {
 	if err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
-	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases, api_tokens, resource_samples RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases, api_tokens, resource_samples, nats_clusters RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	t.Cleanup(p.Close)
@@ -36,14 +36,14 @@ func TestPostgresGenerationBumpAndDesired(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:aaa"}}
-	g1, err := p.SetAssignment("m1", "s", spec)
+	g1, _, err := p.SetAssignment("m1", "s", spec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if g1 != 1 {
 		t.Fatalf("first generation = %d, want 1", g1)
 	}
-	g2, _ := p.SetAssignment("m1", "s2", &pb.StrategyAssignmentSpec{Strategy: "s2", Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:bbb"}})
+	g2, _, _ := p.SetAssignment("m1", "s2", &pb.StrategyAssignmentSpec{Strategy: "s2", Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:bbb"}})
 	if g2 != 2 {
 		t.Fatalf("second generation = %d, want 2", g2)
 	}
@@ -132,7 +132,7 @@ func TestPostgresStatusHeartbeatReachable(t *testing.T) {
 	if err := p.SetReachable("nope", true); err == nil {
 		t.Fatal("SetReachable on unknown machine should error")
 	}
-	if _, err := p.SetAssignment("nope", "s", &pb.StrategyAssignmentSpec{}); err == nil {
+	if _, _, err := p.SetAssignment("nope", "s", &pb.StrategyAssignmentSpec{}); err == nil {
 		t.Fatal("SetAssignment on unknown machine should error")
 	}
 }
@@ -245,6 +245,38 @@ func TestPostgresAPITokens(t *testing.T) {
 	loaded, err = p.LoadAPITokens(ctx)
 	if err != nil || len(loaded) != 0 {
 		t.Fatalf("active after revoke: %+v err=%v", loaded, err)
+	}
+}
+
+func TestPostgresNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
+	assertConcurrentOverlapRejected(t, newTestPostgres(t, nil))
+}
+
+func TestPostgresNatsClusterReapplyAndGrowth(t *testing.T) {
+	assertReapplyAndGrowth(t, newTestPostgres(t, nil))
+}
+
+func TestPostgresNatsClusterStatusPreservesDeleting(t *testing.T) {
+	p := newTestPostgres(t, nil)
+	if _, err := applyCluster(p, "trading", clusterSpec("m1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.MarkNatsClusterDeleting("trading"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+		Phase:              "Ready",
+		ObservedGeneration: 1,
+		Servers:            []*pb.NatsServerStatus{{Machine: "m1", Ready: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := p.GetNatsCluster("trading")
+	if !ok {
+		t.Fatal("missing cluster")
+	}
+	if !got.GetStatus().GetDeleting() || got.GetStatus().GetPhase() != "Deleting" {
+		t.Fatalf("status = %+v, want Deleting preserved", got.GetStatus())
 	}
 }
 

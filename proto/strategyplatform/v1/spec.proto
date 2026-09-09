@@ -24,6 +24,17 @@ message StrategyAssignmentSpec {
   // When true the agent drains the process but retains WorkDir, release, and
   // status so logs/history remain browsable. Default false = should be running.
   bool stopped = 11;
+  // Optional readiness probe. Presence turns the health window into a deadline:
+  // expiry without Ready=TRUE rolls back (if enabled) or fails — never promotes
+  // to HEALTHY. Specs without a probe keep today's grace-period behaviour.
+  ReadinessProbe readiness = 12;
+}
+
+// ReadinessProbe is an HTTP URL or unix socket path the agent probes for Ready.
+message ReadinessProbe {
+  // http://127.0.0.1:8222/healthz, or a filesystem path for a unix socket
+  // that serves HTTP /healthz (same as the existing UnixSocketChecker).
+  string endpoint = 1;
 }
 
 // SharedFileSpec is one machine-level shared file. name is the on-disk basename

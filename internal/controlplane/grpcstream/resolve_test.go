@@ -49,7 +49,7 @@ func seedAssigned(t *testing.T, st *store.Memory, machineID string, art *pb.Arti
 	if err := st.RegisterArtifact(art); err != nil {
 		t.Fatal(err)
 	}
-	_, err := st.SetAssignment(machineID, "strat", &pb.StrategyAssignmentSpec{
+	_, _, err := st.SetAssignment(machineID, "strat", &pb.StrategyAssignmentSpec{
 		Strategy: "strat",
 		Artifact: art,
 	})
@@ -102,7 +102,7 @@ func TestResolveArtifactSourceDeniedNotAssigned(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Only m1 is assigned.
-	if _, err := st.SetAssignment("m1", "strat", &pb.StrategyAssignmentSpec{
+	if _, _, err := st.SetAssignment("m1", "strat", &pb.StrategyAssignmentSpec{
 		Strategy: "strat", Artifact: art,
 	}); err != nil {
 		t.Fatal(err)
@@ -171,7 +171,7 @@ func TestResolveArtifactSourceConfigRefOK(t *testing.T) {
 	if err := st.RegisterArtifact(cfg); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.SetAssignment("m1", "strat", &pb.StrategyAssignmentSpec{
+	if _, _, err := st.SetAssignment("m1", "strat", &pb.StrategyAssignmentSpec{
 		Strategy: "strat", Artifact: bin, Config: cfg,
 	}); err != nil {
 		t.Fatal(err)

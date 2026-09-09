@@ -50,6 +50,7 @@ flowchart LR
 cmd/
   controlplane/   Control plane binary (agent port + human port + UI)
   agent/          Per-host reconciler + outbound stream client
+  strategon/      Human CLI (apply / get / wait against :8081)
   strategon-ca/   Offline Ed25519 CA (init / sign agent certs)
   lease-demo/     Sample process that exercises sdk/lease
 internal/
@@ -64,6 +65,7 @@ gen/                         Generated Go + Connect code (buf generate)
 web/                         SvelteKit SPA (Connect-ES client)
 sdk/lease/                   Strategy-side fencing lease client
 deploy/                      Production compose + agent install script
+examples/nats/               Declarative NatsCluster YAML + server config
 ```
 
 Generated code under `gen/` and `web/src/lib/gen/` is produced by `make generate`

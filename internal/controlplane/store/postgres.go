@@ -328,20 +328,36 @@ func (p *Postgres) UpsertMachine(reg *pb.Register) (*MachineRecord, error) {
 	return rec, nil
 }
 
-func (p *Postgres) SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error) {
+func (p *Postgres) SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, bool, error) {
 	ctx, cancel := opCtx()
 	defer cancel()
 	var gen int64
+	var changed bool
 	err := p.inTx(ctx, func(tx pgx.Tx) error {
-		var exists bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM machines WHERE machine_id=$1)`,
-			machineID).Scan(&exists); err != nil {
-			return err
-		}
-		if !exists {
+		var curGen int64
+		err := tx.QueryRow(ctx, `SELECT generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
+			machineID).Scan(&curGen)
+		if errors.Is(err, pgx.ErrNoRows) {
 			return fmt.Errorf("set assignment: unknown machine %s", machineID)
 		}
+		if err != nil {
+			return err
+		}
+
+		var oldBytes []byte
+		err = tx.QueryRow(ctx, `SELECT spec FROM assignments WHERE machine_id=$1 AND strategy=$2`,
+			machineID, strategy).Scan(&oldBytes)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return err
+		}
+		hasOld := err == nil
+
 		if spec == nil {
+			if !hasOld {
+				gen = curGen
+				changed = false
+				return nil
+			}
 			for _, sql := range []string{
 				`DELETE FROM assignments WHERE machine_id=$1 AND strategy=$2`,
 				`DELETE FROM previous_artifacts WHERE machine_id=$1 AND strategy=$2`,
@@ -352,18 +368,15 @@ func (p *Postgres) SetAssignment(machineID, strategy string, spec *pb.StrategyAs
 				}
 			}
 		} else {
-			// Record the replaced artifact for empty-target rollback, matching
-			// Memory: only when the digest actually changes.
-			var oldBytes []byte
-			err := tx.QueryRow(ctx, `SELECT spec FROM assignments WHERE machine_id=$1 AND strategy=$2`,
-				machineID, strategy).Scan(&oldBytes)
-			if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-				return err
-			}
-			if oldBytes != nil {
+			if hasOld {
 				old := &pb.StrategyAssignmentSpec{}
 				if err := proto.Unmarshal(oldBytes, old); err != nil {
 					return err
+				}
+				if proto.Equal(old, spec) {
+					gen = curGen
+					changed = false
+					return nil
 				}
 				if d := old.GetArtifact().GetDigest(); d != "" && d != spec.GetArtifact().GetDigest() {
 					artBytes, err := proto.Marshal(old.GetArtifact())
@@ -387,15 +400,18 @@ func (p *Postgres) SetAssignment(machineID, strategy string, spec *pb.StrategyAs
 				return err
 			}
 		}
+		changed = true
 		return tx.QueryRow(ctx,
 			`UPDATE machines SET generation = generation + 1 WHERE machine_id=$1 RETURNING generation`,
 			machineID).Scan(&gen)
 	})
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
-	p.notify(machineID)
-	return gen, nil
+	if changed {
+		p.notify(machineID)
+	}
+	return gen, changed, nil
 }
 
 func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error) {

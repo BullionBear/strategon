@@ -45,9 +45,24 @@ const (
 	// ControlPlaneServiceSetDeploymentProcedure is the fully-qualified name of the
 	// ControlPlaneService's SetDeployment RPC.
 	ControlPlaneServiceSetDeploymentProcedure = "/strategyplatform.v1.ControlPlaneService/SetDeployment"
+	// ControlPlaneServiceApplyAssignmentProcedure is the fully-qualified name of the
+	// ControlPlaneService's ApplyAssignment RPC.
+	ControlPlaneServiceApplyAssignmentProcedure = "/strategyplatform.v1.ControlPlaneService/ApplyAssignment"
 	// ControlPlaneServiceRollbackProcedure is the fully-qualified name of the ControlPlaneService's
 	// Rollback RPC.
 	ControlPlaneServiceRollbackProcedure = "/strategyplatform.v1.ControlPlaneService/Rollback"
+	// ControlPlaneServiceApplyNatsClusterProcedure is the fully-qualified name of the
+	// ControlPlaneService's ApplyNatsCluster RPC.
+	ControlPlaneServiceApplyNatsClusterProcedure = "/strategyplatform.v1.ControlPlaneService/ApplyNatsCluster"
+	// ControlPlaneServiceGetNatsClusterProcedure is the fully-qualified name of the
+	// ControlPlaneService's GetNatsCluster RPC.
+	ControlPlaneServiceGetNatsClusterProcedure = "/strategyplatform.v1.ControlPlaneService/GetNatsCluster"
+	// ControlPlaneServiceListNatsClustersProcedure is the fully-qualified name of the
+	// ControlPlaneService's ListNatsClusters RPC.
+	ControlPlaneServiceListNatsClustersProcedure = "/strategyplatform.v1.ControlPlaneService/ListNatsClusters"
+	// ControlPlaneServiceDeleteNatsClusterProcedure is the fully-qualified name of the
+	// ControlPlaneService's DeleteNatsCluster RPC.
+	ControlPlaneServiceDeleteNatsClusterProcedure = "/strategyplatform.v1.ControlPlaneService/DeleteNatsCluster"
 	// ControlPlaneServiceStopProcedure is the fully-qualified name of the ControlPlaneService's Stop
 	// RPC.
 	ControlPlaneServiceStopProcedure = "/strategyplatform.v1.ControlPlaneService/Stop"
@@ -102,7 +117,12 @@ var (
 	controlPlaneServiceGetMachineMethodDescriptor             = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachine")
 	controlPlaneServiceDeployMethodDescriptor                 = controlPlaneServiceServiceDescriptor.Methods().ByName("Deploy")
 	controlPlaneServiceSetDeploymentMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("SetDeployment")
+	controlPlaneServiceApplyAssignmentMethodDescriptor        = controlPlaneServiceServiceDescriptor.Methods().ByName("ApplyAssignment")
 	controlPlaneServiceRollbackMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Rollback")
+	controlPlaneServiceApplyNatsClusterMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("ApplyNatsCluster")
+	controlPlaneServiceGetNatsClusterMethodDescriptor         = controlPlaneServiceServiceDescriptor.Methods().ByName("GetNatsCluster")
+	controlPlaneServiceListNatsClustersMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("ListNatsClusters")
+	controlPlaneServiceDeleteNatsClusterMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("DeleteNatsCluster")
 	controlPlaneServiceStopMethodDescriptor                   = controlPlaneServiceServiceDescriptor.Methods().ByName("Stop")
 	controlPlaneServiceStartMethodDescriptor                  = controlPlaneServiceServiceDescriptor.Methods().ByName("Start")
 	controlPlaneServiceUndeployMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Undeploy")
@@ -126,7 +146,12 @@ type ControlPlaneServiceClient interface {
 	GetMachine(context.Context, *connect.Request[v1.GetMachineRequest]) (*connect.Response[v1.Machine], error)
 	Deploy(context.Context, *connect.Request[v1.DeployRequest]) (*connect.Response[v1.DeployResponse], error)
 	SetDeployment(context.Context, *connect.Request[v1.SetDeploymentRequest]) (*connect.Response[v1.SetDeploymentResponse], error)
+	ApplyAssignment(context.Context, *connect.Request[v1.ApplyAssignmentRequest]) (*connect.Response[v1.ApplyAssignmentResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
+	ApplyNatsCluster(context.Context, *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error)
+	GetNatsCluster(context.Context, *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error)
+	ListNatsClusters(context.Context, *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error)
+	DeleteNatsCluster(context.Context, *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
@@ -185,10 +210,40 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceSetDeploymentMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		applyAssignment: connect.NewClient[v1.ApplyAssignmentRequest, v1.ApplyAssignmentResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceApplyAssignmentProcedure,
+			connect.WithSchema(controlPlaneServiceApplyAssignmentMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		rollback: connect.NewClient[v1.RollbackRequest, v1.RollbackResponse](
 			httpClient,
 			baseURL+ControlPlaneServiceRollbackProcedure,
 			connect.WithSchema(controlPlaneServiceRollbackMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		applyNatsCluster: connect.NewClient[v1.ApplyNatsClusterRequest, v1.ApplyNatsClusterResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceApplyNatsClusterProcedure,
+			connect.WithSchema(controlPlaneServiceApplyNatsClusterMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		getNatsCluster: connect.NewClient[v1.GetNatsClusterRequest, v1.NatsCluster](
+			httpClient,
+			baseURL+ControlPlaneServiceGetNatsClusterProcedure,
+			connect.WithSchema(controlPlaneServiceGetNatsClusterMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		listNatsClusters: connect.NewClient[v1.ListNatsClustersRequest, v1.ListNatsClustersResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceListNatsClustersProcedure,
+			connect.WithSchema(controlPlaneServiceListNatsClustersMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		deleteNatsCluster: connect.NewClient[v1.DeleteNatsClusterRequest, v1.DeleteNatsClusterResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceDeleteNatsClusterProcedure,
+			connect.WithSchema(controlPlaneServiceDeleteNatsClusterMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
 		stop: connect.NewClient[v1.StopRequest, v1.StopResponse](
@@ -290,7 +345,12 @@ type controlPlaneServiceClient struct {
 	getMachine             *connect.Client[v1.GetMachineRequest, v1.Machine]
 	deploy                 *connect.Client[v1.DeployRequest, v1.DeployResponse]
 	setDeployment          *connect.Client[v1.SetDeploymentRequest, v1.SetDeploymentResponse]
+	applyAssignment        *connect.Client[v1.ApplyAssignmentRequest, v1.ApplyAssignmentResponse]
 	rollback               *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
+	applyNatsCluster       *connect.Client[v1.ApplyNatsClusterRequest, v1.ApplyNatsClusterResponse]
+	getNatsCluster         *connect.Client[v1.GetNatsClusterRequest, v1.NatsCluster]
+	listNatsClusters       *connect.Client[v1.ListNatsClustersRequest, v1.ListNatsClustersResponse]
+	deleteNatsCluster      *connect.Client[v1.DeleteNatsClusterRequest, v1.DeleteNatsClusterResponse]
 	stop                   *connect.Client[v1.StopRequest, v1.StopResponse]
 	start                  *connect.Client[v1.StartRequest, v1.StartResponse]
 	undeploy               *connect.Client[v1.UndeployRequest, v1.UndeployResponse]
@@ -328,9 +388,34 @@ func (c *controlPlaneServiceClient) SetDeployment(ctx context.Context, req *conn
 	return c.setDeployment.CallUnary(ctx, req)
 }
 
+// ApplyAssignment calls strategyplatform.v1.ControlPlaneService.ApplyAssignment.
+func (c *controlPlaneServiceClient) ApplyAssignment(ctx context.Context, req *connect.Request[v1.ApplyAssignmentRequest]) (*connect.Response[v1.ApplyAssignmentResponse], error) {
+	return c.applyAssignment.CallUnary(ctx, req)
+}
+
 // Rollback calls strategyplatform.v1.ControlPlaneService.Rollback.
 func (c *controlPlaneServiceClient) Rollback(ctx context.Context, req *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error) {
 	return c.rollback.CallUnary(ctx, req)
+}
+
+// ApplyNatsCluster calls strategyplatform.v1.ControlPlaneService.ApplyNatsCluster.
+func (c *controlPlaneServiceClient) ApplyNatsCluster(ctx context.Context, req *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error) {
+	return c.applyNatsCluster.CallUnary(ctx, req)
+}
+
+// GetNatsCluster calls strategyplatform.v1.ControlPlaneService.GetNatsCluster.
+func (c *controlPlaneServiceClient) GetNatsCluster(ctx context.Context, req *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error) {
+	return c.getNatsCluster.CallUnary(ctx, req)
+}
+
+// ListNatsClusters calls strategyplatform.v1.ControlPlaneService.ListNatsClusters.
+func (c *controlPlaneServiceClient) ListNatsClusters(ctx context.Context, req *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error) {
+	return c.listNatsClusters.CallUnary(ctx, req)
+}
+
+// DeleteNatsCluster calls strategyplatform.v1.ControlPlaneService.DeleteNatsCluster.
+func (c *controlPlaneServiceClient) DeleteNatsCluster(ctx context.Context, req *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error) {
+	return c.deleteNatsCluster.CallUnary(ctx, req)
 }
 
 // Stop calls strategyplatform.v1.ControlPlaneService.Stop.
@@ -415,7 +500,12 @@ type ControlPlaneServiceHandler interface {
 	GetMachine(context.Context, *connect.Request[v1.GetMachineRequest]) (*connect.Response[v1.Machine], error)
 	Deploy(context.Context, *connect.Request[v1.DeployRequest]) (*connect.Response[v1.DeployResponse], error)
 	SetDeployment(context.Context, *connect.Request[v1.SetDeploymentRequest]) (*connect.Response[v1.SetDeploymentResponse], error)
+	ApplyAssignment(context.Context, *connect.Request[v1.ApplyAssignmentRequest]) (*connect.Response[v1.ApplyAssignmentResponse], error)
 	Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error)
+	ApplyNatsCluster(context.Context, *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error)
+	GetNatsCluster(context.Context, *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error)
+	ListNatsClusters(context.Context, *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error)
+	DeleteNatsCluster(context.Context, *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
@@ -470,10 +560,40 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceSetDeploymentMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceApplyAssignmentHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceApplyAssignmentProcedure,
+		svc.ApplyAssignment,
+		connect.WithSchema(controlPlaneServiceApplyAssignmentMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	controlPlaneServiceRollbackHandler := connect.NewUnaryHandler(
 		ControlPlaneServiceRollbackProcedure,
 		svc.Rollback,
 		connect.WithSchema(controlPlaneServiceRollbackMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceApplyNatsClusterHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceApplyNatsClusterProcedure,
+		svc.ApplyNatsCluster,
+		connect.WithSchema(controlPlaneServiceApplyNatsClusterMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceGetNatsClusterHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceGetNatsClusterProcedure,
+		svc.GetNatsCluster,
+		connect.WithSchema(controlPlaneServiceGetNatsClusterMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceListNatsClustersHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceListNatsClustersProcedure,
+		svc.ListNatsClusters,
+		connect.WithSchema(controlPlaneServiceListNatsClustersMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceDeleteNatsClusterHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceDeleteNatsClusterProcedure,
+		svc.DeleteNatsCluster,
+		connect.WithSchema(controlPlaneServiceDeleteNatsClusterMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	controlPlaneServiceStopHandler := connect.NewUnaryHandler(
@@ -576,8 +696,18 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceDeployHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceSetDeploymentProcedure:
 			controlPlaneServiceSetDeploymentHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceApplyAssignmentProcedure:
+			controlPlaneServiceApplyAssignmentHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceRollbackProcedure:
 			controlPlaneServiceRollbackHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceApplyNatsClusterProcedure:
+			controlPlaneServiceApplyNatsClusterHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceGetNatsClusterProcedure:
+			controlPlaneServiceGetNatsClusterHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceListNatsClustersProcedure:
+			controlPlaneServiceListNatsClustersHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceDeleteNatsClusterProcedure:
+			controlPlaneServiceDeleteNatsClusterHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceStopProcedure:
 			controlPlaneServiceStopHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceStartProcedure:
@@ -633,8 +763,28 @@ func (UnimplementedControlPlaneServiceHandler) SetDeployment(context.Context, *c
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.SetDeployment is not implemented"))
 }
 
+func (UnimplementedControlPlaneServiceHandler) ApplyAssignment(context.Context, *connect.Request[v1.ApplyAssignmentRequest]) (*connect.Response[v1.ApplyAssignmentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ApplyAssignment is not implemented"))
+}
+
 func (UnimplementedControlPlaneServiceHandler) Rollback(context.Context, *connect.Request[v1.RollbackRequest]) (*connect.Response[v1.RollbackResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.Rollback is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ApplyNatsCluster(context.Context, *connect.Request[v1.ApplyNatsClusterRequest]) (*connect.Response[v1.ApplyNatsClusterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ApplyNatsCluster is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) GetNatsCluster(context.Context, *connect.Request[v1.GetNatsClusterRequest]) (*connect.Response[v1.NatsCluster], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.GetNatsCluster is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ListNatsClusters(context.Context, *connect.Request[v1.ListNatsClustersRequest]) (*connect.Response[v1.ListNatsClustersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListNatsClusters is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) DeleteNatsCluster(context.Context, *connect.Request[v1.DeleteNatsClusterRequest]) (*connect.Response[v1.DeleteNatsClusterResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.DeleteNatsCluster is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error) {

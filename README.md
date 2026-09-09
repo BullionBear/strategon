@@ -140,6 +140,22 @@ Requirements and limits:
   writable overlay. Old releases are GC'd (`--release-retention`, default 3);
   `Rollback` to a GC'd `target_version` re-downloads.
 
+## Declarative NATS cluster
+
+`strategon apply -f` sends a `NatsCluster` document to `ApplyNatsCluster`. The
+control plane stores the object only; a rolling controller writes member
+assignments. See [examples/nats/](examples/nats/) for `cluster.yaml`, a
+`nats.conf` without `routes:` (peers go on `--routes`), and register steps.
+
+```bash
+go run ./cmd/strategon apply -f examples/nats/cluster.yaml
+go run ./cmd/strategon wait natscluster trading --for=ready
+```
+
+Safe production rolls need the assignment readiness probe (the controller sets
+`http://127.0.0.1:<monitorPort>/healthz`). `routeHost` must be an address the
+other members can actually dial.
+
 ## Status
 
 Under active development. APIs, storage, and ops paths will keep changing.

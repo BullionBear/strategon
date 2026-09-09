@@ -49,6 +49,7 @@ build:
 	mkdir -p bin
 	go build -ldflags "$(LDFLAGS)" -o bin/controlplane ./cmd/controlplane
 	go build -ldflags "$(LDFLAGS)" -o bin/agent ./cmd/agent
+	go build -ldflags "$(LDFLAGS)" -o bin/strategon ./cmd/strategon
 
 ## test: run the full Go test suite
 test:

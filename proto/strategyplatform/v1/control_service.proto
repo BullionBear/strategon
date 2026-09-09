@@ -8,6 +8,8 @@ import "google/protobuf/timestamp.proto";
 import "strategyplatform/v1/agent_service.proto";
 import "strategyplatform/v1/common.proto";
 import "strategyplatform/v1/enrollment.proto";
+import "strategyplatform/v1/nats.proto";
+import "strategyplatform/v1/spec.proto";
 import "strategyplatform/v1/status.proto";
 import "strategyplatform/v1/telemetry.proto";
 
@@ -107,6 +109,31 @@ message SetDeploymentRequest {
 
 message SetDeploymentResponse {
   int64 generation = 1; // new deployment generation, for convergence tracking
+}
+
+// ApplyAssignment upserts a full desired assignment (versions + runtime +
+// policy + schedules). Unlike SetDeployment this is not a partial merge:
+// omitted schedules mean empty schedules, omitted env means empty env.
+// stopped is taken from the document — a first apply may start the process
+// (stopped=false). Digest/uri are not client-supplied; the control plane
+// resolves artifact_version / config_version through the catalog.
+message ApplyAssignmentRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  string artifact_version = 3; // required; "latest" pins to a concrete version
+  string config_version = 4; // optional; empty keeps current config if any
+  bool stopped = 5;
+  DeployPolicy deploy_policy = 6;
+  repeated CronSchedule schedules = 7;
+  repeated string args = 8;
+  map<string, string> env = 9;
+  ResourceLimits limits = 10;
+  LeaseSpec lease = 11;
+  ReadinessProbe readiness = 12;
+}
+
+message ApplyAssignmentResponse {
+  int64 generation = 1;
 }
 
 message RollbackRequest {
@@ -331,7 +358,13 @@ service ControlPlaneService {
 
   rpc Deploy(DeployRequest) returns (DeployResponse);
   rpc SetDeployment(SetDeploymentRequest) returns (SetDeploymentResponse);
+  rpc ApplyAssignment(ApplyAssignmentRequest) returns (ApplyAssignmentResponse);
   rpc Rollback(RollbackRequest) returns (RollbackResponse);
+
+  rpc ApplyNatsCluster(ApplyNatsClusterRequest) returns (ApplyNatsClusterResponse);
+  rpc GetNatsCluster(GetNatsClusterRequest) returns (NatsCluster);
+  rpc ListNatsClusters(ListNatsClustersRequest) returns (ListNatsClustersResponse);
+  rpc DeleteNatsCluster(DeleteNatsClusterRequest) returns (DeleteNatsClusterResponse);
   rpc Stop(StopRequest) returns (StopResponse);
   rpc Start(StartRequest) returns (StartResponse);
   rpc Undeploy(UndeployRequest) returns (UndeployResponse);

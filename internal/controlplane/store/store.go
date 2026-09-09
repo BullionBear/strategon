@@ -79,9 +79,11 @@ type Store interface {
 	// DesiredState builds the current full DesiredState snapshot for a machine.
 	DesiredState(machineID string) (*pb.DesiredState, bool)
 
-	// SetAssignment sets (or, with nil spec, removes) a strategy assignment and
-	// bumps the machine generation. Returns the new generation.
-	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error)
+	// SetAssignment sets (or, with nil spec, removes) a strategy assignment.
+	// An identical spec (proto.Equal) is a no-op: generation is not bumped,
+	// PreviousArtifacts is untouched, and notify is not fired. Removing a
+	// missing assignment is also a no-op. Returns (generation, changed).
+	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (gen int64, changed bool, err error)
 
 	// SetSharedFiles replaces the full set of machine-level shared files.
 	// When the desired set is unchanged (same names → digests), it is a no-op:
@@ -174,4 +176,28 @@ type Store interface {
 	// TouchAPITokens batch-updates last_used for the given token ids.
 	// Best-effort telemetry; callers may lose unflushed updates on hard kill.
 	TouchAPITokens(ctx context.Context, lastUsed map[string]time.Time) error
+
+	// ApplyNatsCluster upserts a cluster object. The caller supplies a fully
+	// populated metadata+spec; the store assigns uid/created_at on create and
+	// increments generation only when spec changes. Labels-only updates do
+	// not bump generation. Returns the persisted object and whether it changed.
+	ApplyNatsCluster(cluster *pb.NatsCluster) (out *pb.NatsCluster, changed bool, err error)
+
+	// GetNatsCluster looks up a cluster by metadata.name.
+	GetNatsCluster(name string) (*pb.NatsCluster, bool)
+
+	// ListNatsClusters returns all clusters, name-sorted.
+	ListNatsClusters() []*pb.NatsCluster
+
+	// UpdateNatsClusterStatus writes controller-observed status.
+	UpdateNatsClusterStatus(name string, status *pb.NatsClusterStatus) error
+
+	// MarkNatsClusterDeleting sets status.deleting / phase=Deleting.
+	MarkNatsClusterDeleting(name string) (*pb.NatsCluster, error)
+
+	// DeleteNatsCluster removes the row (after the controller undeploys).
+	DeleteNatsCluster(name string) error
+
+	// ReservedBy reports the cluster that owns machineID+strategy, if any.
+	ReservedBy(machineID, strategy string) (cluster string, ok bool)
 }
