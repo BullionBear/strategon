@@ -248,6 +248,38 @@ func TestPostgresAPITokens(t *testing.T) {
 	}
 }
 
+func TestPostgresNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
+	assertConcurrentOverlapRejected(t, newTestPostgres(t, nil))
+}
+
+func TestPostgresNatsClusterReapplyAndGrowth(t *testing.T) {
+	assertReapplyAndGrowth(t, newTestPostgres(t, nil))
+}
+
+func TestPostgresNatsClusterStatusPreservesDeleting(t *testing.T) {
+	p := newTestPostgres(t, nil)
+	if _, err := applyCluster(p, "trading", clusterSpec("m1")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.MarkNatsClusterDeleting("trading"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+		Phase:              "Ready",
+		ObservedGeneration: 1,
+		Servers:            []*pb.NatsServerStatus{{Machine: "m1", Ready: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := p.GetNatsCluster("trading")
+	if !ok {
+		t.Fatal("missing cluster")
+	}
+	if !got.GetStatus().GetDeleting() || got.GetStatus().GetPhase() != "Deleting" {
+		t.Fatalf("status = %+v, want Deleting preserved", got.GetStatus())
+	}
+}
+
 func TestPostgresLeaseSurvivesReconnect(t *testing.T) {
 	dsn := os.Getenv("STRATEGON_TEST_DB")
 	p := newTestPostgres(t, nil)

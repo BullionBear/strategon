@@ -138,11 +138,26 @@ func TestMemoryNatsClusterStatusPreservesDeleting(t *testing.T) {
 	}
 }
 
+func clusterSpec(machines ...string) *pb.NatsClusterSpec {
+	out := &pb.NatsClusterSpec{Strategy: "nats"}
+	for _, m := range machines {
+		out.Servers = append(out.Servers, &pb.NatsServer{Machine: m, ServerName: m, RouteHost: "h"})
+	}
+	return out
+}
+
+func applyCluster(s Store, name string, spec *pb.NatsClusterSpec) (*pb.NatsCluster, error) {
+	out, _, err := s.ApplyNatsCluster(&pb.NatsCluster{
+		Metadata: &pb.ObjectMeta{Name: name}, Spec: spec,
+	})
+	return out, err
+}
+
 // Concurrent applies claiming the same machine must not both land: the store
 // re-checks ownership under its write lock, so exactly one wins no matter how
 // the API-layer admission checks interleave.
-func TestMemoryNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
-	s := NewMemory(nil)
+func assertConcurrentOverlapRejected(t *testing.T, s Store) {
+	t.Helper()
 	const n = 16
 	var wg sync.WaitGroup
 	errs := make([]error, n)
@@ -152,13 +167,7 @@ func TestMemoryNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			<-start
-			_, _, errs[i] = s.ApplyNatsCluster(&pb.NatsCluster{
-				Metadata: &pb.ObjectMeta{Name: fmt.Sprintf("c%02d", i)},
-				Spec: &pb.NatsClusterSpec{
-					Strategy: "nats",
-					Servers:  []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "h"}},
-				},
-			})
+			_, errs[i] = applyCluster(s, fmt.Sprintf("c%02d", i), clusterSpec("m1"))
 		}(i)
 	}
 	close(start)
@@ -190,39 +199,30 @@ func TestMemoryNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
 	}
 }
 
-// A cluster may still re-apply its own spec and grow onto free machines.
-func TestMemoryNatsClusterReapplyAndGrowth(t *testing.T) {
-	s := NewMemory(nil)
-	spec := func(machines ...string) *pb.NatsClusterSpec {
-		out := &pb.NatsClusterSpec{Strategy: "nats"}
-		for _, m := range machines {
-			out.Servers = append(out.Servers, &pb.NatsServer{Machine: m, ServerName: m, RouteHost: "h"})
-		}
-		return out
-	}
-	apply := func(name string, sp *pb.NatsClusterSpec) (*pb.NatsCluster, error) {
-		out, _, err := s.ApplyNatsCluster(&pb.NatsCluster{
-			Metadata: &pb.ObjectMeta{Name: name}, Spec: sp,
-		})
-		return out, err
-	}
-	if _, err := apply("trading", spec("m1")); err != nil {
+func assertReapplyAndGrowth(t *testing.T, s Store) {
+	t.Helper()
+	if _, err := applyCluster(s, "trading", clusterSpec("m1")); err != nil {
 		t.Fatal(err)
 	}
-	// Idempotent re-apply of an owned machine is not a self-conflict.
-	if _, err := apply("trading", spec("m1")); err != nil {
+	if _, err := applyCluster(s, "trading", clusterSpec("m1")); err != nil {
 		t.Fatalf("re-apply own spec: %v", err)
 	}
-	// Growing onto a free machine is allowed.
-	out, err := apply("trading", spec("m1", "m2"))
+	out, err := applyCluster(s, "trading", clusterSpec("m1", "m2"))
 	if err != nil {
 		t.Fatalf("grow: %v", err)
 	}
 	if out.GetMetadata().GetGeneration() != 2 {
 		t.Fatalf("generation = %d, want 2", out.GetMetadata().GetGeneration())
 	}
-	// A second cluster cannot take either machine.
-	if _, err := apply("other", spec("m2")); err == nil {
+	if _, err := applyCluster(s, "other", clusterSpec("m2")); err == nil {
 		t.Fatal("overlapping apply should fail")
 	}
+}
+
+func TestMemoryNatsClusterConcurrentApplyRejectsOverlap(t *testing.T) {
+	assertConcurrentOverlapRejected(t, NewMemory(nil))
+}
+
+func TestMemoryNatsClusterReapplyAndGrowth(t *testing.T) {
+	assertReapplyAndGrowth(t, NewMemory(nil))
 }
