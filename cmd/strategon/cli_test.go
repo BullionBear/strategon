@@ -207,6 +207,52 @@ func TestWaitTimeoutAndFailed(t *testing.T) {
 	}
 }
 
+func TestWaitStaleReadyDoesNotSucceed(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	seedNATSExample(t, client, st)
+	ctx := context.Background()
+	if _, err := applyFile(ctx, client, exampleClusterYAML(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+		Phase:              "Ready",
+		ObservedGeneration: 0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	old := waitPoll
+	waitPoll = 10 * time.Millisecond
+	t.Cleanup(func() { waitPoll = old })
+	err := waitNatsCluster(ctx, client, "trading", "ready", 40*time.Millisecond)
+	if err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("stale Ready must time out, got %v", err)
+	}
+}
+
+func TestWaitDegradedFailsFast(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	seedNATSExample(t, client, st)
+	ctx := context.Background()
+	if _, err := applyFile(ctx, client, exampleClusterYAML(t)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+		Phase:   "Degraded",
+		Message: "waitReadySeconds elapsed",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	old := waitPoll
+	waitPoll = 10 * time.Millisecond
+	t.Cleanup(func() { waitPoll = old })
+	err := waitNatsCluster(ctx, client, "trading", "ready", time.Second)
+	if err == nil || !strings.Contains(err.Error(), "Degraded") {
+		t.Fatalf("want Degraded, got %v", err)
+	}
+}
+
 func TestPeelLeadingGlobals(t *testing.T) {
 	t.Setenv("STRATEGON_ADDR", "")
 	t.Setenv("STRATEGON_TOKEN", "")

@@ -33,11 +33,14 @@ func waitNatsCluster(ctx context.Context, client strategyplatformv1connect.Contr
 			phase := c.GetStatus().GetPhase()
 			switch phase {
 			case "Ready":
+				if c.GetStatus().GetObservedGeneration() < c.GetMetadata().GetGeneration() {
+					break
+				}
 				fmt.Printf("natscluster/%s is Ready (generation=%d observed=%d)\n",
 					name, c.GetMetadata().GetGeneration(), c.GetStatus().GetObservedGeneration())
 				return nil
-			case "Failed":
-				return fmt.Errorf("natscluster %q is Failed: %s", name, strings.TrimSpace(c.GetStatus().GetMessage()+" "+c.GetStatus().GetReason()))
+			case "Failed", "Degraded":
+				return fmt.Errorf("natscluster %q is %s: %s", name, phase, strings.TrimSpace(c.GetStatus().GetMessage()+" "+c.GetStatus().GetReason()))
 			case "Deleting":
 				return fmt.Errorf("natscluster %q is Deleting", name)
 			}
