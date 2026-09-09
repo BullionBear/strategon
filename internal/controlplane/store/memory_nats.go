@@ -101,7 +101,7 @@ func (m *Memory) UpdateNatsClusterStatus(name string, status *pb.NatsClusterStat
 		m.mu.Unlock()
 		return fmt.Errorf("update nats cluster status: %q not found", name)
 	}
-	cur.Status = proto.Clone(status).(*pb.NatsClusterStatus)
+	cur.Status = preserveDeleting(cur.Status, status)
 	m.mu.Unlock()
 	m.notifyClusters()
 	return nil
@@ -159,6 +159,24 @@ func reservedByLocked(clusters map[string]*pb.NatsCluster, machineID, strategy s
 		}
 	}
 	return "", false
+}
+
+// preserveDeleting keeps a concurrent MarkNatsClusterDeleting from being
+// overwritten by a controller status write that omitted the flag.
+func preserveDeleting(cur, incoming *pb.NatsClusterStatus) *pb.NatsClusterStatus {
+	var next *pb.NatsClusterStatus
+	if incoming != nil {
+		next = proto.Clone(incoming).(*pb.NatsClusterStatus)
+	} else {
+		next = &pb.NatsClusterStatus{}
+	}
+	if cur != nil && cur.GetDeleting() {
+		next.Deleting = true
+		if next.Phase != "Deleting" {
+			next.Phase = "Deleting"
+		}
+	}
+	return next
 }
 
 // ClusterStrategy returns the owned strategy name (default nats).

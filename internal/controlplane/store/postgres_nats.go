@@ -31,7 +31,7 @@ func (p *Postgres) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, b
 	var out *pb.NatsCluster
 	var changed bool
 	err := p.inTx(ctx, func(tx pgx.Tx) error {
-		cur, err := loadNatsCluster(ctx, tx, name)
+		cur, err := loadNatsCluster(ctx, tx, name, true)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
@@ -86,7 +86,7 @@ func (p *Postgres) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, b
 func (p *Postgres) GetNatsCluster(name string) (*pb.NatsCluster, bool) {
 	ctx, cancel := opCtx()
 	defer cancel()
-	c, err := loadNatsCluster(ctx, p.pool, name)
+	c, err := loadNatsCluster(ctx, p.pool, name, false)
 	if err != nil {
 		return nil, false
 	}
@@ -107,7 +107,7 @@ func (p *Postgres) ListNatsClusters() []*pb.NatsCluster {
 		if err := rows.Scan(&n); err != nil {
 			return nil
 		}
-		c, err := loadNatsCluster(ctx, p.pool, n)
+		c, err := loadNatsCluster(ctx, p.pool, n, false)
 		if err == nil {
 			out = append(out, c)
 		}
@@ -118,12 +118,23 @@ func (p *Postgres) ListNatsClusters() []*pb.NatsCluster {
 func (p *Postgres) UpdateNatsClusterStatus(name string, status *pb.NatsClusterStatus) error {
 	ctx, cancel := opCtx()
 	defer cancel()
-	cur, err := loadNatsCluster(ctx, p.pool, name)
+	err := p.inTx(ctx, func(tx pgx.Tx) error {
+		cur, err := loadNatsCluster(ctx, tx, name, true)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return fmt.Errorf("update nats cluster status: %q not found", name)
+			}
+			return err
+		}
+		next := preserveDeleting(cur.Status, status)
+		statusBytes, err := proto.Marshal(next)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `UPDATE nats_clusters SET status=$2 WHERE name=$1`, name, statusBytes)
+		return err
+	})
 	if err != nil {
-		return fmt.Errorf("update nats cluster status: %q not found", name)
-	}
-	cur.Status = proto.Clone(status).(*pb.NatsClusterStatus)
-	if err := upsertNatsCluster(ctx, p.pool, cur); err != nil {
 		return err
 	}
 	p.notifyClusters()
@@ -133,7 +144,7 @@ func (p *Postgres) UpdateNatsClusterStatus(name string, status *pb.NatsClusterSt
 func (p *Postgres) MarkNatsClusterDeleting(name string) (*pb.NatsCluster, error) {
 	ctx, cancel := opCtx()
 	defer cancel()
-	cur, err := loadNatsCluster(ctx, p.pool, name)
+	cur, err := loadNatsCluster(ctx, p.pool, name, false)
 	if err != nil {
 		return nil, fmt.Errorf("delete nats cluster: %q not found", name)
 	}
@@ -207,13 +218,16 @@ func upsertNatsCluster(ctx context.Context, q querier, c *pb.NatsCluster) error 
 	return err
 }
 
-func loadNatsCluster(ctx context.Context, q querier, name string) (*pb.NatsCluster, error) {
+func loadNatsCluster(ctx context.Context, q querier, name string, forUpdate bool) (*pb.NatsCluster, error) {
 	var uid string
 	var gen int64
 	var created time.Time
 	var specBytes, statusBytes, labelBytes []byte
-	err := q.QueryRow(ctx, `SELECT uid, generation, created_at, spec, status, labels FROM nats_clusters WHERE name=$1`,
-		name).Scan(&uid, &gen, &created, &specBytes, &statusBytes, &labelBytes)
+	qstr := `SELECT uid, generation, created_at, spec, status, labels FROM nats_clusters WHERE name=$1`
+	if forUpdate {
+		qstr += ` FOR UPDATE`
+	}
+	err := q.QueryRow(ctx, qstr, name).Scan(&uid, &gen, &created, &specBytes, &statusBytes, &labelBytes)
 	if err != nil {
 		return nil, err
 	}

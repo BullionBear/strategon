@@ -104,3 +104,33 @@ func TestMemoryNatsClusterReservation(t *testing.T) {
 		t.Fatal("deleted cluster still present")
 	}
 }
+
+func TestMemoryNatsClusterStatusPreservesDeleting(t *testing.T) {
+	s := NewMemory(nil)
+	if _, _, err := s.ApplyNatsCluster(&pb.NatsCluster{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.NatsClusterSpec{
+			Strategy: "nats",
+			Servers:  []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "h"}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MarkNatsClusterDeleting("trading"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateNatsClusterStatus("trading", &pb.NatsClusterStatus{
+		Phase:              "Ready",
+		ObservedGeneration: 1,
+		Servers:            []*pb.NatsServerStatus{{Machine: "m1", Ready: true}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := s.GetNatsCluster("trading")
+	if !ok {
+		t.Fatal("missing cluster")
+	}
+	if !got.GetStatus().GetDeleting() || got.GetStatus().GetPhase() != "Deleting" {
+		t.Fatalf("status = %+v, want Deleting preserved", got.GetStatus())
+	}
+}
