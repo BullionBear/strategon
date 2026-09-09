@@ -123,6 +123,31 @@ func TestProbeSuccessMarksHealthy(t *testing.T) {
 	}
 }
 
+func TestHealthyProbeFailureDemotesReady(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, _, _, _ := newTestReconciler(t, t0)
+	r.deps.Health = staticHealth{res: health.Result{Status: pb.ConditionStatus_CONDITION_STATUS_FALSE, Reason: "Unreachable"}}
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{HealthWindowSeconds: 30})
+	spec.Readiness = &pb.ReadinessProbe{Endpoint: "http://127.0.0.1:8222/healthz"}
+	r.desired = map[string]*pb.StrategyAssignmentSpec{spec.GetStrategy(): spec}
+	st := newStrategyState(spec.GetStrategy())
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = spec.GetArtifact()
+	st.proc = mustStart(t, fd)
+	r.setCondition(st, conditionReady, pb.ConditionStatus_CONDITION_STATUS_TRUE, "Healthy", "")
+	r.actual[spec.GetStrategy()] = st
+
+	r.tick(t0)
+	time.Sleep(20 * time.Millisecond)
+	drainHealth(r)
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+		t.Fatalf("phase=%v, want HEALTHY", st.phase)
+	}
+	if readyCond(st) != pb.ConditionStatus_CONDITION_STATUS_FALSE {
+		t.Fatalf("Ready=%v, want FALSE", readyCond(st))
+	}
+}
+
 func TestNoProbeTimeoutStillHealthy(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 	r, fd, _, _, _ := newTestReconciler(t, t0)

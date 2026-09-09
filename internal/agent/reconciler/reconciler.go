@@ -701,7 +701,17 @@ func (r *Reconciler) launchIsOCI(st *strategyState) bool {
 // wakeups are handled by reconcile() running after every tick.
 func (r *Reconciler) tick(now time.Time) {
 	for _, st := range r.actual {
-		if st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING || st.proc == nil {
+		if st.proc == nil {
+			continue
+		}
+		spec := r.desired[st.strategy]
+		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
+			if hasReadinessProbe(spec) {
+				r.probeReadiness(st)
+			}
+			continue
+		}
+		if st.phase != pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING {
 			continue
 		}
 		if now.After(st.healthDeadline) {
