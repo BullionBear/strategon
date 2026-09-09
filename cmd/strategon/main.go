@@ -28,7 +28,31 @@ func isUsage(err error) bool {
 	return ok
 }
 
+func peelLeadingGlobals(args []string) []string {
+	out := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--addr" && i+1 < len(args):
+			os.Setenv("STRATEGON_ADDR", args[i+1])
+			i++
+		case strings.HasPrefix(a, "--addr="):
+			os.Setenv("STRATEGON_ADDR", strings.TrimPrefix(a, "--addr="))
+		case a == "--token" && i+1 < len(args):
+			os.Setenv("STRATEGON_TOKEN", args[i+1])
+			i++
+		case strings.HasPrefix(a, "--token="):
+			os.Setenv("STRATEGON_TOKEN", strings.TrimPrefix(a, "--token="))
+		default:
+			out = append(out, args[i:]...)
+			return out
+		}
+	}
+	return out
+}
+
 func run(args []string) error {
+	args = peelLeadingGlobals(args)
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
 		fmt.Fprint(os.Stderr, usageText)
 		if len(args) == 0 {

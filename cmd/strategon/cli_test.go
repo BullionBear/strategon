@@ -207,6 +207,18 @@ func TestWaitTimeoutAndFailed(t *testing.T) {
 	}
 }
 
+func TestPeelLeadingGlobals(t *testing.T) {
+	t.Setenv("STRATEGON_ADDR", "")
+	t.Setenv("STRATEGON_TOKEN", "")
+	rest := peelLeadingGlobals([]string{"--addr", "http://example:8081", "--token", "t", "apply", "-f", "x.yaml"})
+	if strings.Join(rest, " ") != "apply -f x.yaml" {
+		t.Fatalf("rest = %v", rest)
+	}
+	if os.Getenv("STRATEGON_ADDR") != "http://example:8081" || os.Getenv("STRATEGON_TOKEN") != "t" {
+		t.Fatalf("env addr=%s token=%s", os.Getenv("STRATEGON_ADDR"), os.Getenv("STRATEGON_TOKEN"))
+	}
+}
+
 func TestRunUnknownCommandAndKind(t *testing.T) {
 	if err := run([]string{"explode"}); err == nil || !isUsage(err) {
 		t.Fatalf("unknown command: %v", err)
