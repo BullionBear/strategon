@@ -1,7 +1,13 @@
 # Epic: Declarative deploy and cluster orchestration
 
-Status: proposed
+Status: implemented — E1–E7 landed in #39 and #40
 Depends on: [Architecture](ARCHITECTURE.md)
+
+This document is kept as the design record. It states the contract and the
+reasoning behind it; the **Ticket split** below is history now, and the
+acceptance checklists describe tests that exist rather than work to do. Where
+the shipped code and this document disagree, the code is right — see
+[What shipped differently](#what-shipped-differently).
 
 Strategon already reconciles **per-machine desired assignments**. This epic
 adds a Kubernetes-style **human apply surface** and a **control-plane
@@ -845,6 +851,40 @@ Each issue should link this epic and paste the **Acceptance** checklist
 from the matching section.
 
 ---
+
+## What shipped differently
+
+Three things changed between this document and the merged implementation.
+They are recorded here because each was a design assumption that turned out to
+be wrong under contact with the code or with a real `nats-server`.
+
+**`NatsCluster` became the generic `AssignmentSet`.** The first draft made a
+NATS cluster a first-class object. See the revision note at the top: of the
+lines carrying the NATS name, almost none were about NATS. NATS is now a
+manifest in `examples/nats/`.
+
+**The peer list moved from `env` to `args`, and nothing is dropped.** NATS
+cannot expand `$VAR` into a config array, so routes ride on `--routes`. An
+earlier revision dropped an empty `${peers}` value together with the bare flag
+before it, so a single-member set would not pass a flag with no value. That
+inferred a flag/value pairing the manifest never declares — it ate standalone
+flags — and it solved a problem that does not exist: `nats-server` 2.10.29
+starts cleanly with `--routes ""`, keeping cluster mode and listening for route
+connections. Args now render in place.
+
+**Ownership is enforced in the store, not only at admission.** E3 described a
+reservation check on apply. That check is a separate read from the write, so
+two concurrent applies could both pass it and both land, leaving two
+controllers rewriting one machine's assignment every tick. The authoritative
+check now runs inside `ApplyAssignmentSet` under the memory store's lock and,
+for Postgres, inside the apply transaction behind `pg_advisory_xact_lock` —
+row locks cannot guard it, because the conflicting set may not exist yet and
+`FOR UPDATE` does not block a concurrent `INSERT`.
+
+Still unverified: no three-node cluster has been run end to end. Everything
+here is covered by unit tests, fake agents, and a Postgres container; the only
+contact with a real `nats-server` was checking its flag behaviour.
+
 
 ## Risks
 
