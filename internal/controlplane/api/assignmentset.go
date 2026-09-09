@@ -8,31 +8,32 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/auth"
+	"github.com/bullionbear/strategon/internal/controlplane/assignmentset"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"google.golang.org/protobuf/proto"
 )
 
-func (s *Server) ApplyNatsCluster(ctx context.Context, req *connect.Request[pb.ApplyNatsClusterRequest]) (*connect.Response[pb.ApplyNatsClusterResponse], error) {
-	in := req.Msg.GetCluster()
+func (s *Server) ApplyAssignmentSet(ctx context.Context, req *connect.Request[pb.ApplyAssignmentSetRequest]) (*connect.Response[pb.ApplyAssignmentSetResponse], error) {
+	in := req.Msg.GetSet()
 	if in == nil || in.GetMetadata().GetName() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("cluster metadata.name is required"))
 	}
 	if in.GetSpec() == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("cluster spec is required"))
 	}
-	spec, err := s.normalizeAndValidateClusterSpec(in.GetSpec())
+	spec, err := s.normalizeAndValidateSetSpec(in.GetMetadata().GetName(), in.GetSpec())
 	if err != nil {
 		return nil, err
 	}
-	strategy := store.ClusterStrategy(&pb.NatsCluster{Spec: spec})
-	if err := s.rejectUnownedStrategy(in.GetMetadata().GetName(), strategy, spec.GetServers()); err != nil {
+	strategy := store.SetStrategy(&pb.AssignmentSet{Spec: spec})
+	if err := s.rejectUnownedStrategy(in.GetMetadata().GetName(), strategy, spec.GetMembers()); err != nil {
 		return nil, err
 	}
-	next := &pb.NatsCluster{
+	next := &pb.AssignmentSet{
 		Metadata: in.GetMetadata(),
 		Spec:     spec,
 	}
-	out, _, err := s.store.ApplyNatsCluster(next)
+	out, _, err := s.store.ApplyAssignmentSet(next)
 	if err != nil {
 		// The store re-checks ownership under its write lock, so a race that
 		// slipped past rejectUnownedStrategy surfaces here as the same class of
@@ -45,63 +46,63 @@ func (s *Server) ApplyNatsCluster(ctx context.Context, req *connect.Request[pb.A
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{
 		Actor:    auth.ActorFromContext(ctx),
-		Action:   "ApplyNatsCluster",
+		Action:   "ApplyAssignmentSet",
 		Strategy: strategy,
 		Detail:   out.GetMetadata().GetName(),
 	})
 	s.logger.Info("apply_nats_cluster", "name", out.GetMetadata().GetName(),
 		"generation", out.GetMetadata().GetGeneration(), "actor", auth.ActorFromContext(ctx))
-	return connect.NewResponse(&pb.ApplyNatsClusterResponse{Cluster: out}), nil
+	return connect.NewResponse(&pb.ApplyAssignmentSetResponse{Set: out}), nil
 }
 
-func (s *Server) GetNatsCluster(_ context.Context, req *connect.Request[pb.GetNatsClusterRequest]) (*connect.Response[pb.NatsCluster], error) {
+func (s *Server) GetAssignmentSet(_ context.Context, req *connect.Request[pb.GetAssignmentSetRequest]) (*connect.Response[pb.AssignmentSet], error) {
 	name := req.Msg.GetName()
 	if name == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
 	}
-	c, ok := s.store.GetNatsCluster(name)
+	c, ok := s.store.GetAssignmentSet(name)
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("nats cluster %q not found", name))
 	}
 	return connect.NewResponse(c), nil
 }
 
-func (s *Server) ListNatsClusters(_ context.Context, _ *connect.Request[pb.ListNatsClustersRequest]) (*connect.Response[pb.ListNatsClustersResponse], error) {
-	return connect.NewResponse(&pb.ListNatsClustersResponse{Clusters: s.store.ListNatsClusters()}), nil
+func (s *Server) ListAssignmentSets(_ context.Context, _ *connect.Request[pb.ListAssignmentSetsRequest]) (*connect.Response[pb.ListAssignmentSetsResponse], error) {
+	return connect.NewResponse(&pb.ListAssignmentSetsResponse{Sets: s.store.ListAssignmentSets()}), nil
 }
 
-func (s *Server) DeleteNatsCluster(ctx context.Context, req *connect.Request[pb.DeleteNatsClusterRequest]) (*connect.Response[pb.DeleteNatsClusterResponse], error) {
+func (s *Server) DeleteAssignmentSet(ctx context.Context, req *connect.Request[pb.DeleteAssignmentSetRequest]) (*connect.Response[pb.DeleteAssignmentSetResponse], error) {
 	name := req.Msg.GetName()
 	if name == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
 	}
-	if _, ok := s.store.GetNatsCluster(name); !ok {
+	if _, ok := s.store.GetAssignmentSet(name); !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("nats cluster %q not found", name))
 	}
-	if _, err := s.store.MarkNatsClusterDeleting(name); err != nil {
+	if _, err := s.store.MarkAssignmentSetDeleting(name); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{
 		Actor:  auth.ActorFromContext(ctx),
-		Action: "DeleteNatsCluster",
+		Action: "DeleteAssignmentSet",
 		Detail: name,
 	})
-	return connect.NewResponse(&pb.DeleteNatsClusterResponse{}), nil
+	return connect.NewResponse(&pb.DeleteAssignmentSetResponse{}), nil
 }
 
-func (s *Server) normalizeAndValidateClusterSpec(in *pb.NatsClusterSpec) (*pb.NatsClusterSpec, error) {
-	spec := proto.Clone(in).(*pb.NatsClusterSpec)
+func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSpec) (*pb.AssignmentSetSpec, error) {
+	spec := proto.Clone(in).(*pb.AssignmentSetSpec)
 	if spec.Strategy == "" {
-		spec.Strategy = "nats"
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("spec.strategy is required"))
 	}
 	if spec.GetArtifactVersion() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("artifact_version is required"))
 	}
-	if len(spec.GetServers()) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("servers must not be empty"))
+	if len(spec.GetMembers()) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("members must not be empty"))
 	}
 	if spec.Update == nil {
-		spec.Update = &pb.NatsClusterUpdate{}
+		spec.Update = &pb.RollingUpdate{}
 	}
 	if spec.Update.MaxUnavailable < 1 {
 		if spec.Update.MaxUnavailable == 0 {
@@ -116,36 +117,33 @@ func (s *Server) normalizeAndValidateClusterSpec(in *pb.NatsClusterSpec) (*pb.Na
 
 	seenName := map[string]struct{}{}
 	seenMachine := map[string]struct{}{}
-	for i, srv := range spec.GetServers() {
+	for i, srv := range spec.GetMembers() {
 		if srv.GetMachine() == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("servers[%d]: machine is required", i))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: machine is required", i))
 		}
-		if srv.GetServerName() == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("servers[%d]: server_name is required", i))
-		}
-		if srv.GetRouteHost() == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("servers[%d]: route_host is required", i))
+		if srv.GetName() == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: name is required", i))
 		}
 		if _, ok := s.store.GetMachine(srv.GetMachine()); !ok {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("servers[%d]: machine %q not registered", i, srv.GetMachine()))
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: machine %q not registered", i, srv.GetMachine()))
 		}
-		if _, dup := seenName[srv.GetServerName()]; dup {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate server_name %q", srv.GetServerName()))
+		if _, dup := seenName[srv.GetName()]; dup {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate member name %q", srv.GetName()))
 		}
 		if _, dup := seenMachine[srv.GetMachine()]; dup {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate machine %q", srv.GetMachine()))
 		}
-		seenName[srv.GetServerName()] = struct{}{}
+		seenName[srv.GetName()] = struct{}{}
 		seenMachine[srv.GetMachine()] = struct{}{}
-		if srv.ClientPort <= 0 {
-			srv.ClientPort = 4222
-		}
-		if srv.ClusterPort <= 0 {
-			srv.ClusterPort = 6222
-		}
-		if srv.MonitorPort <= 0 {
-			srv.MonitorPort = 8222
-		}
+	}
+
+	// Render every member now so an unknown ${...} is rejected here rather than
+	// failing on the machine when the agent cannot expand it.
+	if err := assignmentset.Validate(&pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: name},
+		Spec:     spec,
+	}); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
 	art, err := s.resolveArtifact(spec.Strategy, spec.Strategy, spec.GetArtifactVersion())
@@ -165,7 +163,7 @@ func (s *Server) normalizeAndValidateClusterSpec(in *pb.NatsClusterSpec) (*pb.Na
 		}
 	}
 	if art.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
-		for _, srv := range spec.GetServers() {
+		for _, srv := range spec.GetMembers() {
 			rec, _ := s.store.GetMachine(srv.GetMachine())
 			if err := requireOCISupported(rec); err != nil {
 				return nil, err
@@ -175,12 +173,12 @@ func (s *Server) normalizeAndValidateClusterSpec(in *pb.NatsClusterSpec) (*pb.Na
 	return spec, nil
 }
 
-func (s *Server) rejectUnownedStrategy(clusterName, strategy string, servers []*pb.NatsServer) error {
+func (s *Server) rejectUnownedStrategy(clusterName, strategy string, servers []*pb.SetMember) error {
 	for _, srv := range servers {
 		owner, reserved := s.store.ReservedBy(srv.GetMachine(), strategy)
 		if reserved && owner != clusterName {
 			return connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("machine %q strategy %q is owned by NatsCluster %q", srv.GetMachine(), strategy, owner))
+				fmt.Errorf("machine %q strategy %q is owned by AssignmentSet %q", srv.GetMachine(), strategy, owner))
 		}
 		rec, ok := s.store.GetMachine(srv.GetMachine())
 		if !ok || rec.Assignments[strategy] == nil {

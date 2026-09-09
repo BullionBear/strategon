@@ -1,4 +1,4 @@
-// Package orchestrator reconciles NatsCluster objects into rolling
+// Package orchestrator reconciles AssignmentSet objects into rolling
 // per-machine assignments. It never talks to agents except through
 // assign.Service (the same write path as human verbs).
 package orchestrator
@@ -8,13 +8,12 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/controlplane/assign"
+	"github.com/bullionbear/strategon/internal/controlplane/assignmentset"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/controlplane/view"
 	"google.golang.org/protobuf/proto"
@@ -22,7 +21,7 @@ import (
 
 const defaultTick = 2 * time.Second
 
-// Controller is a level-triggered NatsCluster reconciler.
+// Controller is a level-triggered AssignmentSet reconciler.
 type Controller struct {
 	Store  store.Store
 	Assign *assign.Service
@@ -89,7 +88,7 @@ func (c *Controller) Run(ctx context.Context) {
 
 // ReconcileAll reconciles every stored cluster.
 func (c *Controller) ReconcileAll(ctx context.Context) {
-	for _, cl := range c.Store.ListNatsClusters() {
+	for _, cl := range c.Store.ListAssignmentSets() {
 		if err := c.Reconcile(ctx, cl); err != nil {
 			c.Logger.Warn("nats cluster reconcile", "cluster", cl.GetMetadata().GetName(), "err", err)
 		}
@@ -97,27 +96,27 @@ func (c *Controller) ReconcileAll(ctx context.Context) {
 }
 
 // Reconcile brings one cluster toward its spec.
-func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
+func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error {
 	if cl.GetStatus().GetDeleting() {
 		return c.reconcileDelete(ctx, cl)
 	}
-	strategy := store.ClusterStrategy(cl)
+	strategy := store.SetStrategy(cl)
 	art, cfg, err := resolveClusterArtifacts(c.Store, cl)
 	if err != nil {
-		return c.setStatus(cl, &pb.NatsClusterStatus{
+		return c.setStatus(cl, &pb.AssignmentSetStatus{
 			Phase:              "Failed",
 			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 			Reason:             "Artifact",
 			Message:            err.Error(),
-			Servers:            cl.GetStatus().GetServers(),
+			Members:            cl.GetStatus().GetMembers(),
 		})
 	}
 
-	servers := append([]*pb.NatsServer(nil), cl.GetSpec().GetServers()...)
+	servers := append([]*pb.SetMember(nil), cl.GetSpec().GetMembers()...)
 	sort.Slice(servers, func(i, j int) bool { return servers[i].GetMachine() < servers[j].GetMachine() })
 
 	type member struct {
-		srv      *pb.NatsServer
+		srv      *pb.SetMember
 		computed *pb.StrategyAssignmentSpec
 		view     *pb.StrategyView
 		live     *pb.StrategyAssignmentSpec
@@ -130,16 +129,19 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 	dropped := c.droppedMachines(cl)
 	undeployed, err := c.undeployMachines(ctx, cl, dropped, int(maxUnavail))
 	if err != nil {
-		return c.setAssignFailed(cl, cl.GetStatus().GetServers(), err)
+		return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 	}
 
 	members := make([]member, 0, len(servers))
 	var candidates []member
 	var inflight []member
-	serverStatus := make([]*pb.NatsServerStatus, 0, len(servers))
+	serverStatus := make([]*pb.MemberStatus, 0, len(servers))
 
-	for _, srv := range servers {
-		computed := computeAssignment(cl, srv, servers, art, cfg)
+	for i, srv := range servers {
+		computed, err := computeAssignment(cl, i, art, cfg)
+		if err != nil {
+			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
+		}
 		rec, ok := c.Store.GetMachine(srv.GetMachine())
 		if !ok {
 			rec = &store.MachineRecord{MachineID: srv.GetMachine(), Assignments: map[string]*pb.StrategyAssignmentSpec{}, Status: map[string]*pb.StrategyAssignmentStatus{}}
@@ -150,12 +152,12 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 		members = append(members, m)
 		ready := view.IsConverged(sv) && view.ReadyConditionTrue(sv)
 		match := live != nil && proto.Equal(live, computed)
-		serverStatus = append(serverStatus, &pb.NatsServerStatus{
-			Machine:    srv.GetMachine(),
-			ServerName: srv.GetServerName(),
-			Ready:      ready,
-			Phase:      sv.GetPhase().String(),
-			Converged:  sv.GetConverged(),
+		serverStatus = append(serverStatus, &pb.MemberStatus{
+			Machine:   srv.GetMachine(),
+			Name:      srv.GetName(),
+			Ready:     ready,
+			Phase:     sv.GetPhase().String(),
+			Converged: sv.GetConverged(),
 		})
 		if !match {
 			candidates = append(candidates, m)
@@ -168,10 +170,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 		c.clearDeadline(cl.GetMetadata().GetName(), srv.GetMachine())
 	}
 
-	waitSec := cl.GetSpec().GetUpdate().GetWaitReadySeconds()
-	if waitSec <= 0 {
-		waitSec = 60
-	}
+	waitSec := waitReadySeconds(cl)
 
 	now := c.Now()
 	stopReason := ""
@@ -198,12 +197,12 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 		}
 	}
 	if stopPhase != "" {
-		return c.setStatus(cl, &pb.NatsClusterStatus{
+		return c.setStatus(cl, &pb.AssignmentSetStatus{
 			Phase:              stopPhase,
 			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 			Reason:             "RollStopped",
 			Message:            stopReason,
-			Servers:            serverStatus,
+			Members:            serverStatus,
 		})
 	}
 
@@ -221,7 +220,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 			MachineID:             m.srv.GetMachine(),
 			Strategy:              strategy,
 			Spec:                  m.computed,
-			Action:                "NatsCluster",
+			Action:                "AssignmentSet",
 			Detail:                detail,
 			FromVersion:           m.live.GetArtifact().GetVersion(),
 			ToVersion:             m.computed.GetArtifact().GetVersion(),
@@ -249,14 +248,14 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 	} else if wrote == 0 && undeployed == 0 && len(inflight) == 0 && len(candidates) > 0 {
 		phase = "Pending"
 	}
-	return c.setStatus(cl, &pb.NatsClusterStatus{
+	return c.setStatus(cl, &pb.AssignmentSetStatus{
 		Phase:              phase,
 		ObservedGeneration: obs,
-		Servers:            serverStatus,
+		Members:            serverStatus,
 	})
 }
 
-func (c *Controller) reconcileDelete(ctx context.Context, cl *pb.NatsCluster) error {
+func (c *Controller) reconcileDelete(ctx context.Context, cl *pb.AssignmentSet) error {
 	maxUnavail := cl.GetSpec().GetUpdate().GetMaxUnavailable()
 	if maxUnavail < 1 {
 		maxUnavail = 1
@@ -264,33 +263,33 @@ func (c *Controller) reconcileDelete(ctx context.Context, cl *pb.NatsCluster) er
 	targets := c.assignedClusterMachines(cl)
 	removed, err := c.undeployMachines(ctx, cl, targets, int(maxUnavail))
 	if err != nil {
-		return c.setAssignFailed(cl, cl.GetStatus().GetServers(), err)
+		return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 	}
 	if len(targets) > removed {
-		return c.setStatus(cl, &pb.NatsClusterStatus{
+		return c.setStatus(cl, &pb.AssignmentSetStatus{
 			Phase:              "Deleting",
 			Deleting:           true,
 			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 			Reason:             "Undeploying",
-			Servers:            cl.GetStatus().GetServers(),
+			Members:            cl.GetStatus().GetMembers(),
 		})
 	}
 	c.pruneClusterDeadlines(cl.GetMetadata().GetName())
-	return c.Store.DeleteNatsCluster(cl.GetMetadata().GetName())
+	return c.Store.DeleteAssignmentSet(cl.GetMetadata().GetName())
 }
 
-func (c *Controller) setAssignFailed(cl *pb.NatsCluster, servers []*pb.NatsServerStatus, err error) error {
-	return c.setStatus(cl, &pb.NatsClusterStatus{
+func (c *Controller) setAssignFailed(cl *pb.AssignmentSet, servers []*pb.MemberStatus, err error) error {
+	return c.setStatus(cl, &pb.AssignmentSetStatus{
 		Phase:              "Failed",
 		ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 		Reason:             "AssignFailed",
 		Message:            err.Error(),
-		Servers:            servers,
+		Members:            servers,
 	})
 }
 
-func (c *Controller) undeployMachines(ctx context.Context, cl *pb.NatsCluster, machines []string, limit int) (int, error) {
-	strategy := store.ClusterStrategy(cl)
+func (c *Controller) undeployMachines(ctx context.Context, cl *pb.AssignmentSet, machines []string, limit int) (int, error) {
+	strategy := store.SetStrategy(cl)
 	removed := 0
 	for _, machine := range machines {
 		rec, ok := c.Store.GetMachine(machine)
@@ -305,7 +304,7 @@ func (c *Controller) undeployMachines(ctx context.Context, cl *pb.NatsCluster, m
 			MachineID:     machine,
 			Strategy:      strategy,
 			Spec:          nil,
-			Action:        "NatsClusterUndeploy",
+			Action:        "AssignmentSetUndeploy",
 			Detail:        cl.GetMetadata().GetName(),
 			AllowReserved: true,
 		}); err != nil {
@@ -317,7 +316,7 @@ func (c *Controller) undeployMachines(ctx context.Context, cl *pb.NatsCluster, m
 	return removed, nil
 }
 
-func (c *Controller) droppedMachines(cl *pb.NatsCluster) []string {
+func (c *Controller) droppedMachines(cl *pb.AssignmentSet) []string {
 	want := specMachines(cl)
 	var out []string
 	for _, id := range c.assignedClusterMachines(cl) {
@@ -328,8 +327,8 @@ func (c *Controller) droppedMachines(cl *pb.NatsCluster) []string {
 	return out
 }
 
-func (c *Controller) assignedClusterMachines(cl *pb.NatsCluster) []string {
-	strategy := store.ClusterStrategy(cl)
+func (c *Controller) assignedClusterMachines(cl *pb.AssignmentSet) []string {
+	strategy := store.SetStrategy(cl)
 	var out []string
 	for _, id := range c.ownedAssignmentMachines(cl) {
 		rec, ok := c.Store.GetMachine(id)
@@ -341,9 +340,10 @@ func (c *Controller) assignedClusterMachines(cl *pb.NatsCluster) []string {
 	return out
 }
 
-func (c *Controller) ownedAssignmentMachines(cl *pb.NatsCluster) []string {
-	strategy := store.ClusterStrategy(cl)
-	name := cl.GetMetadata().GetName()
+// ownedAssignmentMachines is every machine this set has written to: the current
+// spec plus whatever the last status recorded, so a member dropped from the
+// spec is still undeployed. Status is persisted, so this survives a restart.
+func (c *Controller) ownedAssignmentMachines(cl *pb.AssignmentSet) []string {
 	seen := map[string]struct{}{}
 	var out []string
 	add := func(id string) {
@@ -356,25 +356,19 @@ func (c *Controller) ownedAssignmentMachines(cl *pb.NatsCluster) []string {
 		seen[id] = struct{}{}
 		out = append(out, id)
 	}
-	for _, s := range cl.GetSpec().GetServers() {
+	for _, s := range cl.GetSpec().GetMembers() {
 		add(s.GetMachine())
 	}
-	for _, s := range cl.GetStatus().GetServers() {
+	for _, s := range cl.GetStatus().GetMembers() {
 		add(s.GetMachine())
-	}
-	for _, rec := range c.Store.ListMachines() {
-		spec := rec.Assignments[strategy]
-		if spec != nil && spec.GetEnv()["NATS_CLUSTER_NAME"] == name {
-			add(rec.MachineID)
-		}
 	}
 	sort.Strings(out)
 	return out
 }
 
-func specMachines(cl *pb.NatsCluster) map[string]struct{} {
+func specMachines(cl *pb.AssignmentSet) map[string]struct{} {
 	out := map[string]struct{}{}
-	for _, s := range cl.GetSpec().GetServers() {
+	for _, s := range cl.GetSpec().GetMembers() {
 		out[s.GetMachine()] = struct{}{}
 	}
 	return out
@@ -396,56 +390,39 @@ func (c *Controller) pruneClusterDeadlines(cluster string) {
 	c.mu.Unlock()
 }
 
-func (c *Controller) setStatus(cl *pb.NatsCluster, st *pb.NatsClusterStatus) error {
+func (c *Controller) setStatus(cl *pb.AssignmentSet, st *pb.AssignmentSetStatus) error {
 	if proto.Equal(cl.GetStatus(), st) {
 		return nil
 	}
-	return c.Store.UpdateNatsClusterStatus(cl.GetMetadata().GetName(), st)
+	return c.Store.UpdateAssignmentSetStatus(cl.GetMetadata().GetName(), st)
 }
 
-func computeAssignment(cl *pb.NatsCluster, self *pb.NatsServer, all []*pb.NatsServer, art, cfg *pb.ArtifactRef) *pb.StrategyAssignmentSpec {
-	var routes []string
-	for _, s := range all {
-		if s.GetMachine() == self.GetMachine() {
-			continue
-		}
-		routes = append(routes, fmt.Sprintf("nats://%s:%d", s.GetRouteHost(), natsPort(s.GetClusterPort(), 6222)))
+func computeAssignment(cl *pb.AssignmentSet, idx int, art, cfg *pb.ArtifactRef) (*pb.StrategyAssignmentSpec, error) {
+	rendered, err := assignmentset.Expand(cl, idx)
+	if err != nil {
+		return nil, err
 	}
-	sort.Strings(routes)
-	var args []string
-	if cfg != nil {
-		args = append(args, "-c", "${CONFIG}")
-	}
-	if len(routes) > 0 {
-		args = append(args, "--routes", strings.Join(routes, ","))
-	}
-	monitor := natsPort(self.GetMonitorPort(), 8222)
-	health := cl.GetSpec().GetUpdate().GetWaitReadySeconds()
-	if health <= 0 {
-		health = 60
-	}
+	tmpl := cl.GetSpec().GetTemplate()
 	spec := &pb.StrategyAssignmentSpec{
-		Strategy: store.ClusterStrategy(cl),
+		Strategy: store.SetStrategy(cl),
 		Artifact: proto.Clone(art).(*pb.ArtifactRef),
 		Stopped:  false,
-		Args:     args,
-		Env: map[string]string{
-			"NATS_SERVER_NAME":  self.GetServerName(),
-			"NATS_CLUSTER_NAME": cl.GetMetadata().GetName(),
-			"NATS_CLIENT_PORT":  strconv.Itoa(natsPort(self.GetClientPort(), 4222)),
-			"NATS_CLUSTER_PORT": strconv.Itoa(natsPort(self.GetClusterPort(), 6222)),
-			"NATS_MONITOR_PORT": strconv.Itoa(monitor),
-		},
-		DeployPolicy: &pb.DeployPolicy{
-			Startsecs:           2,
-			HealthWindowSeconds: health,
-			MaxCrashesInWindow:  3,
-			StopGraceSeconds:    10,
-			EnableAutoRollback:  true,
-		},
-		Readiness: &pb.ReadinessProbe{
-			Endpoint: fmt.Sprintf("http://127.0.0.1:%d/healthz", monitor),
-		},
+		Args:     rendered.Args,
+		Env:      rendered.Env,
+	}
+	if p := tmpl.GetDeployPolicy(); p != nil {
+		spec.DeployPolicy = proto.Clone(p).(*pb.DeployPolicy)
+	} else {
+		spec.DeployPolicy = defaultDeployPolicy(cl)
+	}
+	if spec.GetDeployPolicy().GetHealthWindowSeconds() <= 0 {
+		spec.DeployPolicy.HealthWindowSeconds = waitReadySeconds(cl)
+	}
+	if l := tmpl.GetLimits(); l != nil {
+		spec.Limits = proto.Clone(l).(*pb.ResourceLimits)
+	}
+	if rendered.Endpoint != "" {
+		spec.Readiness = &pb.ReadinessProbe{Endpoint: rendered.Endpoint}
 	}
 	if cfg != nil {
 		spec.Config = proto.Clone(cfg).(*pb.ArtifactRef)
@@ -455,18 +432,32 @@ func computeAssignment(cl *pb.NatsCluster, self *pb.NatsServer, all []*pb.NatsSe
 	} else {
 		spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_EXEC
 	}
-	return spec
+	return spec, nil
 }
 
-func natsPort(got, def int32) int {
-	if got <= 0 {
-		return int(def)
+// defaultDeployPolicy is used when the template omits one. Auto-rollback is on:
+// on a first roll there is no previous version, so the agent reports FAILED
+// (an honest terminal signal); on an upgrade the member returns on the previous
+// version instead of staying dead. Either way the roll stops.
+func defaultDeployPolicy(cl *pb.AssignmentSet) *pb.DeployPolicy {
+	return &pb.DeployPolicy{
+		Startsecs:           2,
+		HealthWindowSeconds: waitReadySeconds(cl),
+		MaxCrashesInWindow:  3,
+		StopGraceSeconds:    10,
+		EnableAutoRollback:  true,
 	}
-	return int(got)
 }
 
-func resolveClusterArtifacts(st store.Store, cl *pb.NatsCluster) (art, cfg *pb.ArtifactRef, err error) {
-	strategy := store.ClusterStrategy(cl)
+func waitReadySeconds(cl *pb.AssignmentSet) int32 {
+	if w := cl.GetSpec().GetUpdate().GetWaitReadySeconds(); w > 0 {
+		return w
+	}
+	return 60
+}
+
+func resolveClusterArtifacts(st store.Store, cl *pb.AssignmentSet) (art, cfg *pb.ArtifactRef, err error) {
+	strategy := store.SetStrategy(cl)
 	ver := cl.GetSpec().GetArtifactVersion()
 	art, ok := st.GetArtifact(strategy, ver)
 	if !ok {

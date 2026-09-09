@@ -63,7 +63,7 @@ func (s *Service) Apply(_ context.Context, req Request) (gen int64, changed bool
 	if !req.AllowReserved && s.Reservation != nil {
 		if cluster, ok := s.Reservation.ReservedBy(req.MachineID, req.Strategy); ok {
 			return 0, false, connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("strategy %q on machine %q is owned by NatsCluster %q", req.Strategy, req.MachineID, cluster))
+				fmt.Errorf("strategy %q on machine %q is owned by AssignmentSet %q", req.Strategy, req.MachineID, cluster))
 		}
 	}
 	if req.EnforceLeaseInterlock {

@@ -140,21 +140,39 @@ Requirements and limits:
   writable overlay. Old releases are GC'd (`--release-retention`, default 3);
   `Rollback` to a GC'd `target_version` re-downloads.
 
-## Declarative NATS cluster
+## Declarative multi-machine workloads
 
-`strategon apply -f` sends a `NatsCluster` document to `ApplyNatsCluster`. The
-control plane stores the object only; a rolling controller writes member
-assignments. See [examples/nats/](examples/nats/) for `cluster.yaml`, a
-`nats.conf` without `routes:` (peers go on `--routes`), and register steps.
+`strategon apply -f` sends an `AssignmentSet` document to `ApplyAssignmentSet`.
+The control plane stores the object only; a rolling controller writes one
+member assignment at a time (`maxUnavailable`), advancing only when the
+in-flight member is converged **and** Ready.
+
+An `AssignmentSet` is workload-agnostic. Per-member identity and any peer list
+come from a template the manifest supplies:
+
+```yaml
+template:
+  args: ["-c", "${CONFIG}", "--routes", "${peers}"]
+  env: { NATS_SERVER_NAME: "${member.name}" }
+  peers: { format: "nats://${peer.vars.route_host}:${peer.vars.cluster_port}" }
+members:
+  - { machine: m1, name: nats-m1, vars: { route_host: "10.0.0.1", cluster_port: "6222" } }
+```
+
+The control plane expands `${set.*}`, `${member.*}` and `${peers}`; `${CONFIG}`
+is left for the agent. An unknown placeholder is rejected at apply time.
+
+A NATS cluster is therefore a manifest, not a feature — see
+[examples/nats/](examples/nats/). Running something else with the same shape
+needs no server change.
 
 ```bash
 go run ./cmd/strategon apply -f examples/nats/cluster.yaml
-go run ./cmd/strategon wait natscluster trading --for=ready
+go run ./cmd/strategon wait assignmentset trading --for=ready
 ```
 
-Safe production rolls need the assignment readiness probe (the controller sets
-`http://127.0.0.1:<monitorPort>/healthz`). `routeHost` must be an address the
-other members can actually dial.
+Safe production rolls need the readiness probe the manifest sets; addresses in
+`vars` must be dialable by the other members.
 
 ## Status
 

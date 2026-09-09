@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package strategyplatform.v1;
+
+option go_package = "github.com/bullionbear/strategon/gen/strategyplatform/v1;strategyplatformv1";
+
+import "strategyplatform/v1/common.proto";
+import "strategyplatform/v1/spec.proto";
+
+// AssignmentSet places one assignment of a strategy on each of several
+// machines and rolls changes across them, at most max_unavailable at a time.
+//
+// The control plane knows nothing about what the members run. Per-member
+// identity and any peer list live in the template as placeholders, so a NATS
+// cluster, a sharded feed handler, or anything else that needs "N machines
+// that know about each other" is a manifest, not new server code.
+//
+// Apply persists spec only; a controller writes the per-machine assignments
+// over time.
+message AssignmentSet {
+  ObjectMeta metadata = 1;
+  AssignmentSetSpec spec = 2;
+  AssignmentSetStatus status = 3;
+}
+
+message AssignmentSetSpec {
+  // Strategy name this set owns on every member machine. The set is the sole
+  // writer of that name: human verbs are rejected on machines it owns.
+  string strategy = 1;
+  string artifact_version = 2;
+  string config_version = 3; // optional
+  MemberTemplate template = 4;
+  repeated SetMember members = 5;
+  RollingUpdate update = 6;
+}
+
+// MemberTemplate is shared by every member. Strings in args, env values, and
+// the readiness endpoint may contain placeholders the control plane expands
+// per member before writing the assignment:
+//
+//	${set.name}            the AssignmentSet's metadata.name
+//	${member.name}         this member's name
+//	${member.machine}      this member's machine id
+//	${member.vars.KEY}     this member's vars[KEY]
+//	${peers}               peers rendered and joined, see PeerList
+//
+// Agent-side placeholders (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) are left
+// untouched and expanded later by the agent. Any other ${...} is rejected at
+// apply time rather than surfacing as an agent start failure.
+message MemberTemplate {
+  // Process args, rendered in place: nothing is added, reordered or dropped.
+  // An arg that expands to the empty string is passed through as an empty
+  // argument — a single-member set renders ${peers} empty and the workload
+  // decides what that means. The control plane does not infer that an arg
+  // belongs to the flag before it.
+  repeated string args = 1;
+  map<string, string> env = 2;
+  DeployPolicy deploy_policy = 3;
+  ReadinessProbe readiness = 4;
+  ResourceLimits limits = 5;
+  PeerList peers = 6;
+}
+
+// PeerList renders ${peers} for one member.
+message PeerList {
+  // Per-peer template. Use ${peer.name}, ${peer.machine}, ${peer.vars.KEY}.
+  string format = 1;
+  string separator = 2;  // default ","
+  bool include_self = 3; // default false
+}
+
+message SetMember {
+  string machine = 1;
+  // Member identity, unique within the set (e.g. "nats-m1").
+  string name = 2;
+  // Free-form per-member values referenced as ${member.vars.KEY} and, from
+  // PeerList.format, ${peer.vars.KEY}.
+  map<string, string> vars = 3;
+}
+
+message RollingUpdate {
+  int32 max_unavailable = 1;    // must be >= 1
+  int32 wait_ready_seconds = 2; // controller deadline per in-flight member
+}
+
+message AssignmentSetStatus {
+  // Pending | Rolling | Ready | Degraded | Failed | Deleting
+  string phase = 1;
+  int64 observed_generation = 2;
+  string reason = 3;
+  string message = 4;
+  repeated MemberStatus members = 5;
+  bool deleting = 6;
+}
+
+message MemberStatus {
+  string machine = 1;
+  string name = 2;
+  bool ready = 3;
+  string phase = 4;
+  bool converged = 5;
+}
+
+message ApplyAssignmentSetRequest {
+  AssignmentSet set = 1;
+}
+
+message ApplyAssignmentSetResponse {
+  AssignmentSet set = 1;
+}
+
+message GetAssignmentSetRequest {
+  string name = 1;
+}
+
+message ListAssignmentSetsRequest {}
+
+message ListAssignmentSetsResponse {
+  repeated AssignmentSet sets = 1;
+}
+
+message DeleteAssignmentSetRequest {
+  string name = 1;
+}
+
+message DeleteAssignmentSetResponse {}

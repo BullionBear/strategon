@@ -13,7 +13,7 @@ import (
 
 var waitPoll = 500 * time.Millisecond
 
-func waitNatsCluster(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, name, cond string, timeout time.Duration) error {
+func waitAssignmentSet(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, name, cond string, timeout time.Duration) error {
 	want := strings.ToLower(strings.TrimSpace(cond))
 	if want == "" {
 		want = "ready"
@@ -23,10 +23,10 @@ func waitNatsCluster(ctx context.Context, client strategyplatformv1connect.Contr
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		resp, err := client.GetNatsCluster(ctx, connect.NewRequest(&pb.GetNatsClusterRequest{Name: name}))
+		resp, err := client.GetAssignmentSet(ctx, connect.NewRequest(&pb.GetAssignmentSetRequest{Name: name}))
 		if err != nil {
 			if time.Now().After(deadline) {
-				return fmt.Errorf("wait natscluster %q: %w", name, err)
+				return fmt.Errorf("wait assignmentset %q: %w", name, err)
 			}
 		} else {
 			c := resp.Msg
@@ -36,13 +36,13 @@ func waitNatsCluster(ctx context.Context, client strategyplatformv1connect.Contr
 				if c.GetStatus().GetObservedGeneration() < c.GetMetadata().GetGeneration() {
 					break
 				}
-				fmt.Printf("natscluster/%s is Ready (generation=%d observed=%d)\n",
+				fmt.Printf("assignmentset/%s is Ready (generation=%d observed=%d)\n",
 					name, c.GetMetadata().GetGeneration(), c.GetStatus().GetObservedGeneration())
 				return nil
 			case "Failed", "Degraded":
-				return fmt.Errorf("natscluster %q is %s: %s", name, phase, strings.TrimSpace(c.GetStatus().GetMessage()+" "+c.GetStatus().GetReason()))
+				return fmt.Errorf("assignmentset %q is %s: %s", name, phase, strings.TrimSpace(c.GetStatus().GetMessage()+" "+c.GetStatus().GetReason()))
 			case "Deleting":
-				return fmt.Errorf("natscluster %q is Deleting", name)
+				return fmt.Errorf("assignmentset %q is Deleting", name)
 			}
 		}
 		if time.Now().After(deadline) {
@@ -50,7 +50,7 @@ func waitNatsCluster(ctx context.Context, client strategyplatformv1connect.Contr
 			if err == nil && resp != nil {
 				phase = resp.Msg.GetStatus().GetPhase()
 			}
-			return fmt.Errorf("timed out waiting for natscluster %q to be Ready (last phase=%s)", name, emptyDash(phase))
+			return fmt.Errorf("timed out waiting for assignmentset %q to be Ready (last phase=%s)", name, emptyDash(phase))
 		}
 		sleep := waitPoll
 		if remain := time.Until(deadline); remain < sleep {

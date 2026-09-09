@@ -8,7 +8,7 @@ import "google/protobuf/timestamp.proto";
 import "strategyplatform/v1/agent_service.proto";
 import "strategyplatform/v1/common.proto";
 import "strategyplatform/v1/enrollment.proto";
-import "strategyplatform/v1/nats.proto";
+import "strategyplatform/v1/assignmentset.proto";
 import "strategyplatform/v1/spec.proto";
 import "strategyplatform/v1/status.proto";
 import "strategyplatform/v1/telemetry.proto";
@@ -361,10 +361,10 @@ service ControlPlaneService {
   rpc ApplyAssignment(ApplyAssignmentRequest) returns (ApplyAssignmentResponse);
   rpc Rollback(RollbackRequest) returns (RollbackResponse);
 
-  rpc ApplyNatsCluster(ApplyNatsClusterRequest) returns (ApplyNatsClusterResponse);
-  rpc GetNatsCluster(GetNatsClusterRequest) returns (NatsCluster);
-  rpc ListNatsClusters(ListNatsClustersRequest) returns (ListNatsClustersResponse);
-  rpc DeleteNatsCluster(DeleteNatsClusterRequest) returns (DeleteNatsClusterResponse);
+  rpc ApplyAssignmentSet(ApplyAssignmentSetRequest) returns (ApplyAssignmentSetResponse);
+  rpc GetAssignmentSet(GetAssignmentSetRequest) returns (AssignmentSet);
+  rpc ListAssignmentSets(ListAssignmentSetsRequest) returns (ListAssignmentSetsResponse);
+  rpc DeleteAssignmentSet(DeleteAssignmentSetRequest) returns (DeleteAssignmentSetResponse);
   rpc Stop(StopRequest) returns (StopResponse);
   rpc Start(StartRequest) returns (StartResponse);
   rpc Undeploy(UndeployRequest) returns (UndeployResponse);
