@@ -4,5 +4,5 @@
 //	strategon get natscluster NAME
 //	strategon wait natscluster NAME --for=ready
 //
-// Authentication is a Bearer token (--token or $STRATEGON_TOKEN).
+// Authenticate with the token flag or the STRATEGON_TOKEN environment variable.
 package main

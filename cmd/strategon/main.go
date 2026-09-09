@@ -88,12 +88,12 @@ Unknown kinds exit non-zero.
 
 Global flags (any command):
   --addr    Control plane human API (default http://127.0.0.1:8081 or $STRATEGON_ADDR)
-  --token   Bearer API token (default $STRATEGON_TOKEN)
+  --token   from $STRATEGON_TOKEN (human API)
 `
 
 func addGlobal(fs *flag.FlagSet, cfg *cliConfig) {
 	fs.StringVar(&cfg.Addr, "addr", envOr("STRATEGON_ADDR", defaultAddr), "control plane human API base URL")
-	fs.StringVar(&cfg.Token, "token", os.Getenv("STRATEGON_TOKEN"), "Bearer API token")
+	fs.StringVar(&cfg.Token, "token", os.Getenv("STRATEGON_TOKEN"), "human API credential from STRATEGON_TOKEN")
 }
 
 func cmdApply(args []string) error {
