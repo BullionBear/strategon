@@ -706,12 +706,22 @@ func (r *Reconciler) tick(now time.Time) {
 		}
 		if now.After(st.healthDeadline) {
 			spec := r.desired[st.strategy]
+			if hasReadinessProbe(spec) {
+				r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "HealthTimeout",
+					"readiness not achieved within health window")
+				if spec.GetDeployPolicy().GetEnableAutoRollback() && st.inflight != nil {
+					r.beginRollback(spec, st)
+				} else {
+					r.failHealthWindow(st)
+				}
+				continue
+			}
 			if spec != nil && spec.GetDeployPolicy().GetEnableAutoRollback() && st.inflight != nil {
 				r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "HealthTimeout",
 					"readiness not achieved within health window")
 				r.beginRollback(spec, st)
 			} else {
-				// No rollback configured: accept as healthy once the window passes.
+				// No probe: the window is a grace period. Unchanged for traders.
 				r.markHealthy(st)
 			}
 			continue
@@ -727,7 +737,10 @@ func (r *Reconciler) probeReadiness(st *strategyState) {
 		return
 	}
 	endpoint := ""
-	if r.deps.ReadyEndpoint != nil {
+	if spec := r.desired[st.strategy]; spec != nil {
+		endpoint = spec.GetReadiness().GetEndpoint()
+	}
+	if endpoint == "" && r.deps.ReadyEndpoint != nil {
 		endpoint = r.deps.ReadyEndpoint(st.strategy)
 	}
 	st.probeInflight = true
@@ -751,6 +764,21 @@ func (r *Reconciler) applyHealthResult(hr healthResult) {
 		hr.status == pb.ConditionStatus_CONDITION_STATUS_TRUE {
 		r.markHealthy(st)
 	}
+}
+
+func hasReadinessProbe(spec *pb.StrategyAssignmentSpec) bool {
+	return spec != nil && spec.GetReadiness().GetEndpoint() != ""
+}
+
+func (r *Reconciler) failHealthWindow(st *strategyState) {
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
+	st.lastError = "readiness not achieved within health window"
+	st.failedAtGen = r.generation
+	if st.inflight != nil {
+		st.inflight.cancel()
+		st.inflight = nil
+	}
+	r.setCondition(st, conditionReady, pb.ConditionStatus_CONDITION_STATUS_FALSE, "HealthTimeout", st.lastError)
 }
 
 // markHealthy promotes a strategy to HEALTHY steady state.

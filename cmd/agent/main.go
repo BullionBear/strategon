@@ -92,7 +92,7 @@ func main() {
 	rec := reconciler.New(reconciler.Deps{
 		Driver:           driver.NewRouter(execDrv, driver.NewOCIDriver(execDrv)),
 		Artifacts:        artifacts,
-		Health:           health.AlwaysReady{},
+		Health:           health.EndpointChecker{},
 		Clock:            clock.Real{},
 		Out:              out,
 		BaseDir:          *base,
