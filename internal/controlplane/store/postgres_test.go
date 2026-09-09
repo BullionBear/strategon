@@ -36,14 +36,14 @@ func TestPostgresGenerationBumpAndDesired(t *testing.T) {
 		t.Fatal(err)
 	}
 	spec := &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:aaa"}}
-	g1, err := p.SetAssignment("m1", "s", spec)
+	g1, _, err := p.SetAssignment("m1", "s", spec)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if g1 != 1 {
 		t.Fatalf("first generation = %d, want 1", g1)
 	}
-	g2, _ := p.SetAssignment("m1", "s2", &pb.StrategyAssignmentSpec{Strategy: "s2", Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:bbb"}})
+	g2, _, _ := p.SetAssignment("m1", "s2", &pb.StrategyAssignmentSpec{Strategy: "s2", Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:bbb"}})
 	if g2 != 2 {
 		t.Fatalf("second generation = %d, want 2", g2)
 	}
@@ -132,7 +132,7 @@ func TestPostgresStatusHeartbeatReachable(t *testing.T) {
 	if err := p.SetReachable("nope", true); err == nil {
 		t.Fatal("SetReachable on unknown machine should error")
 	}
-	if _, err := p.SetAssignment("nope", "s", &pb.StrategyAssignmentSpec{}); err == nil {
+	if _, _, err := p.SetAssignment("nope", "s", &pb.StrategyAssignmentSpec{}); err == nil {
 		t.Fatal("SetAssignment on unknown machine should error")
 	}
 }

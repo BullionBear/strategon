@@ -18,6 +18,7 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/filebrowse"
 	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
+	"github.com/bullionbear/strategon/internal/controlplane/assign"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/ingest"
 	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
@@ -47,6 +48,7 @@ type Server struct {
 	store   store.Store
 	hub     *store.Hub
 	agents  AgentNotifier
+	assign  *assign.Service
 	broker  *filetransfer.Broker
 	ingest  *ingest.Service
 	objects objectstore.Store
@@ -63,7 +65,22 @@ func NewWithBroker(st store.Store, hub *store.Hub, agents AgentNotifier, broker 
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Server{store: st, hub: hub, agents: agents, broker: broker, logger: logger}
+	return &Server{
+		store:  st,
+		hub:    hub,
+		agents: agents,
+		assign: assign.New(st, agents),
+		broker: broker,
+		logger: logger,
+	}
+}
+
+// WithReservation attaches cluster ownership checks to human assignment writes.
+func (s *Server) WithReservation(r assign.Reservation) *Server {
+	if s.assign != nil {
+		s.assign.Reservation = r
+	}
+	return s
 }
 
 // WithIngest attaches the registration-time ingest service (optional).
@@ -242,10 +259,6 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 		spec.Stopped = true
 	}
 
-	if blocked, reason := store.DeploymentBlockedByLease(s.store, machineID, strategy); blocked {
-		return nil, nil, "", connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("migration interlocking: lease for %q %s", strategy, reason))
-	}
 	return spec, art, fromVersion, nil
 }
 
@@ -285,23 +298,17 @@ func latestArtifact(st store.Store, name string) (*pb.ArtifactRef, bool) {
 }
 
 func (s *Server) commitAssignment(ctx context.Context, machineID, strategy string, spec *pb.StrategyAssignmentSpec, action, fromVersion, toVersion string) (int64, error) {
-	gen, err := s.store.SetAssignment(machineID, strategy, spec)
-	if err != nil {
-		return 0, connect.NewError(connect.CodeInternal, err)
-	}
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp:   timestamppb.Now(),
-		Actor:       auth.ActorFromContext(ctx),
-		Action:      action,
-		MachineId:   machineID,
-		Strategy:    strategy,
-		FromVersion: fromVersion,
-		ToVersion:   toVersion,
+	gen, _, err := s.assign.Apply(ctx, assign.Request{
+		MachineID:             machineID,
+		Strategy:              strategy,
+		Spec:                  spec,
+		Action:                action,
+		Actor:                 auth.ActorFromContext(ctx),
+		FromVersion:           fromVersion,
+		ToVersion:             toVersion,
+		EnforceLeaseInterlock: true,
 	})
-	if s.agents != nil {
-		s.agents.Notify(machineID)
-	}
-	return gen, nil
+	return gen, err
 }
 
 func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackRequest]) (*connect.Response[pb.RollbackResponse], error) {
@@ -353,21 +360,18 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackR
 	if err := applyDriverFromArtifact(next, target, rec); err != nil {
 		return nil, err
 	}
-	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), next)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp:   timestamppb.Now(),
-		Actor:       auth.ActorFromContext(ctx),
-		Action:      "Rollback",
-		MachineId:   msg.GetMachineId(),
-		Strategy:    msg.GetStrategy(),
-		FromVersion: fromVersion,
-		ToVersion:   target.GetVersion(),
+	gen, _, err := s.assign.Apply(ctx, assign.Request{
+		MachineID:             msg.GetMachineId(),
+		Strategy:              msg.GetStrategy(),
+		Spec:                  next,
+		Action:                "Rollback",
+		Actor:                 auth.ActorFromContext(ctx),
+		FromVersion:           fromVersion,
+		ToVersion:             target.GetVersion(),
+		EnforceLeaseInterlock: true,
 	})
-	if s.agents != nil {
-		s.agents.Notify(msg.GetMachineId())
+	if err != nil {
+		return nil, err
 	}
 	return connect.NewResponse(&pb.RollbackResponse{Generation: gen}), nil
 }
@@ -402,26 +406,19 @@ func (s *Server) setRunState(ctx context.Context, machineID, strategy string, st
 	if spec == nil {
 		return 0, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("strategy %q not assigned", strategy))
 	}
-	if spec.GetStopped() == stopped {
-		return rec.Generation, nil
-	}
 	next := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	next.Stopped = stopped
-	gen, err := s.store.SetAssignment(machineID, strategy, next)
-	if err != nil {
-		return 0, connect.NewError(connect.CodeInternal, err)
-	}
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp:   timestamppb.Now(),
-		Actor:       auth.ActorFromContext(ctx),
-		Action:      action,
-		MachineId:   machineID,
+	gen, _, err := s.assign.Apply(ctx, assign.Request{
+		MachineID:   machineID,
 		Strategy:    strategy,
+		Spec:        next,
+		Action:      action,
+		Actor:       auth.ActorFromContext(ctx),
 		FromVersion: spec.GetArtifact().GetVersion(),
 		ToVersion:   spec.GetArtifact().GetVersion(),
 	})
-	if s.agents != nil {
-		s.agents.Notify(machineID)
+	if err != nil {
+		return 0, err
 	}
 	s.logger.Info(strings.ToLower(action), "machine_id", machineID, "strategy", strategy,
 		"stopped", stopped, "generation", gen, "actor", auth.ActorFromContext(ctx))
@@ -443,20 +440,16 @@ func (s *Server) Undeploy(ctx context.Context, req *connect.Request[pb.UndeployR
 	}
 	fromVersion := spec.GetArtifact().GetVersion()
 
-	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), nil)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp:   timestamppb.Now(),
-		Actor:       auth.ActorFromContext(ctx),
-		Action:      "Undeploy",
-		MachineId:   msg.GetMachineId(),
+	gen, _, err := s.assign.Apply(ctx, assign.Request{
+		MachineID:   msg.GetMachineId(),
 		Strategy:    msg.GetStrategy(),
+		Spec:        nil,
+		Action:      "Undeploy",
+		Actor:       auth.ActorFromContext(ctx),
 		FromVersion: fromVersion,
 	})
-	if s.agents != nil {
-		s.agents.Notify(msg.GetMachineId())
+	if err != nil {
+		return nil, err
 	}
 	s.logger.Info("undeploy", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
 		"from_version", fromVersion, "generation", gen, "actor", auth.ActorFromContext(ctx))
@@ -481,19 +474,15 @@ func (s *Server) SetSchedule(ctx context.Context, req *connect.Request[pb.SetSch
 	}
 	next := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	next.Schedules = msg.GetSchedules()
-	gen, err := s.store.SetAssignment(msg.GetMachineId(), msg.GetStrategy(), next)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	_ = s.store.AppendAudit(&pb.AuditEntry{
-		Timestamp: timestamppb.Now(),
-		Actor:     auth.ActorFromContext(ctx),
-		Action:    "ConfigChange",
-		MachineId: msg.GetMachineId(),
+	gen, _, err := s.assign.Apply(ctx, assign.Request{
+		MachineID: msg.GetMachineId(),
 		Strategy:  msg.GetStrategy(),
+		Spec:      next,
+		Action:    "ConfigChange",
+		Actor:     auth.ActorFromContext(ctx),
 	})
-	if s.agents != nil {
-		s.agents.Notify(msg.GetMachineId())
+	if err != nil {
+		return nil, err
 	}
 	return connect.NewResponse(&pb.SetScheduleResponse{Generation: gen}), nil
 }

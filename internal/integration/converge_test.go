@@ -64,8 +64,11 @@ func TestChangeDesiredConvergesThenRetires(t *testing.T) {
 		TickInterval: 100 * time.Millisecond,
 	})
 	httpClient := &http.Client{Transport: &http2.Transport{
-		AllowHTTP:      true,
-		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) { var d net.Dialer; return d.DialContext(ctx, network, addr) },
+		AllowHTTP: true,
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		},
 	}}
 	client := &stream.Client{
 		Register:    &pb.Register{MachineId: "m1", Hostname: "test", AgentVersion: 1},
@@ -98,11 +101,11 @@ func TestChangeDesiredConvergesThenRetires(t *testing.T) {
 	digest := "sha256:" + hex.EncodeToString(sum[:])
 
 	spec := &pb.StrategyAssignmentSpec{
-		Strategy: "s",
-		Artifact: &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY, Version: "v1", Digest: digest, Uri: "file://" + src},
+		Strategy:     "s",
+		Artifact:     &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY, Version: "v1", Digest: digest, Uri: "file://" + src},
 		DeployPolicy: &pb.DeployPolicy{Startsecs: 1, HealthWindowSeconds: 5, MaxCrashesInWindow: 3, StopGraceSeconds: 3, EnableAutoRollback: true},
 	}
-	gen, err := st.SetAssignment("m1", "s", spec)
+	gen, _, err := st.SetAssignment("m1", "s", spec)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +143,7 @@ func TestChangeDesiredConvergesThenRetires(t *testing.T) {
 	}
 
 	// --- Retire the strategy (remove from desired) ---
-	if _, err := st.SetAssignment("m1", "s", nil); err != nil {
+	if _, _, err := st.SetAssignment("m1", "s", nil); err != nil {
 		t.Fatal(err)
 	}
 	srv.Notify("m1")

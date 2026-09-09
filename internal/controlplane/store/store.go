@@ -79,9 +79,11 @@ type Store interface {
 	// DesiredState builds the current full DesiredState snapshot for a machine.
 	DesiredState(machineID string) (*pb.DesiredState, bool)
 
-	// SetAssignment sets (or, with nil spec, removes) a strategy assignment and
-	// bumps the machine generation. Returns the new generation.
-	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error)
+	// SetAssignment sets (or, with nil spec, removes) a strategy assignment.
+	// An identical spec (proto.Equal) is a no-op: generation is not bumped,
+	// PreviousArtifacts is untouched, and notify is not fired. Removing a
+	// missing assignment is also a no-op. Returns (generation, changed).
+	SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (gen int64, changed bool, err error)
 
 	// SetSharedFiles replaces the full set of machine-level shared files.
 	// When the desired set is unchanged (same names → digests), it is a no-op:

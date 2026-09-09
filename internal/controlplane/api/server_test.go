@@ -901,3 +901,56 @@ func TestRollbackRederivesDriverAndEnforcesOCIGate(t *testing.T) {
 		t.Fatalf("code = %v, want FailedPrecondition", connect.CodeOf(err))
 	}
 }
+
+func TestVerbPathsNoopOnIdenticalSpec(t *testing.T) {
+	client, st, _, agents := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	first, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := agents.n
+	again, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "s", ArtifactVersion: "v1",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Msg.GetGeneration() != first.Msg.GetGeneration() || agents.n != n {
+		t.Fatalf("identical Deploy should no-op: gen %d→%d notify %d→%d",
+			first.Msg.GetGeneration(), again.Msg.GetGeneration(), n, agents.n)
+	}
+	if n := len(st.ListAudit("m1", "s")); n != 1 {
+		t.Fatalf("audit count = %d, want 1", n)
+	}
+
+	sched := []*pb.CronSchedule{{
+		Name:     "hourly",
+		CronExpr: "0 * * * *",
+		Timezone: "UTC",
+		Action:   pb.CronAction_CRON_ACTION_RESTART,
+	}}
+	set, err := client.SetSchedule(ctx, connect.NewRequest(&pb.SetScheduleRequest{
+		MachineId: "m1", Strategy: "s", Schedules: sched,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n = agents.n
+	gen := set.Msg.GetGeneration()
+	setAgain, err := client.SetSchedule(ctx, connect.NewRequest(&pb.SetScheduleRequest{
+		MachineId: "m1", Strategy: "s", Schedules: sched,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if setAgain.Msg.GetGeneration() != gen || agents.n != n {
+		t.Fatal("identical SetSchedule should no-op")
+	}
+}

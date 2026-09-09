@@ -140,18 +140,28 @@ func (m *Memory) DesiredState(machineID string) (*pb.DesiredState, bool) {
 	return buildDesiredState(rec), true
 }
 
-func (m *Memory) SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, error) {
+func (m *Memory) SetAssignment(machineID, strategy string, spec *pb.StrategyAssignmentSpec) (int64, bool, error) {
 	m.mu.Lock()
 	rec, ok := m.machines[machineID]
 	if !ok {
 		m.mu.Unlock()
-		return 0, fmt.Errorf("set assignment: unknown machine %s", machineID)
+		return 0, false, fmt.Errorf("set assignment: unknown machine %s", machineID)
 	}
 	if spec == nil {
+		if _, exists := rec.Assignments[strategy]; !exists {
+			gen := rec.Generation
+			m.mu.Unlock()
+			return gen, false, nil
+		}
 		delete(rec.Assignments, strategy)
 		delete(rec.PreviousArtifacts, strategy)
 		delete(rec.Status, strategy)
 	} else {
+		if old := rec.Assignments[strategy]; old != nil && proto.Equal(old, spec) {
+			gen := rec.Generation
+			m.mu.Unlock()
+			return gen, false, nil
+		}
 		if old := rec.Assignments[strategy]; old != nil &&
 			old.GetArtifact().GetDigest() != "" &&
 			old.GetArtifact().GetDigest() != spec.GetArtifact().GetDigest() {
@@ -159,11 +169,11 @@ func (m *Memory) SetAssignment(machineID, strategy string, spec *pb.StrategyAssi
 		}
 		rec.Assignments[strategy] = proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	}
-	rec.Generation++ // monotonic bump on every spec change
+	rec.Generation++
 	gen := rec.Generation
 	m.mu.Unlock()
 	m.notify(machineID)
-	return gen, nil
+	return gen, true, nil
 }
 
 func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
