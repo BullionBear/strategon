@@ -24,11 +24,13 @@ import (
 	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/api"
+	"github.com/bullionbear/strategon/internal/controlplane/assign"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/grpcstream"
 	"github.com/bullionbear/strategon/internal/controlplane/ingest"
 	cpLease "github.com/bullionbear/strategon/internal/controlplane/lease"
 	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
+	"github.com/bullionbear/strategon/internal/controlplane/orchestrator"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/mtls"
 	"github.com/bullionbear/strategon/internal/webassets"
@@ -157,6 +159,8 @@ func run(logger *slog.Logger) error {
 	agentSrv := grpcstream.New(st, agentOpts...)
 	leaseSrv := cpLease.New(st, logger)
 	humanSrv := api.NewWithBroker(st, hub, agentSrv, broker, logger)
+	orchAssign := assign.New(st, agentSrv)
+	go orchestrator.New(st, orchAssign, hub, logger).Run(ctx)
 
 	ingestMode, err := ingest.ParseMode(*ingestModeFlag)
 	if err != nil {
