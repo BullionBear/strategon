@@ -218,3 +218,76 @@ func TestApplyNatsClusterPersistOnlyAndReservation(t *testing.T) {
 		t.Fatalf("list err=%v n=%d", err, len(list.Msg.GetClusters()))
 	}
 }
+
+func TestApplyNatsClusterRejectsOverlappingMembership(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	}))
+
+	if _, err := client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
+		Cluster: &pb.NatsCluster{
+			Metadata: &pb.ObjectMeta{Name: "alpha"},
+			Spec: &pb.NatsClusterSpec{
+				ArtifactVersion: "v1",
+				Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "10.0.0.1"}},
+			},
+		},
+	})); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
+		Cluster: &pb.NatsCluster{
+			Metadata: &pb.ObjectMeta{Name: "beta"},
+			Spec: &pb.NatsClusterSpec{
+				ArtifactVersion: "v1",
+				Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "n2", RouteHost: "10.0.0.1"}},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("overlapping apply: %v", err)
+	}
+	if _, ok := st.GetNatsCluster("beta"); ok {
+		t.Fatal("rejected overlapping apply wrote a row")
+	}
+}
+
+func TestApplyNatsClusterRejectsOCIOnExecOnlyMachine(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	if _, err := st.UpsertMachine(&pb.Register{
+		MachineId: "m1",
+		Spec: &pb.MachineSpec{
+			SupportedDrivers: []pb.ExecutionDriver{pb.ExecutionDriver_EXECUTION_DRIVER_EXEC},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats.tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.ApplyNatsCluster(ctx, connect.NewRequest(&pb.ApplyNatsClusterRequest{
+		Cluster: &pb.NatsCluster{
+			Metadata: &pb.ObjectMeta{Name: "trading"},
+			Spec: &pb.NatsClusterSpec{
+				ArtifactVersion: "v1",
+				Servers:         []*pb.NatsServer{{Machine: "m1", ServerName: "n1", RouteHost: "10.0.0.1"}},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("oci admission: %v", err)
+	}
+	if _, ok := st.GetNatsCluster("trading"); ok {
+		t.Fatal("rejected OCI apply wrote a row")
+	}
+}

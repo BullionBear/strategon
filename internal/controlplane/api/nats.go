@@ -157,26 +157,31 @@ func (s *Server) normalizeAndValidateClusterSpec(in *pb.NatsClusterSpec) (*pb.Na
 			return nil, err
 		}
 	}
+	if art.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
+		for _, srv := range spec.GetServers() {
+			rec, _ := s.store.GetMachine(srv.GetMachine())
+			if err := requireOCISupported(rec); err != nil {
+				return nil, err
+			}
+		}
+	}
 	return spec, nil
 }
 
 func (s *Server) rejectUnownedStrategy(clusterName, strategy string, servers []*pb.NatsServer) error {
 	for _, srv := range servers {
-		rec, ok := s.store.GetMachine(srv.GetMachine())
-		if !ok {
-			continue
-		}
-		if rec.Assignments[strategy] == nil {
-			continue
-		}
 		owner, reserved := s.store.ReservedBy(srv.GetMachine(), strategy)
+		if reserved && owner != clusterName {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("machine %q strategy %q is owned by NatsCluster %q", srv.GetMachine(), strategy, owner))
+		}
+		rec, ok := s.store.GetMachine(srv.GetMachine())
+		if !ok || rec.Assignments[strategy] == nil {
+			continue
+		}
 		if !reserved {
 			return connect.NewError(connect.CodeFailedPrecondition,
 				fmt.Errorf("machine %q already has an unowned %q assignment", srv.GetMachine(), strategy))
-		}
-		if owner != clusterName {
-			return connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("machine %q strategy %q is owned by NatsCluster %q", srv.GetMachine(), strategy, owner))
 		}
 	}
 	return nil
