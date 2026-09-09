@@ -51,7 +51,7 @@ Machines listed in `spec.servers[].machine` must already be registered
 config array, so the controller sets:
 
 ```
--c ${CONFIG} --routes nats-route://<other>:6222,...
+-c ${CONFIG} --routes nats://<other>:6222,...
 ```
 
 `routeHost` is the address **peer members use to reach this node**. Use a
