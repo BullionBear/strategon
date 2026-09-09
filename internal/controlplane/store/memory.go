@@ -33,6 +33,7 @@ type Memory struct {
 	// samples keyed by machineID + "\x00" + strategy ("" = machine-level).
 	samples      map[string][]ResourceSample
 	lastSampleAt map[string]int64 // machineID -> unix of last window write
+	clusters     map[string]*pb.NatsCluster
 }
 
 // NewMemory returns an empty in-memory store that notifies hub on changes.
@@ -48,6 +49,7 @@ func NewMemory(hub *Hub) *Memory {
 		hub:          hub,
 		samples:      map[string][]ResourceSample{},
 		lastSampleAt: map[string]int64{},
+		clusters:     map[string]*pb.NatsCluster{},
 	}
 }
 

@@ -779,6 +779,194 @@ func (x *SetDeploymentResponse) GetGeneration() int64 {
 	return 0
 }
 
+// ApplyAssignment upserts a full desired assignment (versions + runtime +
+// policy + schedules). Unlike SetDeployment this is not a partial merge:
+// omitted schedules mean empty schedules, omitted env means empty env.
+// stopped is taken from the document — a first apply may start the process
+// (stopped=false). Digest/uri are not client-supplied; the control plane
+// resolves artifact_version / config_version through the catalog.
+type ApplyAssignmentRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	MachineId       string            `protobuf:"bytes,1,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
+	Strategy        string            `protobuf:"bytes,2,opt,name=strategy,proto3" json:"strategy,omitempty"`
+	ArtifactVersion string            `protobuf:"bytes,3,opt,name=artifact_version,json=artifactVersion,proto3" json:"artifact_version,omitempty"` // required; "latest" pins to a concrete version
+	ConfigVersion   string            `protobuf:"bytes,4,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`       // optional; empty keeps current config if any
+	Stopped         bool              `protobuf:"varint,5,opt,name=stopped,proto3" json:"stopped,omitempty"`
+	DeployPolicy    *DeployPolicy     `protobuf:"bytes,6,opt,name=deploy_policy,json=deployPolicy,proto3" json:"deploy_policy,omitempty"`
+	Schedules       []*CronSchedule   `protobuf:"bytes,7,rep,name=schedules,proto3" json:"schedules,omitempty"`
+	Args            []string          `protobuf:"bytes,8,rep,name=args,proto3" json:"args,omitempty"`
+	Env             map[string]string `protobuf:"bytes,9,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Limits          *ResourceLimits   `protobuf:"bytes,10,opt,name=limits,proto3" json:"limits,omitempty"`
+	Lease           *LeaseSpec        `protobuf:"bytes,11,opt,name=lease,proto3" json:"lease,omitempty"`
+	Readiness       *ReadinessProbe   `protobuf:"bytes,12,opt,name=readiness,proto3" json:"readiness,omitempty"`
+}
+
+func (x *ApplyAssignmentRequest) Reset() {
+	*x = ApplyAssignmentRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ApplyAssignmentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyAssignmentRequest) ProtoMessage() {}
+
+func (x *ApplyAssignmentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyAssignmentRequest.ProtoReflect.Descriptor instead.
+func (*ApplyAssignmentRequest) Descriptor() ([]byte, []int) {
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ApplyAssignmentRequest) GetMachineId() string {
+	if x != nil {
+		return x.MachineId
+	}
+	return ""
+}
+
+func (x *ApplyAssignmentRequest) GetStrategy() string {
+	if x != nil {
+		return x.Strategy
+	}
+	return ""
+}
+
+func (x *ApplyAssignmentRequest) GetArtifactVersion() string {
+	if x != nil {
+		return x.ArtifactVersion
+	}
+	return ""
+}
+
+func (x *ApplyAssignmentRequest) GetConfigVersion() string {
+	if x != nil {
+		return x.ConfigVersion
+	}
+	return ""
+}
+
+func (x *ApplyAssignmentRequest) GetStopped() bool {
+	if x != nil {
+		return x.Stopped
+	}
+	return false
+}
+
+func (x *ApplyAssignmentRequest) GetDeployPolicy() *DeployPolicy {
+	if x != nil {
+		return x.DeployPolicy
+	}
+	return nil
+}
+
+func (x *ApplyAssignmentRequest) GetSchedules() []*CronSchedule {
+	if x != nil {
+		return x.Schedules
+	}
+	return nil
+}
+
+func (x *ApplyAssignmentRequest) GetArgs() []string {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+func (x *ApplyAssignmentRequest) GetEnv() map[string]string {
+	if x != nil {
+		return x.Env
+	}
+	return nil
+}
+
+func (x *ApplyAssignmentRequest) GetLimits() *ResourceLimits {
+	if x != nil {
+		return x.Limits
+	}
+	return nil
+}
+
+func (x *ApplyAssignmentRequest) GetLease() *LeaseSpec {
+	if x != nil {
+		return x.Lease
+	}
+	return nil
+}
+
+func (x *ApplyAssignmentRequest) GetReadiness() *ReadinessProbe {
+	if x != nil {
+		return x.Readiness
+	}
+	return nil
+}
+
+type ApplyAssignmentResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Generation int64 `protobuf:"varint,1,opt,name=generation,proto3" json:"generation,omitempty"`
+}
+
+func (x *ApplyAssignmentResponse) Reset() {
+	*x = ApplyAssignmentResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ApplyAssignmentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApplyAssignmentResponse) ProtoMessage() {}
+
+func (x *ApplyAssignmentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApplyAssignmentResponse.ProtoReflect.Descriptor instead.
+func (*ApplyAssignmentResponse) Descriptor() ([]byte, []int) {
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ApplyAssignmentResponse) GetGeneration() int64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
 type RollbackRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -792,7 +980,7 @@ type RollbackRequest struct {
 func (x *RollbackRequest) Reset() {
 	*x = RollbackRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -805,7 +993,7 @@ func (x *RollbackRequest) String() string {
 func (*RollbackRequest) ProtoMessage() {}
 
 func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[9]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -818,7 +1006,7 @@ func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackRequest.ProtoReflect.Descriptor instead.
 func (*RollbackRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{9}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RollbackRequest) GetMachineId() string {
@@ -853,7 +1041,7 @@ type RollbackResponse struct {
 func (x *RollbackResponse) Reset() {
 	*x = RollbackResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -866,7 +1054,7 @@ func (x *RollbackResponse) String() string {
 func (*RollbackResponse) ProtoMessage() {}
 
 func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[10]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +1067,7 @@ func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackResponse.ProtoReflect.Descriptor instead.
 func (*RollbackResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{10}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RollbackResponse) GetGeneration() int64 {
@@ -901,7 +1089,7 @@ type UndeployRequest struct {
 func (x *UndeployRequest) Reset() {
 	*x = UndeployRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -914,7 +1102,7 @@ func (x *UndeployRequest) String() string {
 func (*UndeployRequest) ProtoMessage() {}
 
 func (x *UndeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[11]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -927,7 +1115,7 @@ func (x *UndeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndeployRequest.ProtoReflect.Descriptor instead.
 func (*UndeployRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{11}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *UndeployRequest) GetMachineId() string {
@@ -955,7 +1143,7 @@ type UndeployResponse struct {
 func (x *UndeployResponse) Reset() {
 	*x = UndeployResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -968,7 +1156,7 @@ func (x *UndeployResponse) String() string {
 func (*UndeployResponse) ProtoMessage() {}
 
 func (x *UndeployResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[12]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -981,7 +1169,7 @@ func (x *UndeployResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndeployResponse.ProtoReflect.Descriptor instead.
 func (*UndeployResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{12}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *UndeployResponse) GetGeneration() int64 {
@@ -1004,7 +1192,7 @@ type StopRequest struct {
 func (x *StopRequest) Reset() {
 	*x = StopRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1017,7 +1205,7 @@ func (x *StopRequest) String() string {
 func (*StopRequest) ProtoMessage() {}
 
 func (x *StopRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[13]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1030,7 +1218,7 @@ func (x *StopRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopRequest.ProtoReflect.Descriptor instead.
 func (*StopRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{13}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *StopRequest) GetMachineId() string {
@@ -1058,7 +1246,7 @@ type StopResponse struct {
 func (x *StopResponse) Reset() {
 	*x = StopResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1071,7 +1259,7 @@ func (x *StopResponse) String() string {
 func (*StopResponse) ProtoMessage() {}
 
 func (x *StopResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[14]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1084,7 +1272,7 @@ func (x *StopResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StopResponse.ProtoReflect.Descriptor instead.
 func (*StopResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{14}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *StopResponse) GetGeneration() int64 {
@@ -1107,7 +1295,7 @@ type StartRequest struct {
 func (x *StartRequest) Reset() {
 	*x = StartRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1120,7 +1308,7 @@ func (x *StartRequest) String() string {
 func (*StartRequest) ProtoMessage() {}
 
 func (x *StartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[15]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1133,7 +1321,7 @@ func (x *StartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartRequest.ProtoReflect.Descriptor instead.
 func (*StartRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{15}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *StartRequest) GetMachineId() string {
@@ -1161,7 +1349,7 @@ type StartResponse struct {
 func (x *StartResponse) Reset() {
 	*x = StartResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1174,7 +1362,7 @@ func (x *StartResponse) String() string {
 func (*StartResponse) ProtoMessage() {}
 
 func (x *StartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[16]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1187,7 +1375,7 @@ func (x *StartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartResponse.ProtoReflect.Descriptor instead.
 func (*StartResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{16}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *StartResponse) GetGeneration() int64 {
@@ -1210,7 +1398,7 @@ type SetScheduleRequest struct {
 func (x *SetScheduleRequest) Reset() {
 	*x = SetScheduleRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1223,7 +1411,7 @@ func (x *SetScheduleRequest) String() string {
 func (*SetScheduleRequest) ProtoMessage() {}
 
 func (x *SetScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[17]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1236,7 +1424,7 @@ func (x *SetScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetScheduleRequest.ProtoReflect.Descriptor instead.
 func (*SetScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{17}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SetScheduleRequest) GetMachineId() string {
@@ -1271,7 +1459,7 @@ type SetScheduleResponse struct {
 func (x *SetScheduleResponse) Reset() {
 	*x = SetScheduleResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1284,7 +1472,7 @@ func (x *SetScheduleResponse) String() string {
 func (*SetScheduleResponse) ProtoMessage() {}
 
 func (x *SetScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[18]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1297,7 +1485,7 @@ func (x *SetScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetScheduleResponse.ProtoReflect.Descriptor instead.
 func (*SetScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{18}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SetScheduleResponse) GetGeneration() int64 {
@@ -1326,7 +1514,7 @@ type AuditEntry struct {
 func (x *AuditEntry) Reset() {
 	*x = AuditEntry{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[19]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1339,7 +1527,7 @@ func (x *AuditEntry) String() string {
 func (*AuditEntry) ProtoMessage() {}
 
 func (x *AuditEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[19]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1352,7 +1540,7 @@ func (x *AuditEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuditEntry.ProtoReflect.Descriptor instead.
 func (*AuditEntry) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{19}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *AuditEntry) GetTimestamp() *timestamppb.Timestamp {
@@ -1424,7 +1612,7 @@ type BrowseDirRequest struct {
 func (x *BrowseDirRequest) Reset() {
 	*x = BrowseDirRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[20]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1437,7 +1625,7 @@ func (x *BrowseDirRequest) String() string {
 func (*BrowseDirRequest) ProtoMessage() {}
 
 func (x *BrowseDirRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[20]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1450,7 +1638,7 @@ func (x *BrowseDirRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowseDirRequest.ProtoReflect.Descriptor instead.
 func (*BrowseDirRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{20}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *BrowseDirRequest) GetMachineId() string {
@@ -1486,7 +1674,7 @@ type BrowseDirResponse struct {
 func (x *BrowseDirResponse) Reset() {
 	*x = BrowseDirResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[21]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1499,7 +1687,7 @@ func (x *BrowseDirResponse) String() string {
 func (*BrowseDirResponse) ProtoMessage() {}
 
 func (x *BrowseDirResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[21]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1512,7 +1700,7 @@ func (x *BrowseDirResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BrowseDirResponse.ProtoReflect.Descriptor instead.
 func (*BrowseDirResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{21}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *BrowseDirResponse) GetEntries() []*DirEntry {
@@ -1542,7 +1730,7 @@ type DownloadFilesRequest struct {
 func (x *DownloadFilesRequest) Reset() {
 	*x = DownloadFilesRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[22]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1555,7 +1743,7 @@ func (x *DownloadFilesRequest) String() string {
 func (*DownloadFilesRequest) ProtoMessage() {}
 
 func (x *DownloadFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[22]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1568,7 +1756,7 @@ func (x *DownloadFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadFilesRequest.ProtoReflect.Descriptor instead.
 func (*DownloadFilesRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{22}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *DownloadFilesRequest) GetMachineId() string {
@@ -1606,7 +1794,7 @@ type DownloadChunk struct {
 func (x *DownloadChunk) Reset() {
 	*x = DownloadChunk{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[23]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1619,7 +1807,7 @@ func (x *DownloadChunk) String() string {
 func (*DownloadChunk) ProtoMessage() {}
 
 func (x *DownloadChunk) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[23]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1632,7 +1820,7 @@ func (x *DownloadChunk) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadChunk.ProtoReflect.Descriptor instead.
 func (*DownloadChunk) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{23}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DownloadChunk) GetData() []byte {
@@ -1677,7 +1865,7 @@ type ListAuditRequest struct {
 func (x *ListAuditRequest) Reset() {
 	*x = ListAuditRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[24]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1690,7 +1878,7 @@ func (x *ListAuditRequest) String() string {
 func (*ListAuditRequest) ProtoMessage() {}
 
 func (x *ListAuditRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[24]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1703,7 +1891,7 @@ func (x *ListAuditRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuditRequest.ProtoReflect.Descriptor instead.
 func (*ListAuditRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{24}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListAuditRequest) GetMachineId() string {
@@ -1746,7 +1934,7 @@ type ListAuditResponse struct {
 func (x *ListAuditResponse) Reset() {
 	*x = ListAuditResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[25]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1759,7 +1947,7 @@ func (x *ListAuditResponse) String() string {
 func (*ListAuditResponse) ProtoMessage() {}
 
 func (x *ListAuditResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[25]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1772,7 +1960,7 @@ func (x *ListAuditResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAuditResponse.ProtoReflect.Descriptor instead.
 func (*ListAuditResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{25}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListAuditResponse) GetEntries() []*AuditEntry {
@@ -1802,7 +1990,7 @@ type MachineStatusEvent struct {
 func (x *MachineStatusEvent) Reset() {
 	*x = MachineStatusEvent{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[26]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1815,7 +2003,7 @@ func (x *MachineStatusEvent) String() string {
 func (*MachineStatusEvent) ProtoMessage() {}
 
 func (x *MachineStatusEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[26]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1828,7 +2016,7 @@ func (x *MachineStatusEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MachineStatusEvent.ProtoReflect.Descriptor instead.
 func (*MachineStatusEvent) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{26}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *MachineStatusEvent) GetMachineId() string {
@@ -1866,7 +2054,7 @@ type RegisterArtifactRequest struct {
 func (x *RegisterArtifactRequest) Reset() {
 	*x = RegisterArtifactRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[27]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1879,7 +2067,7 @@ func (x *RegisterArtifactRequest) String() string {
 func (*RegisterArtifactRequest) ProtoMessage() {}
 
 func (x *RegisterArtifactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[27]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1892,7 +2080,7 @@ func (x *RegisterArtifactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterArtifactRequest.ProtoReflect.Descriptor instead.
 func (*RegisterArtifactRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{27}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RegisterArtifactRequest) GetArtifact() *ArtifactRef {
@@ -1911,7 +2099,7 @@ type RegisterArtifactResponse struct {
 func (x *RegisterArtifactResponse) Reset() {
 	*x = RegisterArtifactResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[28]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1924,7 +2112,7 @@ func (x *RegisterArtifactResponse) String() string {
 func (*RegisterArtifactResponse) ProtoMessage() {}
 
 func (x *RegisterArtifactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[28]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1937,7 +2125,7 @@ func (x *RegisterArtifactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterArtifactResponse.ProtoReflect.Descriptor instead.
 func (*RegisterArtifactResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{28}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{30}
 }
 
 // CreateArtifactUpload returns a presigned PUT so the client can write bytes
@@ -1957,7 +2145,7 @@ type CreateArtifactUploadRequest struct {
 func (x *CreateArtifactUploadRequest) Reset() {
 	*x = CreateArtifactUploadRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[29]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1970,7 +2158,7 @@ func (x *CreateArtifactUploadRequest) String() string {
 func (*CreateArtifactUploadRequest) ProtoMessage() {}
 
 func (x *CreateArtifactUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[29]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1983,7 +2171,7 @@ func (x *CreateArtifactUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateArtifactUploadRequest.ProtoReflect.Descriptor instead.
 func (*CreateArtifactUploadRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{29}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CreateArtifactUploadRequest) GetName() string {
@@ -2027,7 +2215,7 @@ type CreateArtifactUploadResponse struct {
 func (x *CreateArtifactUploadResponse) Reset() {
 	*x = CreateArtifactUploadResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2040,7 +2228,7 @@ func (x *CreateArtifactUploadResponse) String() string {
 func (*CreateArtifactUploadResponse) ProtoMessage() {}
 
 func (x *CreateArtifactUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[30]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2053,7 +2241,7 @@ func (x *CreateArtifactUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateArtifactUploadResponse.ProtoReflect.Descriptor instead.
 func (*CreateArtifactUploadResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{30}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *CreateArtifactUploadResponse) GetPutUrl() string {
@@ -2088,7 +2276,7 @@ type ListArtifactsRequest struct {
 func (x *ListArtifactsRequest) Reset() {
 	*x = ListArtifactsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2101,7 +2289,7 @@ func (x *ListArtifactsRequest) String() string {
 func (*ListArtifactsRequest) ProtoMessage() {}
 
 func (x *ListArtifactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[31]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2114,7 +2302,7 @@ func (x *ListArtifactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArtifactsRequest.ProtoReflect.Descriptor instead.
 func (*ListArtifactsRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{31}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListArtifactsRequest) GetName() string {
@@ -2141,7 +2329,7 @@ type ArtifactCatalogEntry struct {
 func (x *ArtifactCatalogEntry) Reset() {
 	*x = ArtifactCatalogEntry{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2154,7 +2342,7 @@ func (x *ArtifactCatalogEntry) String() string {
 func (*ArtifactCatalogEntry) ProtoMessage() {}
 
 func (x *ArtifactCatalogEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[32]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2167,7 +2355,7 @@ func (x *ArtifactCatalogEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArtifactCatalogEntry.ProtoReflect.Descriptor instead.
 func (*ArtifactCatalogEntry) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{32}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ArtifactCatalogEntry) GetArtifact() *ArtifactRef {
@@ -2204,7 +2392,7 @@ type ListArtifactsResponse struct {
 func (x *ListArtifactsResponse) Reset() {
 	*x = ListArtifactsResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2217,7 +2405,7 @@ func (x *ListArtifactsResponse) String() string {
 func (*ListArtifactsResponse) ProtoMessage() {}
 
 func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[33]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2230,7 +2418,7 @@ func (x *ListArtifactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListArtifactsResponse.ProtoReflect.Descriptor instead.
 func (*ListArtifactsResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{33}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListArtifactsResponse) GetArtifacts() []*ArtifactRef {
@@ -2257,7 +2445,7 @@ type GetControlPlaneVersionRequest struct {
 func (x *GetControlPlaneVersionRequest) Reset() {
 	*x = GetControlPlaneVersionRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2270,7 +2458,7 @@ func (x *GetControlPlaneVersionRequest) String() string {
 func (*GetControlPlaneVersionRequest) ProtoMessage() {}
 
 func (x *GetControlPlaneVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[34]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2283,7 +2471,7 @@ func (x *GetControlPlaneVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetControlPlaneVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetControlPlaneVersionRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{34}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{36}
 }
 
 type ControlPlaneVersion struct {
@@ -2299,7 +2487,7 @@ type ControlPlaneVersion struct {
 func (x *ControlPlaneVersion) Reset() {
 	*x = ControlPlaneVersion{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2312,7 +2500,7 @@ func (x *ControlPlaneVersion) String() string {
 func (*ControlPlaneVersion) ProtoMessage() {}
 
 func (x *ControlPlaneVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[35]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2325,7 +2513,7 @@ func (x *ControlPlaneVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlPlaneVersion.ProtoReflect.Descriptor instead.
 func (*ControlPlaneVersion) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{35}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ControlPlaneVersion) GetVersion() string {
@@ -2363,7 +2551,7 @@ type ResourceSamplePoint struct {
 func (x *ResourceSamplePoint) Reset() {
 	*x = ResourceSamplePoint{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2376,7 +2564,7 @@ func (x *ResourceSamplePoint) String() string {
 func (*ResourceSamplePoint) ProtoMessage() {}
 
 func (x *ResourceSamplePoint) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[36]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2389,7 +2577,7 @@ func (x *ResourceSamplePoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceSamplePoint.ProtoReflect.Descriptor instead.
 func (*ResourceSamplePoint) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{36}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ResourceSamplePoint) GetSampledAt() *timestamppb.Timestamp {
@@ -2428,7 +2616,7 @@ type GetMachineMetricsRequest struct {
 func (x *GetMachineMetricsRequest) Reset() {
 	*x = GetMachineMetricsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2441,7 +2629,7 @@ func (x *GetMachineMetricsRequest) String() string {
 func (*GetMachineMetricsRequest) ProtoMessage() {}
 
 func (x *GetMachineMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[37]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2454,7 +2642,7 @@ func (x *GetMachineMetricsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMachineMetricsRequest.ProtoReflect.Descriptor instead.
 func (*GetMachineMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{37}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetMachineMetricsRequest) GetMachineId() string {
@@ -2489,7 +2677,7 @@ type GetMachineMetricsResponse struct {
 func (x *GetMachineMetricsResponse) Reset() {
 	*x = GetMachineMetricsResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2502,7 +2690,7 @@ func (x *GetMachineMetricsResponse) String() string {
 func (*GetMachineMetricsResponse) ProtoMessage() {}
 
 func (x *GetMachineMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[38]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2515,7 +2703,7 @@ func (x *GetMachineMetricsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMachineMetricsResponse.ProtoReflect.Descriptor instead.
 func (*GetMachineMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{38}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetMachineMetricsResponse) GetSamples() []*ResourceSamplePoint {
@@ -2539,7 +2727,7 @@ type SetSharedFilesRequest struct {
 func (x *SetSharedFilesRequest) Reset() {
 	*x = SetSharedFilesRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2552,7 +2740,7 @@ func (x *SetSharedFilesRequest) String() string {
 func (*SetSharedFilesRequest) ProtoMessage() {}
 
 func (x *SetSharedFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[39]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2565,7 +2753,7 @@ func (x *SetSharedFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSharedFilesRequest.ProtoReflect.Descriptor instead.
 func (*SetSharedFilesRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{39}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SetSharedFilesRequest) GetMachineId() string {
@@ -2601,7 +2789,7 @@ type SharedFileRef struct {
 func (x *SharedFileRef) Reset() {
 	*x = SharedFileRef{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[42]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2614,7 +2802,7 @@ func (x *SharedFileRef) String() string {
 func (*SharedFileRef) ProtoMessage() {}
 
 func (x *SharedFileRef) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[40]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[42]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2627,7 +2815,7 @@ func (x *SharedFileRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedFileRef.ProtoReflect.Descriptor instead.
 func (*SharedFileRef) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{40}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SharedFileRef) GetName() string {
@@ -2662,7 +2850,7 @@ type SetSharedFilesResponse struct {
 func (x *SetSharedFilesResponse) Reset() {
 	*x = SetSharedFilesResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[43]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2675,7 +2863,7 @@ func (x *SetSharedFilesResponse) String() string {
 func (*SetSharedFilesResponse) ProtoMessage() {}
 
 func (x *SetSharedFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[41]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[43]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2688,7 +2876,7 @@ func (x *SetSharedFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSharedFilesResponse.ProtoReflect.Descriptor instead.
 func (*SetSharedFilesResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{41}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SetSharedFilesResponse) GetGeneration() int64 {
@@ -2709,7 +2897,7 @@ type ListSharedFilesRequest struct {
 func (x *ListSharedFilesRequest) Reset() {
 	*x = ListSharedFilesRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[42]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[44]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2722,7 +2910,7 @@ func (x *ListSharedFilesRequest) String() string {
 func (*ListSharedFilesRequest) ProtoMessage() {}
 
 func (x *ListSharedFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[42]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[44]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2735,7 +2923,7 @@ func (x *ListSharedFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedFilesRequest.ProtoReflect.Descriptor instead.
 func (*ListSharedFilesRequest) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{42}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListSharedFilesRequest) GetMachineId() string {
@@ -2756,7 +2944,7 @@ type ListSharedFilesResponse struct {
 func (x *ListSharedFilesResponse) Reset() {
 	*x = ListSharedFilesResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[43]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2769,7 +2957,7 @@ func (x *ListSharedFilesResponse) String() string {
 func (*ListSharedFilesResponse) ProtoMessage() {}
 
 func (x *ListSharedFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[43]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2782,7 +2970,7 @@ func (x *ListSharedFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSharedFilesResponse.ProtoReflect.Descriptor instead.
 func (*ListSharedFilesResponse) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{43}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListSharedFilesResponse) GetFiles() []*SharedFileView {
@@ -2808,7 +2996,7 @@ type SharedFileView struct {
 func (x *SharedFileView) Reset() {
 	*x = SharedFileView{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[44]
+		mi := &file_strategyplatform_v1_control_service_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2821,7 +3009,7 @@ func (x *SharedFileView) String() string {
 func (*SharedFileView) ProtoMessage() {}
 
 func (x *SharedFileView) ProtoReflect() protoreflect.Message {
-	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[44]
+	mi := &file_strategyplatform_v1_control_service_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2834,7 +3022,7 @@ func (x *SharedFileView) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedFileView.ProtoReflect.Descriptor instead.
 func (*SharedFileView) Descriptor() ([]byte, []int) {
-	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{44}
+	return file_strategyplatform_v1_control_service_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *SharedFileView) GetName() string {
@@ -2895,6 +3083,10 @@ var file_strategyplatform_v1_control_service_proto_rawDesc = []byte{
 	0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x24, 0x73, 0x74,
 	0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2f, 0x76,
 	0x31, 0x2f, 0x65, 0x6e, 0x72, 0x6f, 0x6c, 0x6c, 0x6d, 0x65, 0x6e, 0x74, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x1a, 0x1e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
+	0x66, 0x6f, 0x72, 0x6d, 0x2f, 0x76, 0x31, 0x2f, 0x6e, 0x61, 0x74, 0x73, 0x2e, 0x70, 0x72, 0x6f,
+	0x74, 0x6f, 0x1a, 0x1e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
+	0x66, 0x6f, 0x72, 0x6d, 0x2f, 0x76, 0x31, 0x2f, 0x73, 0x70, 0x65, 0x63, 0x2e, 0x70, 0x72, 0x6f,
 	0x74, 0x6f, 0x1a, 0x20, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
 	0x66, 0x6f, 0x72, 0x6d, 0x2f, 0x76, 0x31, 0x2f, 0x73, 0x74, 0x61, 0x74, 0x75, 0x73, 0x2e, 0x70,
 	0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x23, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c,
@@ -3049,6 +3241,51 @@ var file_strategyplatform_v1_control_service_proto_rawDesc = []byte{
 	0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c,
 	0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a,
 	0x02, 0x38, 0x01, 0x22, 0x37, 0x0a, 0x15, 0x53, 0x65, 0x74, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79,
+	0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1e, 0x0a, 0x0a,
+	0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03,
+	0x52, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x92, 0x05, 0x0a,
+	0x16, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x6d, 0x65, 0x6e, 0x74,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x6d, 0x61, 0x63, 0x68, 0x69,
+	0x6e, 0x65, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x6d, 0x61, 0x63,
+	0x68, 0x69, 0x6e, 0x65, 0x49, 0x64, 0x12, 0x1a, 0x0a, 0x08, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x12, 0x29, 0x0a, 0x10, 0x61, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x5f, 0x76,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x61, 0x72,
+	0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x25, 0x0a,
+	0x0e, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x5f, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0d, 0x63, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x56, 0x65, 0x72,
+	0x73, 0x69, 0x6f, 0x6e, 0x12, 0x18, 0x0a, 0x07, 0x73, 0x74, 0x6f, 0x70, 0x70, 0x65, 0x64, 0x18,
+	0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x73, 0x74, 0x6f, 0x70, 0x70, 0x65, 0x64, 0x12, 0x46,
+	0x0a, 0x0d, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x5f, 0x70, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x18,
+	0x06, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79,
+	0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x70, 0x6c,
+	0x6f, 0x79, 0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x52, 0x0c, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
+	0x50, 0x6f, 0x6c, 0x69, 0x63, 0x79, 0x12, 0x3f, 0x0a, 0x09, 0x73, 0x63, 0x68, 0x65, 0x64, 0x75,
+	0x6c, 0x65, 0x73, 0x18, 0x07, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x21, 0x2e, 0x73, 0x74, 0x72, 0x61,
+	0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e,
+	0x43, 0x72, 0x6f, 0x6e, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x52, 0x09, 0x73, 0x63,
+	0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x61, 0x72, 0x67, 0x73, 0x18,
+	0x08, 0x20, 0x03, 0x28, 0x09, 0x52, 0x04, 0x61, 0x72, 0x67, 0x73, 0x12, 0x46, 0x0a, 0x03, 0x65,
+	0x6e, 0x76, 0x18, 0x09, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x34, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74,
+	0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x41,
+	0x70, 0x70, 0x6c, 0x79, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x45, 0x6e, 0x76, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x52, 0x03,
+	0x65, 0x6e, 0x76, 0x12, 0x3b, 0x0a, 0x06, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x73, 0x18, 0x0a, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c,
+	0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x73, 0x6f, 0x75, 0x72,
+	0x63, 0x65, 0x4c, 0x69, 0x6d, 0x69, 0x74, 0x73, 0x52, 0x06, 0x6c, 0x69, 0x6d, 0x69, 0x74, 0x73,
+	0x12, 0x34, 0x0a, 0x05, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x18, 0x0b, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x1e, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f,
+	0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x65, 0x61, 0x73, 0x65, 0x53, 0x70, 0x65, 0x63, 0x52,
+	0x05, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x12, 0x41, 0x0a, 0x09, 0x72, 0x65, 0x61, 0x64, 0x69, 0x6e,
+	0x65, 0x73, 0x73, 0x18, 0x0c, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x23, 0x2e, 0x73, 0x74, 0x72, 0x61,
+	0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e,
+	0x52, 0x65, 0x61, 0x64, 0x69, 0x6e, 0x65, 0x73, 0x73, 0x50, 0x72, 0x6f, 0x62, 0x65, 0x52, 0x09,
+	0x72, 0x65, 0x61, 0x64, 0x69, 0x6e, 0x65, 0x73, 0x73, 0x1a, 0x36, 0x0a, 0x08, 0x45, 0x6e, 0x76,
+	0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38,
+	0x01, 0x22, 0x39, 0x0a, 0x17, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e,
 	0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1e, 0x0a, 0x0a,
 	0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03,
 	0x52, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x73, 0x0a, 0x0f,
@@ -3290,7 +3527,7 @@ var file_strategyplatform_v1_control_service_proto_rawDesc = []byte{
 	0x05, 0x20, 0x01, 0x28, 0x08, 0x52, 0x09, 0x63, 0x6f, 0x6e, 0x76, 0x65, 0x72, 0x67, 0x65, 0x64,
 	0x12, 0x1d, 0x0a, 0x0a, 0x6c, 0x61, 0x73, 0x74, 0x5f, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x06,
 	0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x6c, 0x61, 0x73, 0x74, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x32,
-	0xd2, 0x0f, 0x0a, 0x13, 0x43, 0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e, 0x65,
+	0xf6, 0x13, 0x0a, 0x13, 0x43, 0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e, 0x65,
 	0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x63, 0x0a, 0x0c, 0x4c, 0x69, 0x73, 0x74, 0x4d,
 	0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x73, 0x12, 0x28, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
 	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
@@ -3314,113 +3551,147 @@ var file_strategyplatform_v1_control_service_proto_rawDesc = []byte{
 	0x70, 0x6c, 0x6f, 0x79, 0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
 	0x2a, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f,
 	0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x44, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x6d,
-	0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x57, 0x0a, 0x08, 0x52,
-	0x6f, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x12, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
-	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x6f,
-	0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e,
-	0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d,
-	0x2e, 0x76, 0x31, 0x2e, 0x52, 0x6f, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4b, 0x0a, 0x04, 0x53, 0x74, 0x6f, 0x70, 0x12, 0x20, 0x2e, 0x73,
-	0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e,
-	0x76, 0x31, 0x2e, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x21,
+	0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6c, 0x0a, 0x0f, 0x41,
+	0x70, 0x70, 0x6c, 0x79, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x6d, 0x65, 0x6e, 0x74, 0x12, 0x2b,
 	0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
-	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x4e, 0x0a, 0x05, 0x53, 0x74, 0x61, 0x72, 0x74, 0x12, 0x21, 0x2e, 0x73, 0x74, 0x72,
-	0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31,
-	0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x22, 0x2e,
-	0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d,
-	0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x57, 0x0a, 0x08, 0x55, 0x6e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x12, 0x24, 0x2e,
-	0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d,
-	0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x52, 0x65, 0x71, 0x75,
-	0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c,
-	0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x64, 0x65, 0x70, 0x6c,
-	0x6f, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x60, 0x0a, 0x0b, 0x53, 0x65,
-	0x74, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x12, 0x27, 0x2e, 0x73, 0x74, 0x72, 0x61,
+	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e,
+	0x6d, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x73, 0x74,
+	0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76,
+	0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x41, 0x73, 0x73, 0x69, 0x67, 0x6e, 0x6d, 0x65, 0x6e,
+	0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x57, 0x0a, 0x08, 0x52, 0x6f, 0x6c,
+	0x6c, 0x62, 0x61, 0x63, 0x6b, 0x12, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79,
+	0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x6f, 0x6c, 0x6c,
+	0x62, 0x61, 0x63, 0x6b, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x73, 0x74,
+	0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76,
+	0x31, 0x2e, 0x52, 0x6f, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x6f, 0x0a, 0x10, 0x41, 0x70, 0x70, 0x6c, 0x79, 0x4e, 0x61, 0x74, 0x73, 0x43,
+	0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x12, 0x2c, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67,
+	0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70,
+	0x6c, 0x79, 0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70,
+	0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x41, 0x70, 0x70, 0x6c, 0x79,
+	0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x5e, 0x0a, 0x0e, 0x47, 0x65, 0x74, 0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c,
+	0x75, 0x73, 0x74, 0x65, 0x72, 0x12, 0x2a, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79,
+	0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4e,
+	0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x20, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
+	0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73,
+	0x74, 0x65, 0x72, 0x12, 0x6f, 0x0a, 0x10, 0x4c, 0x69, 0x73, 0x74, 0x4e, 0x61, 0x74, 0x73, 0x43,
+	0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x73, 0x12, 0x2c, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
+	0x73, 0x74, 0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x73, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79,
+	0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74,
+	0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x73, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x72, 0x0a, 0x11, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4e, 0x61,
+	0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72, 0x12, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x61,
 	0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e,
-	0x53, 0x65, 0x74, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x28, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61,
-	0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x53, 0x63, 0x68, 0x65,
-	0x64, 0x75, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x69, 0x0a, 0x0e,
-	0x53, 0x65, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x12, 0x2a,
+	0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65,
+	0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74,
+	0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x44,
+	0x65, 0x6c, 0x65, 0x74, 0x65, 0x4e, 0x61, 0x74, 0x73, 0x43, 0x6c, 0x75, 0x73, 0x74, 0x65, 0x72,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4b, 0x0a, 0x04, 0x53, 0x74, 0x6f, 0x70,
+	0x12, 0x20, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66,
+	0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x21, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61,
+	0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x6f, 0x70, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4e, 0x0a, 0x05, 0x53, 0x74, 0x61, 0x72, 0x74, 0x12, 0x21,
+	0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
+	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
+	0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x74, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x57, 0x0a, 0x08, 0x55, 0x6e, 0x64, 0x65, 0x70, 0x6c, 0x6f,
+	0x79, 0x12, 0x24, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
+	0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e, 0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x55, 0x6e,
+	0x64, 0x65, 0x70, 0x6c, 0x6f, 0x79, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x60,
+	0x0a, 0x0b, 0x53, 0x65, 0x74, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x12, 0x27, 0x2e,
+	0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d,
+	0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67,
+	0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74,
+	0x53, 0x63, 0x68, 0x65, 0x64, 0x75, 0x6c, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x69, 0x0a, 0x0e, 0x53, 0x65, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c,
+	0x65, 0x73, 0x12, 0x2a, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61,
+	0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x53, 0x68, 0x61, 0x72,
+	0x65, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2b,
 	0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
 	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x53, 0x65, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69,
-	0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2b, 0x2e, 0x73, 0x74, 0x72,
-	0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31,
-	0x2e, 0x53, 0x65, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6c, 0x0a, 0x0f, 0x4c, 0x69, 0x73, 0x74, 0x53,
-	0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x12, 0x2b, 0x2e, 0x73, 0x74, 0x72,
-	0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31,
-	0x2e, 0x4c, 0x69, 0x73, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
-	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
-	0x73, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x61, 0x0a, 0x0c, 0x57, 0x61, 0x74, 0x63, 0x68, 0x4d, 0x61,
-	0x63, 0x68, 0x69, 0x6e, 0x65, 0x12, 0x26, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79,
-	0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d,
-	0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x27, 0x2e,
-	0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d,
-	0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x53, 0x74, 0x61, 0x74, 0x75,
-	0x73, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x30, 0x01, 0x12, 0x5a, 0x0a, 0x09, 0x4c, 0x69, 0x73, 0x74,
-	0x41, 0x75, 0x64, 0x69, 0x74, 0x12, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79,
-	0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74,
-	0x41, 0x75, 0x64, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26, 0x2e, 0x73,
+	0x6c, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6c, 0x0a, 0x0f, 0x4c,
+	0x69, 0x73, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x12, 0x2b,
+	0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
+	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46,
+	0x69, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2c, 0x2e, 0x73, 0x74,
+	0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76,
+	0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x53, 0x68, 0x61, 0x72, 0x65, 0x64, 0x46, 0x69, 0x6c, 0x65,
+	0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x61, 0x0a, 0x0c, 0x57, 0x61, 0x74,
+	0x63, 0x68, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x12, 0x26, 0x2e, 0x73, 0x74, 0x72, 0x61,
+	0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e,
+	0x47, 0x65, 0x74, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x27, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
+	0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x53,
+	0x74, 0x61, 0x74, 0x75, 0x73, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x30, 0x01, 0x12, 0x5a, 0x0a, 0x09,
+	0x4c, 0x69, 0x73, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x12, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x61,
+	0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e,
+	0x4c, 0x69, 0x73, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x26, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66,
+	0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6f, 0x0a, 0x10, 0x52, 0x65, 0x67, 0x69,
+	0x73, 0x74, 0x65, 0x72, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x12, 0x2c, 0x2e, 0x73,
 	0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e,
-	0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x75, 0x64, 0x69, 0x74, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x6f, 0x0a, 0x10, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72,
-	0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x12, 0x2c, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74,
-	0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x52,
-	0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67,
-	0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x67,
-	0x69, 0x73, 0x74, 0x65, 0x72, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x52, 0x65, 0x73,
-	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7b, 0x0a, 0x14, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x41,
-	0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x55, 0x70, 0x6c, 0x6f, 0x61, 0x64, 0x12, 0x30, 0x2e,
-	0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d,
-	0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61,
-	0x63, 0x74, 0x55, 0x70, 0x6c, 0x6f, 0x61, 0x64, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x31, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f,
-	0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x41, 0x72, 0x74, 0x69,
-	0x66, 0x61, 0x63, 0x74, 0x55, 0x70, 0x6c, 0x6f, 0x61, 0x64, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x66, 0x0a, 0x0d, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61,
-	0x63, 0x74, 0x73, 0x12, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c,
-	0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x72,
-	0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2a,
-	0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
-	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63,
-	0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x76, 0x0a, 0x16, 0x47, 0x65,
-	0x74, 0x43, 0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e, 0x65, 0x56, 0x65, 0x72,
-	0x73, 0x69, 0x6f, 0x6e, 0x12, 0x32, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70,
-	0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x43, 0x6f,
-	0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f,
-	0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74,
-	0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x43,
-	0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e, 0x65, 0x56, 0x65, 0x72, 0x73, 0x69,
-	0x6f, 0x6e, 0x12, 0x72, 0x0a, 0x11, 0x47, 0x65, 0x74, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65,
-	0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x12, 0x2d, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
-	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65,
-	0x74, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67,
-	0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74,
-	0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5a, 0x0a, 0x09, 0x42, 0x72, 0x6f, 0x77, 0x73, 0x65,
-	0x44, 0x69, 0x72, 0x12, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c,
-	0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x72, 0x6f, 0x77, 0x73, 0x65,
-	0x44, 0x69, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26, 0x2e, 0x73, 0x74, 0x72,
+	0x76, 0x31, 0x2e, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x41, 0x72, 0x74, 0x69, 0x66,
+	0x61, 0x63, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2d, 0x2e, 0x73, 0x74, 0x72,
 	0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31,
-	0x2e, 0x42, 0x72, 0x6f, 0x77, 0x73, 0x65, 0x44, 0x69, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x12, 0x60, 0x0a, 0x0d, 0x44, 0x6f, 0x77, 0x6e, 0x6c, 0x6f, 0x61, 0x64, 0x46, 0x69,
-	0x6c, 0x65, 0x73, 0x12, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c,
-	0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x6f, 0x77, 0x6e, 0x6c, 0x6f,
-	0x61, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x22,
+	0x2e, 0x52, 0x65, 0x67, 0x69, 0x73, 0x74, 0x65, 0x72, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63,
+	0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x7b, 0x0a, 0x14, 0x43, 0x72, 0x65,
+	0x61, 0x74, 0x65, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x55, 0x70, 0x6c, 0x6f, 0x61,
+	0x64, 0x12, 0x30, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74,
+	0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x41, 0x72,
+	0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x55, 0x70, 0x6c, 0x6f, 0x61, 0x64, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x31, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c,
+	0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65,
+	0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x55, 0x70, 0x6c, 0x6f, 0x61, 0x64, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x66, 0x0a, 0x0d, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x72,
+	0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x73, 0x12, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69,
+	0x73, 0x74, 0x41, 0x72, 0x74, 0x69, 0x66, 0x61, 0x63, 0x74, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x2a, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61,
+	0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x41, 0x72, 0x74,
+	0x69, 0x66, 0x61, 0x63, 0x74, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x76,
+	0x0a, 0x16, 0x47, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e,
+	0x65, 0x56, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x32, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74,
+	0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x47,
+	0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e, 0x65, 0x56, 0x65,
+	0x72, 0x73, 0x69, 0x6f, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x28, 0x2e, 0x73,
+	0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e,
+	0x76, 0x31, 0x2e, 0x43, 0x6f, 0x6e, 0x74, 0x72, 0x6f, 0x6c, 0x50, 0x6c, 0x61, 0x6e, 0x65, 0x56,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x72, 0x0a, 0x11, 0x47, 0x65, 0x74, 0x4d, 0x61, 0x63,
+	0x68, 0x69, 0x6e, 0x65, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x12, 0x2d, 0x2e, 0x73, 0x74,
+	0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76,
+	0x31, 0x2e, 0x47, 0x65, 0x74, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x4d, 0x65, 0x74, 0x72,
+	0x69, 0x63, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x2e, 0x2e, 0x73, 0x74, 0x72,
+	0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31,
+	0x2e, 0x47, 0x65, 0x74, 0x4d, 0x61, 0x63, 0x68, 0x69, 0x6e, 0x65, 0x4d, 0x65, 0x74, 0x72, 0x69,
+	0x63, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x5a, 0x0a, 0x09, 0x42, 0x72,
+	0x6f, 0x77, 0x73, 0x65, 0x44, 0x69, 0x72, 0x12, 0x25, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x72,
+	0x6f, 0x77, 0x73, 0x65, 0x44, 0x69, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x26,
 	0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
-	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x6f, 0x77, 0x6e, 0x6c, 0x6f, 0x61, 0x64, 0x43, 0x68, 0x75,
-	0x6e, 0x6b, 0x30, 0x01, 0x42, 0x4d, 0x5a, 0x4b, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
-	0x6f, 0x6d, 0x2f, 0x62, 0x75, 0x6c, 0x6c, 0x69, 0x6f, 0x6e, 0x62, 0x65, 0x61, 0x72, 0x2f, 0x73,
-	0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x6f, 0x6e, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x73, 0x74, 0x72,
-	0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2f, 0x76, 0x31,
-	0x3b, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
-	0x6d, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x42, 0x72, 0x6f, 0x77, 0x73, 0x65, 0x44, 0x69, 0x72, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x60, 0x0a, 0x0d, 0x44, 0x6f, 0x77, 0x6e, 0x6c, 0x6f,
+	0x61, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x12, 0x29, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65,
+	0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x6f,
+	0x77, 0x6e, 0x6c, 0x6f, 0x61, 0x64, 0x46, 0x69, 0x6c, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x22, 0x2e, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61,
+	0x74, 0x66, 0x6f, 0x72, 0x6d, 0x2e, 0x76, 0x31, 0x2e, 0x44, 0x6f, 0x77, 0x6e, 0x6c, 0x6f, 0x61,
+	0x64, 0x43, 0x68, 0x75, 0x6e, 0x6b, 0x30, 0x01, 0x42, 0x4d, 0x5a, 0x4b, 0x67, 0x69, 0x74, 0x68,
+	0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x62, 0x75, 0x6c, 0x6c, 0x69, 0x6f, 0x6e, 0x62, 0x65,
+	0x61, 0x72, 0x2f, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x6f, 0x6e, 0x2f, 0x67, 0x65, 0x6e,
+	0x2f, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61, 0x74, 0x66, 0x6f, 0x72,
+	0x6d, 0x2f, 0x76, 0x31, 0x3b, 0x73, 0x74, 0x72, 0x61, 0x74, 0x65, 0x67, 0x79, 0x70, 0x6c, 0x61,
+	0x74, 0x66, 0x6f, 0x72, 0x6d, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -3435,7 +3706,7 @@ func file_strategyplatform_v1_control_service_proto_rawDescGZIP() []byte {
 	return file_strategyplatform_v1_control_service_proto_rawDescData
 }
 
-var file_strategyplatform_v1_control_service_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_strategyplatform_v1_control_service_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_strategyplatform_v1_control_service_proto_goTypes = []any{
 	(*Machine)(nil),                       // 0: strategyplatform.v1.Machine
 	(*StrategyView)(nil),                  // 1: strategyplatform.v1.StrategyView
@@ -3446,137 +3717,168 @@ var file_strategyplatform_v1_control_service_proto_goTypes = []any{
 	(*DeployResponse)(nil),                // 6: strategyplatform.v1.DeployResponse
 	(*SetDeploymentRequest)(nil),          // 7: strategyplatform.v1.SetDeploymentRequest
 	(*SetDeploymentResponse)(nil),         // 8: strategyplatform.v1.SetDeploymentResponse
-	(*RollbackRequest)(nil),               // 9: strategyplatform.v1.RollbackRequest
-	(*RollbackResponse)(nil),              // 10: strategyplatform.v1.RollbackResponse
-	(*UndeployRequest)(nil),               // 11: strategyplatform.v1.UndeployRequest
-	(*UndeployResponse)(nil),              // 12: strategyplatform.v1.UndeployResponse
-	(*StopRequest)(nil),                   // 13: strategyplatform.v1.StopRequest
-	(*StopResponse)(nil),                  // 14: strategyplatform.v1.StopResponse
-	(*StartRequest)(nil),                  // 15: strategyplatform.v1.StartRequest
-	(*StartResponse)(nil),                 // 16: strategyplatform.v1.StartResponse
-	(*SetScheduleRequest)(nil),            // 17: strategyplatform.v1.SetScheduleRequest
-	(*SetScheduleResponse)(nil),           // 18: strategyplatform.v1.SetScheduleResponse
-	(*AuditEntry)(nil),                    // 19: strategyplatform.v1.AuditEntry
-	(*BrowseDirRequest)(nil),              // 20: strategyplatform.v1.BrowseDirRequest
-	(*BrowseDirResponse)(nil),             // 21: strategyplatform.v1.BrowseDirResponse
-	(*DownloadFilesRequest)(nil),          // 22: strategyplatform.v1.DownloadFilesRequest
-	(*DownloadChunk)(nil),                 // 23: strategyplatform.v1.DownloadChunk
-	(*ListAuditRequest)(nil),              // 24: strategyplatform.v1.ListAuditRequest
-	(*ListAuditResponse)(nil),             // 25: strategyplatform.v1.ListAuditResponse
-	(*MachineStatusEvent)(nil),            // 26: strategyplatform.v1.MachineStatusEvent
-	(*RegisterArtifactRequest)(nil),       // 27: strategyplatform.v1.RegisterArtifactRequest
-	(*RegisterArtifactResponse)(nil),      // 28: strategyplatform.v1.RegisterArtifactResponse
-	(*CreateArtifactUploadRequest)(nil),   // 29: strategyplatform.v1.CreateArtifactUploadRequest
-	(*CreateArtifactUploadResponse)(nil),  // 30: strategyplatform.v1.CreateArtifactUploadResponse
-	(*ListArtifactsRequest)(nil),          // 31: strategyplatform.v1.ListArtifactsRequest
-	(*ArtifactCatalogEntry)(nil),          // 32: strategyplatform.v1.ArtifactCatalogEntry
-	(*ListArtifactsResponse)(nil),         // 33: strategyplatform.v1.ListArtifactsResponse
-	(*GetControlPlaneVersionRequest)(nil), // 34: strategyplatform.v1.GetControlPlaneVersionRequest
-	(*ControlPlaneVersion)(nil),           // 35: strategyplatform.v1.ControlPlaneVersion
-	(*ResourceSamplePoint)(nil),           // 36: strategyplatform.v1.ResourceSamplePoint
-	(*GetMachineMetricsRequest)(nil),      // 37: strategyplatform.v1.GetMachineMetricsRequest
-	(*GetMachineMetricsResponse)(nil),     // 38: strategyplatform.v1.GetMachineMetricsResponse
-	(*SetSharedFilesRequest)(nil),         // 39: strategyplatform.v1.SetSharedFilesRequest
-	(*SharedFileRef)(nil),                 // 40: strategyplatform.v1.SharedFileRef
-	(*SetSharedFilesResponse)(nil),        // 41: strategyplatform.v1.SetSharedFilesResponse
-	(*ListSharedFilesRequest)(nil),        // 42: strategyplatform.v1.ListSharedFilesRequest
-	(*ListSharedFilesResponse)(nil),       // 43: strategyplatform.v1.ListSharedFilesResponse
-	(*SharedFileView)(nil),                // 44: strategyplatform.v1.SharedFileView
-	nil,                                   // 45: strategyplatform.v1.SetDeploymentRequest.EnvEntry
-	(*ObjectMeta)(nil),                    // 46: strategyplatform.v1.ObjectMeta
-	(*MachineSpec)(nil),                   // 47: strategyplatform.v1.MachineSpec
-	(*MachineResources)(nil),              // 48: strategyplatform.v1.MachineResources
-	(*timestamppb.Timestamp)(nil),         // 49: google.protobuf.Timestamp
-	(*ProcessMetrics)(nil),                // 50: strategyplatform.v1.ProcessMetrics
-	(*ArtifactRef)(nil),                   // 51: strategyplatform.v1.ArtifactRef
-	(DeployPhase)(0),                      // 52: strategyplatform.v1.DeployPhase
-	(*Condition)(nil),                     // 53: strategyplatform.v1.Condition
-	(*CronSchedule)(nil),                  // 54: strategyplatform.v1.CronSchedule
-	(*DirEntry)(nil),                      // 55: strategyplatform.v1.DirEntry
-	(TransferKind)(0),                     // 56: strategyplatform.v1.TransferKind
-	(ArtifactType)(0),                     // 57: strategyplatform.v1.ArtifactType
+	(*ApplyAssignmentRequest)(nil),        // 9: strategyplatform.v1.ApplyAssignmentRequest
+	(*ApplyAssignmentResponse)(nil),       // 10: strategyplatform.v1.ApplyAssignmentResponse
+	(*RollbackRequest)(nil),               // 11: strategyplatform.v1.RollbackRequest
+	(*RollbackResponse)(nil),              // 12: strategyplatform.v1.RollbackResponse
+	(*UndeployRequest)(nil),               // 13: strategyplatform.v1.UndeployRequest
+	(*UndeployResponse)(nil),              // 14: strategyplatform.v1.UndeployResponse
+	(*StopRequest)(nil),                   // 15: strategyplatform.v1.StopRequest
+	(*StopResponse)(nil),                  // 16: strategyplatform.v1.StopResponse
+	(*StartRequest)(nil),                  // 17: strategyplatform.v1.StartRequest
+	(*StartResponse)(nil),                 // 18: strategyplatform.v1.StartResponse
+	(*SetScheduleRequest)(nil),            // 19: strategyplatform.v1.SetScheduleRequest
+	(*SetScheduleResponse)(nil),           // 20: strategyplatform.v1.SetScheduleResponse
+	(*AuditEntry)(nil),                    // 21: strategyplatform.v1.AuditEntry
+	(*BrowseDirRequest)(nil),              // 22: strategyplatform.v1.BrowseDirRequest
+	(*BrowseDirResponse)(nil),             // 23: strategyplatform.v1.BrowseDirResponse
+	(*DownloadFilesRequest)(nil),          // 24: strategyplatform.v1.DownloadFilesRequest
+	(*DownloadChunk)(nil),                 // 25: strategyplatform.v1.DownloadChunk
+	(*ListAuditRequest)(nil),              // 26: strategyplatform.v1.ListAuditRequest
+	(*ListAuditResponse)(nil),             // 27: strategyplatform.v1.ListAuditResponse
+	(*MachineStatusEvent)(nil),            // 28: strategyplatform.v1.MachineStatusEvent
+	(*RegisterArtifactRequest)(nil),       // 29: strategyplatform.v1.RegisterArtifactRequest
+	(*RegisterArtifactResponse)(nil),      // 30: strategyplatform.v1.RegisterArtifactResponse
+	(*CreateArtifactUploadRequest)(nil),   // 31: strategyplatform.v1.CreateArtifactUploadRequest
+	(*CreateArtifactUploadResponse)(nil),  // 32: strategyplatform.v1.CreateArtifactUploadResponse
+	(*ListArtifactsRequest)(nil),          // 33: strategyplatform.v1.ListArtifactsRequest
+	(*ArtifactCatalogEntry)(nil),          // 34: strategyplatform.v1.ArtifactCatalogEntry
+	(*ListArtifactsResponse)(nil),         // 35: strategyplatform.v1.ListArtifactsResponse
+	(*GetControlPlaneVersionRequest)(nil), // 36: strategyplatform.v1.GetControlPlaneVersionRequest
+	(*ControlPlaneVersion)(nil),           // 37: strategyplatform.v1.ControlPlaneVersion
+	(*ResourceSamplePoint)(nil),           // 38: strategyplatform.v1.ResourceSamplePoint
+	(*GetMachineMetricsRequest)(nil),      // 39: strategyplatform.v1.GetMachineMetricsRequest
+	(*GetMachineMetricsResponse)(nil),     // 40: strategyplatform.v1.GetMachineMetricsResponse
+	(*SetSharedFilesRequest)(nil),         // 41: strategyplatform.v1.SetSharedFilesRequest
+	(*SharedFileRef)(nil),                 // 42: strategyplatform.v1.SharedFileRef
+	(*SetSharedFilesResponse)(nil),        // 43: strategyplatform.v1.SetSharedFilesResponse
+	(*ListSharedFilesRequest)(nil),        // 44: strategyplatform.v1.ListSharedFilesRequest
+	(*ListSharedFilesResponse)(nil),       // 45: strategyplatform.v1.ListSharedFilesResponse
+	(*SharedFileView)(nil),                // 46: strategyplatform.v1.SharedFileView
+	nil,                                   // 47: strategyplatform.v1.SetDeploymentRequest.EnvEntry
+	nil,                                   // 48: strategyplatform.v1.ApplyAssignmentRequest.EnvEntry
+	(*ObjectMeta)(nil),                    // 49: strategyplatform.v1.ObjectMeta
+	(*MachineSpec)(nil),                   // 50: strategyplatform.v1.MachineSpec
+	(*MachineResources)(nil),              // 51: strategyplatform.v1.MachineResources
+	(*timestamppb.Timestamp)(nil),         // 52: google.protobuf.Timestamp
+	(*ProcessMetrics)(nil),                // 53: strategyplatform.v1.ProcessMetrics
+	(*ArtifactRef)(nil),                   // 54: strategyplatform.v1.ArtifactRef
+	(DeployPhase)(0),                      // 55: strategyplatform.v1.DeployPhase
+	(*Condition)(nil),                     // 56: strategyplatform.v1.Condition
+	(*CronSchedule)(nil),                  // 57: strategyplatform.v1.CronSchedule
+	(*DeployPolicy)(nil),                  // 58: strategyplatform.v1.DeployPolicy
+	(*ResourceLimits)(nil),                // 59: strategyplatform.v1.ResourceLimits
+	(*LeaseSpec)(nil),                     // 60: strategyplatform.v1.LeaseSpec
+	(*ReadinessProbe)(nil),                // 61: strategyplatform.v1.ReadinessProbe
+	(*DirEntry)(nil),                      // 62: strategyplatform.v1.DirEntry
+	(TransferKind)(0),                     // 63: strategyplatform.v1.TransferKind
+	(ArtifactType)(0),                     // 64: strategyplatform.v1.ArtifactType
+	(*ApplyNatsClusterRequest)(nil),       // 65: strategyplatform.v1.ApplyNatsClusterRequest
+	(*GetNatsClusterRequest)(nil),         // 66: strategyplatform.v1.GetNatsClusterRequest
+	(*ListNatsClustersRequest)(nil),       // 67: strategyplatform.v1.ListNatsClustersRequest
+	(*DeleteNatsClusterRequest)(nil),      // 68: strategyplatform.v1.DeleteNatsClusterRequest
+	(*ApplyNatsClusterResponse)(nil),      // 69: strategyplatform.v1.ApplyNatsClusterResponse
+	(*NatsCluster)(nil),                   // 70: strategyplatform.v1.NatsCluster
+	(*ListNatsClustersResponse)(nil),      // 71: strategyplatform.v1.ListNatsClustersResponse
+	(*DeleteNatsClusterResponse)(nil),     // 72: strategyplatform.v1.DeleteNatsClusterResponse
 }
 var file_strategyplatform_v1_control_service_proto_depIdxs = []int32{
-	46, // 0: strategyplatform.v1.Machine.metadata:type_name -> strategyplatform.v1.ObjectMeta
-	47, // 1: strategyplatform.v1.Machine.spec:type_name -> strategyplatform.v1.MachineSpec
-	48, // 2: strategyplatform.v1.Machine.last_resources:type_name -> strategyplatform.v1.MachineResources
-	49, // 3: strategyplatform.v1.Machine.last_heartbeat:type_name -> google.protobuf.Timestamp
+	49, // 0: strategyplatform.v1.Machine.metadata:type_name -> strategyplatform.v1.ObjectMeta
+	50, // 1: strategyplatform.v1.Machine.spec:type_name -> strategyplatform.v1.MachineSpec
+	51, // 2: strategyplatform.v1.Machine.last_resources:type_name -> strategyplatform.v1.MachineResources
+	52, // 3: strategyplatform.v1.Machine.last_heartbeat:type_name -> google.protobuf.Timestamp
 	1,  // 4: strategyplatform.v1.Machine.strategies:type_name -> strategyplatform.v1.StrategyView
-	50, // 5: strategyplatform.v1.Machine.last_processes:type_name -> strategyplatform.v1.ProcessMetrics
-	51, // 6: strategyplatform.v1.StrategyView.desired_artifact:type_name -> strategyplatform.v1.ArtifactRef
-	51, // 7: strategyplatform.v1.StrategyView.desired_config:type_name -> strategyplatform.v1.ArtifactRef
-	52, // 8: strategyplatform.v1.StrategyView.phase:type_name -> strategyplatform.v1.DeployPhase
-	51, // 9: strategyplatform.v1.StrategyView.running_artifact:type_name -> strategyplatform.v1.ArtifactRef
-	51, // 10: strategyplatform.v1.StrategyView.running_config:type_name -> strategyplatform.v1.ArtifactRef
-	53, // 11: strategyplatform.v1.StrategyView.conditions:type_name -> strategyplatform.v1.Condition
-	49, // 12: strategyplatform.v1.StrategyView.lease_expires_at:type_name -> google.protobuf.Timestamp
-	54, // 13: strategyplatform.v1.StrategyView.schedules:type_name -> strategyplatform.v1.CronSchedule
-	49, // 14: strategyplatform.v1.StrategyView.started_at:type_name -> google.protobuf.Timestamp
-	49, // 15: strategyplatform.v1.StrategyView.deployed_at:type_name -> google.protobuf.Timestamp
+	53, // 5: strategyplatform.v1.Machine.last_processes:type_name -> strategyplatform.v1.ProcessMetrics
+	54, // 6: strategyplatform.v1.StrategyView.desired_artifact:type_name -> strategyplatform.v1.ArtifactRef
+	54, // 7: strategyplatform.v1.StrategyView.desired_config:type_name -> strategyplatform.v1.ArtifactRef
+	55, // 8: strategyplatform.v1.StrategyView.phase:type_name -> strategyplatform.v1.DeployPhase
+	54, // 9: strategyplatform.v1.StrategyView.running_artifact:type_name -> strategyplatform.v1.ArtifactRef
+	54, // 10: strategyplatform.v1.StrategyView.running_config:type_name -> strategyplatform.v1.ArtifactRef
+	56, // 11: strategyplatform.v1.StrategyView.conditions:type_name -> strategyplatform.v1.Condition
+	52, // 12: strategyplatform.v1.StrategyView.lease_expires_at:type_name -> google.protobuf.Timestamp
+	57, // 13: strategyplatform.v1.StrategyView.schedules:type_name -> strategyplatform.v1.CronSchedule
+	52, // 14: strategyplatform.v1.StrategyView.started_at:type_name -> google.protobuf.Timestamp
+	52, // 15: strategyplatform.v1.StrategyView.deployed_at:type_name -> google.protobuf.Timestamp
 	0,  // 16: strategyplatform.v1.ListMachinesResponse.machines:type_name -> strategyplatform.v1.Machine
-	45, // 17: strategyplatform.v1.SetDeploymentRequest.env:type_name -> strategyplatform.v1.SetDeploymentRequest.EnvEntry
-	54, // 18: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
-	49, // 19: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
-	55, // 20: strategyplatform.v1.BrowseDirResponse.entries:type_name -> strategyplatform.v1.DirEntry
-	56, // 21: strategyplatform.v1.DownloadChunk.transfer_kind:type_name -> strategyplatform.v1.TransferKind
-	19, // 22: strategyplatform.v1.ListAuditResponse.entries:type_name -> strategyplatform.v1.AuditEntry
-	0,  // 23: strategyplatform.v1.MachineStatusEvent.machine:type_name -> strategyplatform.v1.Machine
-	49, // 24: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
-	51, // 25: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
-	57, // 26: strategyplatform.v1.CreateArtifactUploadRequest.type:type_name -> strategyplatform.v1.ArtifactType
-	49, // 27: strategyplatform.v1.CreateArtifactUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
-	51, // 28: strategyplatform.v1.ArtifactCatalogEntry.artifact:type_name -> strategyplatform.v1.ArtifactRef
-	51, // 29: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
-	32, // 30: strategyplatform.v1.ListArtifactsResponse.entries:type_name -> strategyplatform.v1.ArtifactCatalogEntry
-	49, // 31: strategyplatform.v1.ResourceSamplePoint.sampled_at:type_name -> google.protobuf.Timestamp
-	36, // 32: strategyplatform.v1.GetMachineMetricsResponse.samples:type_name -> strategyplatform.v1.ResourceSamplePoint
-	40, // 33: strategyplatform.v1.SetSharedFilesRequest.files:type_name -> strategyplatform.v1.SharedFileRef
-	44, // 34: strategyplatform.v1.ListSharedFilesResponse.files:type_name -> strategyplatform.v1.SharedFileView
-	2,  // 35: strategyplatform.v1.ControlPlaneService.ListMachines:input_type -> strategyplatform.v1.ListMachinesRequest
-	4,  // 36: strategyplatform.v1.ControlPlaneService.GetMachine:input_type -> strategyplatform.v1.GetMachineRequest
-	5,  // 37: strategyplatform.v1.ControlPlaneService.Deploy:input_type -> strategyplatform.v1.DeployRequest
-	7,  // 38: strategyplatform.v1.ControlPlaneService.SetDeployment:input_type -> strategyplatform.v1.SetDeploymentRequest
-	9,  // 39: strategyplatform.v1.ControlPlaneService.Rollback:input_type -> strategyplatform.v1.RollbackRequest
-	13, // 40: strategyplatform.v1.ControlPlaneService.Stop:input_type -> strategyplatform.v1.StopRequest
-	15, // 41: strategyplatform.v1.ControlPlaneService.Start:input_type -> strategyplatform.v1.StartRequest
-	11, // 42: strategyplatform.v1.ControlPlaneService.Undeploy:input_type -> strategyplatform.v1.UndeployRequest
-	17, // 43: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
-	39, // 44: strategyplatform.v1.ControlPlaneService.SetSharedFiles:input_type -> strategyplatform.v1.SetSharedFilesRequest
-	42, // 45: strategyplatform.v1.ControlPlaneService.ListSharedFiles:input_type -> strategyplatform.v1.ListSharedFilesRequest
-	4,  // 46: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
-	24, // 47: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
-	27, // 48: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
-	29, // 49: strategyplatform.v1.ControlPlaneService.CreateArtifactUpload:input_type -> strategyplatform.v1.CreateArtifactUploadRequest
-	31, // 50: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
-	34, // 51: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:input_type -> strategyplatform.v1.GetControlPlaneVersionRequest
-	37, // 52: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:input_type -> strategyplatform.v1.GetMachineMetricsRequest
-	20, // 53: strategyplatform.v1.ControlPlaneService.BrowseDir:input_type -> strategyplatform.v1.BrowseDirRequest
-	22, // 54: strategyplatform.v1.ControlPlaneService.DownloadFiles:input_type -> strategyplatform.v1.DownloadFilesRequest
-	3,  // 55: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
-	0,  // 56: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
-	6,  // 57: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
-	8,  // 58: strategyplatform.v1.ControlPlaneService.SetDeployment:output_type -> strategyplatform.v1.SetDeploymentResponse
-	10, // 59: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
-	14, // 60: strategyplatform.v1.ControlPlaneService.Stop:output_type -> strategyplatform.v1.StopResponse
-	16, // 61: strategyplatform.v1.ControlPlaneService.Start:output_type -> strategyplatform.v1.StartResponse
-	12, // 62: strategyplatform.v1.ControlPlaneService.Undeploy:output_type -> strategyplatform.v1.UndeployResponse
-	18, // 63: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
-	41, // 64: strategyplatform.v1.ControlPlaneService.SetSharedFiles:output_type -> strategyplatform.v1.SetSharedFilesResponse
-	43, // 65: strategyplatform.v1.ControlPlaneService.ListSharedFiles:output_type -> strategyplatform.v1.ListSharedFilesResponse
-	26, // 66: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
-	25, // 67: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
-	28, // 68: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
-	30, // 69: strategyplatform.v1.ControlPlaneService.CreateArtifactUpload:output_type -> strategyplatform.v1.CreateArtifactUploadResponse
-	33, // 70: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
-	35, // 71: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:output_type -> strategyplatform.v1.ControlPlaneVersion
-	38, // 72: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:output_type -> strategyplatform.v1.GetMachineMetricsResponse
-	21, // 73: strategyplatform.v1.ControlPlaneService.BrowseDir:output_type -> strategyplatform.v1.BrowseDirResponse
-	23, // 74: strategyplatform.v1.ControlPlaneService.DownloadFiles:output_type -> strategyplatform.v1.DownloadChunk
-	55, // [55:75] is the sub-list for method output_type
-	35, // [35:55] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	47, // 17: strategyplatform.v1.SetDeploymentRequest.env:type_name -> strategyplatform.v1.SetDeploymentRequest.EnvEntry
+	58, // 18: strategyplatform.v1.ApplyAssignmentRequest.deploy_policy:type_name -> strategyplatform.v1.DeployPolicy
+	57, // 19: strategyplatform.v1.ApplyAssignmentRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
+	48, // 20: strategyplatform.v1.ApplyAssignmentRequest.env:type_name -> strategyplatform.v1.ApplyAssignmentRequest.EnvEntry
+	59, // 21: strategyplatform.v1.ApplyAssignmentRequest.limits:type_name -> strategyplatform.v1.ResourceLimits
+	60, // 22: strategyplatform.v1.ApplyAssignmentRequest.lease:type_name -> strategyplatform.v1.LeaseSpec
+	61, // 23: strategyplatform.v1.ApplyAssignmentRequest.readiness:type_name -> strategyplatform.v1.ReadinessProbe
+	57, // 24: strategyplatform.v1.SetScheduleRequest.schedules:type_name -> strategyplatform.v1.CronSchedule
+	52, // 25: strategyplatform.v1.AuditEntry.timestamp:type_name -> google.protobuf.Timestamp
+	62, // 26: strategyplatform.v1.BrowseDirResponse.entries:type_name -> strategyplatform.v1.DirEntry
+	63, // 27: strategyplatform.v1.DownloadChunk.transfer_kind:type_name -> strategyplatform.v1.TransferKind
+	21, // 28: strategyplatform.v1.ListAuditResponse.entries:type_name -> strategyplatform.v1.AuditEntry
+	0,  // 29: strategyplatform.v1.MachineStatusEvent.machine:type_name -> strategyplatform.v1.Machine
+	52, // 30: strategyplatform.v1.MachineStatusEvent.at:type_name -> google.protobuf.Timestamp
+	54, // 31: strategyplatform.v1.RegisterArtifactRequest.artifact:type_name -> strategyplatform.v1.ArtifactRef
+	64, // 32: strategyplatform.v1.CreateArtifactUploadRequest.type:type_name -> strategyplatform.v1.ArtifactType
+	52, // 33: strategyplatform.v1.CreateArtifactUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	54, // 34: strategyplatform.v1.ArtifactCatalogEntry.artifact:type_name -> strategyplatform.v1.ArtifactRef
+	54, // 35: strategyplatform.v1.ListArtifactsResponse.artifacts:type_name -> strategyplatform.v1.ArtifactRef
+	34, // 36: strategyplatform.v1.ListArtifactsResponse.entries:type_name -> strategyplatform.v1.ArtifactCatalogEntry
+	52, // 37: strategyplatform.v1.ResourceSamplePoint.sampled_at:type_name -> google.protobuf.Timestamp
+	38, // 38: strategyplatform.v1.GetMachineMetricsResponse.samples:type_name -> strategyplatform.v1.ResourceSamplePoint
+	42, // 39: strategyplatform.v1.SetSharedFilesRequest.files:type_name -> strategyplatform.v1.SharedFileRef
+	46, // 40: strategyplatform.v1.ListSharedFilesResponse.files:type_name -> strategyplatform.v1.SharedFileView
+	2,  // 41: strategyplatform.v1.ControlPlaneService.ListMachines:input_type -> strategyplatform.v1.ListMachinesRequest
+	4,  // 42: strategyplatform.v1.ControlPlaneService.GetMachine:input_type -> strategyplatform.v1.GetMachineRequest
+	5,  // 43: strategyplatform.v1.ControlPlaneService.Deploy:input_type -> strategyplatform.v1.DeployRequest
+	7,  // 44: strategyplatform.v1.ControlPlaneService.SetDeployment:input_type -> strategyplatform.v1.SetDeploymentRequest
+	9,  // 45: strategyplatform.v1.ControlPlaneService.ApplyAssignment:input_type -> strategyplatform.v1.ApplyAssignmentRequest
+	11, // 46: strategyplatform.v1.ControlPlaneService.Rollback:input_type -> strategyplatform.v1.RollbackRequest
+	65, // 47: strategyplatform.v1.ControlPlaneService.ApplyNatsCluster:input_type -> strategyplatform.v1.ApplyNatsClusterRequest
+	66, // 48: strategyplatform.v1.ControlPlaneService.GetNatsCluster:input_type -> strategyplatform.v1.GetNatsClusterRequest
+	67, // 49: strategyplatform.v1.ControlPlaneService.ListNatsClusters:input_type -> strategyplatform.v1.ListNatsClustersRequest
+	68, // 50: strategyplatform.v1.ControlPlaneService.DeleteNatsCluster:input_type -> strategyplatform.v1.DeleteNatsClusterRequest
+	15, // 51: strategyplatform.v1.ControlPlaneService.Stop:input_type -> strategyplatform.v1.StopRequest
+	17, // 52: strategyplatform.v1.ControlPlaneService.Start:input_type -> strategyplatform.v1.StartRequest
+	13, // 53: strategyplatform.v1.ControlPlaneService.Undeploy:input_type -> strategyplatform.v1.UndeployRequest
+	19, // 54: strategyplatform.v1.ControlPlaneService.SetSchedule:input_type -> strategyplatform.v1.SetScheduleRequest
+	41, // 55: strategyplatform.v1.ControlPlaneService.SetSharedFiles:input_type -> strategyplatform.v1.SetSharedFilesRequest
+	44, // 56: strategyplatform.v1.ControlPlaneService.ListSharedFiles:input_type -> strategyplatform.v1.ListSharedFilesRequest
+	4,  // 57: strategyplatform.v1.ControlPlaneService.WatchMachine:input_type -> strategyplatform.v1.GetMachineRequest
+	26, // 58: strategyplatform.v1.ControlPlaneService.ListAudit:input_type -> strategyplatform.v1.ListAuditRequest
+	29, // 59: strategyplatform.v1.ControlPlaneService.RegisterArtifact:input_type -> strategyplatform.v1.RegisterArtifactRequest
+	31, // 60: strategyplatform.v1.ControlPlaneService.CreateArtifactUpload:input_type -> strategyplatform.v1.CreateArtifactUploadRequest
+	33, // 61: strategyplatform.v1.ControlPlaneService.ListArtifacts:input_type -> strategyplatform.v1.ListArtifactsRequest
+	36, // 62: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:input_type -> strategyplatform.v1.GetControlPlaneVersionRequest
+	39, // 63: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:input_type -> strategyplatform.v1.GetMachineMetricsRequest
+	22, // 64: strategyplatform.v1.ControlPlaneService.BrowseDir:input_type -> strategyplatform.v1.BrowseDirRequest
+	24, // 65: strategyplatform.v1.ControlPlaneService.DownloadFiles:input_type -> strategyplatform.v1.DownloadFilesRequest
+	3,  // 66: strategyplatform.v1.ControlPlaneService.ListMachines:output_type -> strategyplatform.v1.ListMachinesResponse
+	0,  // 67: strategyplatform.v1.ControlPlaneService.GetMachine:output_type -> strategyplatform.v1.Machine
+	6,  // 68: strategyplatform.v1.ControlPlaneService.Deploy:output_type -> strategyplatform.v1.DeployResponse
+	8,  // 69: strategyplatform.v1.ControlPlaneService.SetDeployment:output_type -> strategyplatform.v1.SetDeploymentResponse
+	10, // 70: strategyplatform.v1.ControlPlaneService.ApplyAssignment:output_type -> strategyplatform.v1.ApplyAssignmentResponse
+	12, // 71: strategyplatform.v1.ControlPlaneService.Rollback:output_type -> strategyplatform.v1.RollbackResponse
+	69, // 72: strategyplatform.v1.ControlPlaneService.ApplyNatsCluster:output_type -> strategyplatform.v1.ApplyNatsClusterResponse
+	70, // 73: strategyplatform.v1.ControlPlaneService.GetNatsCluster:output_type -> strategyplatform.v1.NatsCluster
+	71, // 74: strategyplatform.v1.ControlPlaneService.ListNatsClusters:output_type -> strategyplatform.v1.ListNatsClustersResponse
+	72, // 75: strategyplatform.v1.ControlPlaneService.DeleteNatsCluster:output_type -> strategyplatform.v1.DeleteNatsClusterResponse
+	16, // 76: strategyplatform.v1.ControlPlaneService.Stop:output_type -> strategyplatform.v1.StopResponse
+	18, // 77: strategyplatform.v1.ControlPlaneService.Start:output_type -> strategyplatform.v1.StartResponse
+	14, // 78: strategyplatform.v1.ControlPlaneService.Undeploy:output_type -> strategyplatform.v1.UndeployResponse
+	20, // 79: strategyplatform.v1.ControlPlaneService.SetSchedule:output_type -> strategyplatform.v1.SetScheduleResponse
+	43, // 80: strategyplatform.v1.ControlPlaneService.SetSharedFiles:output_type -> strategyplatform.v1.SetSharedFilesResponse
+	45, // 81: strategyplatform.v1.ControlPlaneService.ListSharedFiles:output_type -> strategyplatform.v1.ListSharedFilesResponse
+	28, // 82: strategyplatform.v1.ControlPlaneService.WatchMachine:output_type -> strategyplatform.v1.MachineStatusEvent
+	27, // 83: strategyplatform.v1.ControlPlaneService.ListAudit:output_type -> strategyplatform.v1.ListAuditResponse
+	30, // 84: strategyplatform.v1.ControlPlaneService.RegisterArtifact:output_type -> strategyplatform.v1.RegisterArtifactResponse
+	32, // 85: strategyplatform.v1.ControlPlaneService.CreateArtifactUpload:output_type -> strategyplatform.v1.CreateArtifactUploadResponse
+	35, // 86: strategyplatform.v1.ControlPlaneService.ListArtifacts:output_type -> strategyplatform.v1.ListArtifactsResponse
+	37, // 87: strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion:output_type -> strategyplatform.v1.ControlPlaneVersion
+	40, // 88: strategyplatform.v1.ControlPlaneService.GetMachineMetrics:output_type -> strategyplatform.v1.GetMachineMetricsResponse
+	23, // 89: strategyplatform.v1.ControlPlaneService.BrowseDir:output_type -> strategyplatform.v1.BrowseDirResponse
+	25, // 90: strategyplatform.v1.ControlPlaneService.DownloadFiles:output_type -> strategyplatform.v1.DownloadChunk
+	66, // [66:91] is the sub-list for method output_type
+	41, // [41:66] is the sub-list for method input_type
+	41, // [41:41] is the sub-list for extension type_name
+	41, // [41:41] is the sub-list for extension extendee
+	0,  // [0:41] is the sub-list for field type_name
 }
 
 func init() { file_strategyplatform_v1_control_service_proto_init() }
@@ -3587,6 +3889,8 @@ func file_strategyplatform_v1_control_service_proto_init() {
 	file_strategyplatform_v1_agent_service_proto_init()
 	file_strategyplatform_v1_common_proto_init()
 	file_strategyplatform_v1_enrollment_proto_init()
+	file_strategyplatform_v1_nats_proto_init()
+	file_strategyplatform_v1_spec_proto_init()
 	file_strategyplatform_v1_status_proto_init()
 	file_strategyplatform_v1_telemetry_proto_init()
 	if !protoimpl.UnsafeEnabled {
@@ -3699,7 +4003,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[9].Exporter = func(v any, i int) any {
-			switch v := v.(*RollbackRequest); i {
+			switch v := v.(*ApplyAssignmentRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3711,7 +4015,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[10].Exporter = func(v any, i int) any {
-			switch v := v.(*RollbackResponse); i {
+			switch v := v.(*ApplyAssignmentResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3723,7 +4027,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[11].Exporter = func(v any, i int) any {
-			switch v := v.(*UndeployRequest); i {
+			switch v := v.(*RollbackRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3735,7 +4039,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[12].Exporter = func(v any, i int) any {
-			switch v := v.(*UndeployResponse); i {
+			switch v := v.(*RollbackResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3747,7 +4051,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[13].Exporter = func(v any, i int) any {
-			switch v := v.(*StopRequest); i {
+			switch v := v.(*UndeployRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3759,7 +4063,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[14].Exporter = func(v any, i int) any {
-			switch v := v.(*StopResponse); i {
+			switch v := v.(*UndeployResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3771,7 +4075,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[15].Exporter = func(v any, i int) any {
-			switch v := v.(*StartRequest); i {
+			switch v := v.(*StopRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3783,7 +4087,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[16].Exporter = func(v any, i int) any {
-			switch v := v.(*StartResponse); i {
+			switch v := v.(*StopResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3795,7 +4099,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[17].Exporter = func(v any, i int) any {
-			switch v := v.(*SetScheduleRequest); i {
+			switch v := v.(*StartRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3807,7 +4111,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[18].Exporter = func(v any, i int) any {
-			switch v := v.(*SetScheduleResponse); i {
+			switch v := v.(*StartResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3819,7 +4123,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[19].Exporter = func(v any, i int) any {
-			switch v := v.(*AuditEntry); i {
+			switch v := v.(*SetScheduleRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3831,7 +4135,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[20].Exporter = func(v any, i int) any {
-			switch v := v.(*BrowseDirRequest); i {
+			switch v := v.(*SetScheduleResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3843,7 +4147,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[21].Exporter = func(v any, i int) any {
-			switch v := v.(*BrowseDirResponse); i {
+			switch v := v.(*AuditEntry); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3855,7 +4159,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[22].Exporter = func(v any, i int) any {
-			switch v := v.(*DownloadFilesRequest); i {
+			switch v := v.(*BrowseDirRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3867,7 +4171,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[23].Exporter = func(v any, i int) any {
-			switch v := v.(*DownloadChunk); i {
+			switch v := v.(*BrowseDirResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3879,7 +4183,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[24].Exporter = func(v any, i int) any {
-			switch v := v.(*ListAuditRequest); i {
+			switch v := v.(*DownloadFilesRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3891,7 +4195,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[25].Exporter = func(v any, i int) any {
-			switch v := v.(*ListAuditResponse); i {
+			switch v := v.(*DownloadChunk); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3903,7 +4207,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[26].Exporter = func(v any, i int) any {
-			switch v := v.(*MachineStatusEvent); i {
+			switch v := v.(*ListAuditRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3915,7 +4219,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[27].Exporter = func(v any, i int) any {
-			switch v := v.(*RegisterArtifactRequest); i {
+			switch v := v.(*ListAuditResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3927,7 +4231,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[28].Exporter = func(v any, i int) any {
-			switch v := v.(*RegisterArtifactResponse); i {
+			switch v := v.(*MachineStatusEvent); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3939,7 +4243,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[29].Exporter = func(v any, i int) any {
-			switch v := v.(*CreateArtifactUploadRequest); i {
+			switch v := v.(*RegisterArtifactRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3951,7 +4255,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[30].Exporter = func(v any, i int) any {
-			switch v := v.(*CreateArtifactUploadResponse); i {
+			switch v := v.(*RegisterArtifactResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3963,7 +4267,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[31].Exporter = func(v any, i int) any {
-			switch v := v.(*ListArtifactsRequest); i {
+			switch v := v.(*CreateArtifactUploadRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3975,7 +4279,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[32].Exporter = func(v any, i int) any {
-			switch v := v.(*ArtifactCatalogEntry); i {
+			switch v := v.(*CreateArtifactUploadResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3987,7 +4291,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[33].Exporter = func(v any, i int) any {
-			switch v := v.(*ListArtifactsResponse); i {
+			switch v := v.(*ListArtifactsRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3999,7 +4303,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[34].Exporter = func(v any, i int) any {
-			switch v := v.(*GetControlPlaneVersionRequest); i {
+			switch v := v.(*ArtifactCatalogEntry); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4011,7 +4315,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[35].Exporter = func(v any, i int) any {
-			switch v := v.(*ControlPlaneVersion); i {
+			switch v := v.(*ListArtifactsResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4023,7 +4327,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[36].Exporter = func(v any, i int) any {
-			switch v := v.(*ResourceSamplePoint); i {
+			switch v := v.(*GetControlPlaneVersionRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4035,7 +4339,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[37].Exporter = func(v any, i int) any {
-			switch v := v.(*GetMachineMetricsRequest); i {
+			switch v := v.(*ControlPlaneVersion); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4047,7 +4351,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[38].Exporter = func(v any, i int) any {
-			switch v := v.(*GetMachineMetricsResponse); i {
+			switch v := v.(*ResourceSamplePoint); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4059,7 +4363,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[39].Exporter = func(v any, i int) any {
-			switch v := v.(*SetSharedFilesRequest); i {
+			switch v := v.(*GetMachineMetricsRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4071,7 +4375,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[40].Exporter = func(v any, i int) any {
-			switch v := v.(*SharedFileRef); i {
+			switch v := v.(*GetMachineMetricsResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4083,7 +4387,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[41].Exporter = func(v any, i int) any {
-			switch v := v.(*SetSharedFilesResponse); i {
+			switch v := v.(*SetSharedFilesRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4095,7 +4399,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[42].Exporter = func(v any, i int) any {
-			switch v := v.(*ListSharedFilesRequest); i {
+			switch v := v.(*SharedFileRef); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4107,7 +4411,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[43].Exporter = func(v any, i int) any {
-			switch v := v.(*ListSharedFilesResponse); i {
+			switch v := v.(*SetSharedFilesResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4119,6 +4423,30 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			}
 		}
 		file_strategyplatform_v1_control_service_proto_msgTypes[44].Exporter = func(v any, i int) any {
+			switch v := v.(*ListSharedFilesRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_strategyplatform_v1_control_service_proto_msgTypes[45].Exporter = func(v any, i int) any {
+			switch v := v.(*ListSharedFilesResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_strategyplatform_v1_control_service_proto_msgTypes[46].Exporter = func(v any, i int) any {
 			switch v := v.(*SharedFileView); i {
 			case 0:
 				return &v.state
@@ -4137,7 +4465,7 @@ func file_strategyplatform_v1_control_service_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_strategyplatform_v1_control_service_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   46,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -23,7 +23,7 @@ func newTestPostgres(t *testing.T, hub *Hub) *Postgres {
 	if err != nil {
 		t.Fatalf("NewPostgres: %v", err)
 	}
-	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases, api_tokens, resource_samples RESTART IDENTITY CASCADE`); err != nil {
+	if _, err := p.pool.Exec(ctx, `TRUNCATE machines, artifacts, audit, leases, api_tokens, resource_samples, nats_clusters RESTART IDENTITY CASCADE`); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
 	t.Cleanup(p.Close)

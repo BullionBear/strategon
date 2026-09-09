@@ -12,6 +12,122 @@
     }
   ],
   "paths": {
+    "/strategyplatform.v1.ControlPlaneService/ApplyAssignment": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ApplyAssignment",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ApplyAssignment",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ApplyAssignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ApplyAssignmentResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ApplyNatsCluster": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ApplyNatsCluster",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ApplyNatsCluster",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ApplyNatsClusterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ApplyNatsClusterResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/BrowseDir": {
       "post": {
         "tags": [
@@ -122,6 +238,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/strategyplatform.v1.CreateArtifactUploadResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/DeleteNatsCluster": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "DeleteNatsCluster",
+        "operationId": "strategyplatform.v1.ControlPlaneService.DeleteNatsCluster",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.DeleteNatsClusterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.DeleteNatsClusterResponse"
                 }
               }
             }
@@ -364,6 +538,64 @@
         }
       }
     },
+    "/strategyplatform.v1.ControlPlaneService/GetNatsCluster": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "GetNatsCluster",
+        "operationId": "strategyplatform.v1.ControlPlaneService.GetNatsCluster",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.GetNatsClusterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/ListArtifacts": {
       "post": {
         "tags": [
@@ -531,6 +763,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/strategyplatform.v1.ListMachinesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ListNatsClusters": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ListNatsClusters",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ListNatsClusters",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ListNatsClustersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ListNatsClustersResponse"
                 }
               }
             }
@@ -1163,6 +1453,126 @@
         "format": "date-time",
         "description": "A Timestamp represents a point in time independent of any time zone or local\n calendar, encoded as a count of seconds and fractions of seconds at\n nanosecond resolution. The count is relative to an epoch at UTC midnight on\n January 1, 1970, in the proleptic Gregorian calendar which extends the\n Gregorian calendar backwards to year one.\n\n All minutes are 60 seconds long. Leap seconds are \"smeared\" so that no leap\n second table is needed for interpretation, using a [24-hour linear\n smear](https://developers.google.com/time/smear).\n\n The range is from 0001-01-01T00:00:00Z to 9999-12-31T23:59:59.999999999Z. By\n restricting to that range, we ensure that we can convert to and from [RFC\n 3339](https://www.ietf.org/rfc/rfc3339.txt) date strings.\n\n # Examples\n\n Example 1: Compute Timestamp from POSIX `time()`.\n\n     Timestamp timestamp;\n     timestamp.set_seconds(time(NULL));\n     timestamp.set_nanos(0);\n\n Example 2: Compute Timestamp from POSIX `gettimeofday()`.\n\n     struct timeval tv;\n     gettimeofday(\u0026tv, NULL);\n\n     Timestamp timestamp;\n     timestamp.set_seconds(tv.tv_sec);\n     timestamp.set_nanos(tv.tv_usec * 1000);\n\n Example 3: Compute Timestamp from Win32 `GetSystemTimeAsFileTime()`.\n\n     FILETIME ft;\n     GetSystemTimeAsFileTime(\u0026ft);\n     UINT64 ticks = (((UINT64)ft.dwHighDateTime) \u003c\u003c 32) | ft.dwLowDateTime;\n\n     // A Windows tick is 100 nanoseconds. Windows epoch 1601-01-01T00:00:00Z\n     // is 11644473600 seconds before Unix epoch 1970-01-01T00:00:00Z.\n     Timestamp timestamp;\n     timestamp.set_seconds((INT64) ((ticks / 10000000) - 11644473600LL));\n     timestamp.set_nanos((INT32) ((ticks % 10000000) * 100));\n\n Example 4: Compute Timestamp from Java `System.currentTimeMillis()`.\n\n     long millis = System.currentTimeMillis();\n\n     Timestamp timestamp = Timestamp.newBuilder().setSeconds(millis / 1000)\n         .setNanos((int) ((millis % 1000) * 1000000)).build();\n\n Example 5: Compute Timestamp from Java `Instant.now()`.\n\n     Instant now = Instant.now();\n\n     Timestamp timestamp =\n         Timestamp.newBuilder().setSeconds(now.getEpochSecond())\n             .setNanos(now.getNano()).build();\n\n Example 6: Compute Timestamp from current time in Python.\n\n     timestamp = Timestamp()\n     timestamp.GetCurrentTime()\n\n # JSON Mapping\n\n In JSON format, the Timestamp type is encoded as a string in the\n [RFC 3339](https://www.ietf.org/rfc/rfc3339.txt) format. That is, the\n format is \"{year}-{month}-{day}T{hour}:{min}:{sec}[.{frac_sec}]Z\"\n where {year} is always expressed using four digits while {month}, {day},\n {hour}, {min}, and {sec} are zero-padded to two digits each. The fractional\n seconds, which can go up to 9 digits (i.e. up to 1 nanosecond resolution),\n are optional. The \"Z\" suffix indicates the timezone (\"UTC\"); the timezone\n is required. A proto3 JSON serializer should always use UTC (as indicated by\n \"Z\") when printing the Timestamp type and a proto3 JSON parser should be\n able to accept both UTC and other timezones (as indicated by an offset).\n\n For example, \"2017-01-15T01:30:15.01Z\" encodes 15.01 seconds past\n 01:30 UTC on January 15, 2017.\n\n In JavaScript, one can convert a Date object to this format using the\n standard\n [toISOString()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date/toISOString)\n method. In Python, a standard `datetime.datetime` object can be converted\n to this format using\n [`strftime`](https://docs.python.org/2/library/time.html#time.strftime) with\n the time format spec '%Y-%m-%dT%H:%M:%S.%fZ'. Likewise, in Java, one can use\n the Joda Time's [`ISODateTimeFormat.dateTime()`](\n http://joda-time.sourceforge.net/apidocs/org/joda/time/format/ISODateTimeFormat.html#dateTime()\n ) to obtain a formatter capable of generating timestamps in this format."
       },
+      "strategyplatform.v1.ApplyAssignmentRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "artifactVersion": {
+            "type": "string",
+            "title": "artifact_version",
+            "description": "required; \"latest\" pins to a concrete version"
+          },
+          "configVersion": {
+            "type": "string",
+            "title": "config_version",
+            "description": "optional; empty keeps current config if any"
+          },
+          "stopped": {
+            "type": "boolean",
+            "title": "stopped"
+          },
+          "deployPolicy": {
+            "title": "deploy_policy",
+            "$ref": "#/components/schemas/strategyplatform.v1.DeployPolicy"
+          },
+          "schedules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.CronSchedule"
+            },
+            "title": "schedules"
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "args"
+          },
+          "env": {
+            "type": "object",
+            "title": "env",
+            "additionalProperties": {
+              "type": "string",
+              "title": "value"
+            }
+          },
+          "limits": {
+            "title": "limits",
+            "$ref": "#/components/schemas/strategyplatform.v1.ResourceLimits"
+          },
+          "lease": {
+            "title": "lease",
+            "$ref": "#/components/schemas/strategyplatform.v1.LeaseSpec"
+          },
+          "readiness": {
+            "title": "readiness",
+            "$ref": "#/components/schemas/strategyplatform.v1.ReadinessProbe"
+          }
+        },
+        "title": "ApplyAssignmentRequest",
+        "additionalProperties": false,
+        "description": "ApplyAssignment upserts a full desired assignment (versions + runtime +\n policy + schedules). Unlike SetDeployment this is not a partial merge:\n omitted schedules mean empty schedules, omitted env means empty env.\n stopped is taken from the document — a first apply may start the process\n (stopped=false). Digest/uri are not client-supplied; the control plane\n resolves artifact_version / config_version through the catalog."
+      },
+      "strategyplatform.v1.ApplyAssignmentRequest.EnvEntry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "key"
+          },
+          "value": {
+            "type": "string",
+            "title": "value"
+          }
+        },
+        "title": "EnvEntry",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ApplyAssignmentResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "ApplyAssignmentResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ApplyNatsClusterRequest": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "title": "cluster",
+            "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
+          }
+        },
+        "title": "ApplyNatsClusterRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ApplyNatsClusterResponse": {
+        "type": "object",
+        "properties": {
+          "cluster": {
+            "title": "cluster",
+            "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
+          }
+        },
+        "title": "ApplyNatsClusterResponse",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.ArtifactCatalogEntry": {
         "type": "object",
         "properties": {
@@ -1461,6 +1871,22 @@
         "title": "CronSchedule",
         "additionalProperties": false
       },
+      "strategyplatform.v1.DeleteNatsClusterRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          }
+        },
+        "title": "DeleteNatsClusterRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DeleteNatsClusterResponse": {
+        "type": "object",
+        "title": "DeleteNatsClusterResponse",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.DeployPhase": {
         "type": "string",
         "title": "DeployPhase",
@@ -1479,6 +1905,41 @@
           "DEPLOY_PHASE_ROLLING_BACK",
           "DEPLOY_PHASE_STOPPED"
         ]
+      },
+      "strategyplatform.v1.DeployPolicy": {
+        "type": "object",
+        "properties": {
+          "startsecs": {
+            "type": "integer",
+            "title": "startsecs",
+            "format": "int32",
+            "description": "process must live N seconds to count as \"started\""
+          },
+          "healthWindowSeconds": {
+            "type": "integer",
+            "title": "health_window_seconds",
+            "format": "int32",
+            "description": "auto-rollback observation window"
+          },
+          "maxCrashesInWindow": {
+            "type": "integer",
+            "title": "max_crashes_in_window",
+            "format": "int32",
+            "description": "crashes over this in-window trigger rollback"
+          },
+          "stopGraceSeconds": {
+            "type": "integer",
+            "title": "stop_grace_seconds",
+            "format": "int32",
+            "description": "SIGTERM -\u003e wait -\u003e SIGKILL"
+          },
+          "enableAutoRollback": {
+            "type": "boolean",
+            "title": "enable_auto_rollback"
+          }
+        },
+        "title": "DeployPolicy",
+        "additionalProperties": false
       },
       "strategyplatform.v1.DeployRequest": {
         "type": "object",
@@ -1665,6 +2126,36 @@
         "title": "GetMachineRequest",
         "additionalProperties": false
       },
+      "strategyplatform.v1.GetNatsClusterRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          }
+        },
+        "title": "GetNatsClusterRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.LeaseSpec": {
+        "type": "object",
+        "properties": {
+          "required": {
+            "type": "boolean",
+            "title": "required",
+            "description": "SDK must hold a lease before trading (not an agent start gate)"
+          },
+          "ttlSeconds": {
+            "type": "integer",
+            "title": "ttl_seconds",
+            "format": "int32",
+            "description": "lease TTL; SDK renews before expiry or self-terminates"
+          }
+        },
+        "title": "LeaseSpec",
+        "additionalProperties": false,
+        "description": "LeaseSpec configures fencing-lease expectations for a strategy assignment.\n The strategy SDK (not the agent) acquires/renews the lease from LeaseService\n and must call CheckBeforeOrder before trading."
+      },
       "strategyplatform.v1.ListArtifactsRequest": {
         "type": "object",
         "properties": {
@@ -1773,6 +2264,25 @@
           }
         },
         "title": "ListMachinesResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListNatsClustersRequest": {
+        "type": "object",
+        "title": "ListNatsClustersRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListNatsClustersResponse": {
+        "type": "object",
+        "properties": {
+          "clusters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.NatsCluster"
+            },
+            "title": "clusters"
+          }
+        },
+        "title": "ListNatsClustersResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.ListSharedFilesRequest": {
@@ -1991,6 +2501,180 @@
         "title": "MachineStatusEvent",
         "additionalProperties": false
       },
+      "strategyplatform.v1.NatsCluster": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "title": "metadata",
+            "$ref": "#/components/schemas/strategyplatform.v1.ObjectMeta"
+          },
+          "spec": {
+            "title": "spec",
+            "$ref": "#/components/schemas/strategyplatform.v1.NatsClusterSpec"
+          },
+          "status": {
+            "title": "status",
+            "$ref": "#/components/schemas/strategyplatform.v1.NatsClusterStatus"
+          }
+        },
+        "title": "NatsCluster",
+        "additionalProperties": false,
+        "description": "NatsCluster is a control-plane object. Apply persists spec only; a\n controller writes the per-machine assignments over time."
+      },
+      "strategyplatform.v1.NatsClusterSpec": {
+        "type": "object",
+        "properties": {
+          "artifactVersion": {
+            "type": "string",
+            "title": "artifact_version"
+          },
+          "configVersion": {
+            "type": "string",
+            "title": "config_version"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy",
+            "description": "Strategy name owned by this cluster. Default \"nats\"."
+          },
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.NatsServer"
+            },
+            "title": "servers"
+          },
+          "update": {
+            "title": "update",
+            "$ref": "#/components/schemas/strategyplatform.v1.NatsClusterUpdate"
+          }
+        },
+        "title": "NatsClusterSpec",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.NatsClusterStatus": {
+        "type": "object",
+        "properties": {
+          "phase": {
+            "type": "string",
+            "title": "phase",
+            "description": "Pending | Rolling | Ready | Degraded | Failed | Deleting"
+          },
+          "observedGeneration": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "observed_generation",
+            "format": "int64"
+          },
+          "reason": {
+            "type": "string",
+            "title": "reason"
+          },
+          "message": {
+            "type": "string",
+            "title": "message"
+          },
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.NatsServerStatus"
+            },
+            "title": "servers"
+          },
+          "deleting": {
+            "type": "boolean",
+            "title": "deleting"
+          }
+        },
+        "title": "NatsClusterStatus",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.NatsClusterUpdate": {
+        "type": "object",
+        "properties": {
+          "maxUnavailable": {
+            "type": "integer",
+            "title": "max_unavailable",
+            "format": "int32",
+            "description": "must be \u003e= 1"
+          },
+          "waitReadySeconds": {
+            "type": "integer",
+            "title": "wait_ready_seconds",
+            "format": "int32",
+            "description": "controller deadline per in-flight node"
+          }
+        },
+        "title": "NatsClusterUpdate",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.NatsServer": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "type": "string",
+            "title": "machine"
+          },
+          "serverName": {
+            "type": "string",
+            "title": "server_name"
+          },
+          "routeHost": {
+            "type": "string",
+            "title": "route_host",
+            "description": "Address other members use in --routes. Required; do not guess hostname."
+          },
+          "clientPort": {
+            "type": "integer",
+            "title": "client_port",
+            "format": "int32",
+            "description": "default 4222"
+          },
+          "clusterPort": {
+            "type": "integer",
+            "title": "cluster_port",
+            "format": "int32",
+            "description": "default 6222"
+          },
+          "monitorPort": {
+            "type": "integer",
+            "title": "monitor_port",
+            "format": "int32",
+            "description": "default 8222"
+          }
+        },
+        "title": "NatsServer",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.NatsServerStatus": {
+        "type": "object",
+        "properties": {
+          "machine": {
+            "type": "string",
+            "title": "machine"
+          },
+          "serverName": {
+            "type": "string",
+            "title": "server_name"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "ready"
+          },
+          "phase": {
+            "type": "string",
+            "title": "phase"
+          },
+          "converged": {
+            "type": "boolean",
+            "title": "converged"
+          }
+        },
+        "title": "NatsServerStatus",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.ObjectMeta": {
         "type": "object",
         "properties": {
@@ -2086,6 +2770,19 @@
         "title": "ProcessMetrics",
         "additionalProperties": false
       },
+      "strategyplatform.v1.ReadinessProbe": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "title": "endpoint",
+            "description": "http://127.0.0.1:8222/healthz, or a filesystem path for a unix socket\n that serves HTTP /healthz (same as the existing UnixSocketChecker)."
+          }
+        },
+        "title": "ReadinessProbe",
+        "additionalProperties": false,
+        "description": "ReadinessProbe is an HTTP URL or unix socket path the agent probes for Ready."
+      },
       "strategyplatform.v1.RegisterArtifactRequest": {
         "type": "object",
         "properties": {
@@ -2101,6 +2798,36 @@
       "strategyplatform.v1.RegisterArtifactResponse": {
         "type": "object",
         "title": "RegisterArtifactResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ResourceLimits": {
+        "type": "object",
+        "properties": {
+          "cpuMillicores": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "cpu_millicores",
+            "format": "int64",
+            "description": "written to cgroup v2 cpu.max"
+          },
+          "memoryBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "memory_bytes",
+            "format": "int64",
+            "description": "memory.max"
+          },
+          "maxOpenFiles": {
+            "type": "integer",
+            "title": "max_open_files",
+            "format": "int32"
+          }
+        },
+        "title": "ResourceLimits",
         "additionalProperties": false
       },
       "strategyplatform.v1.ResourceSamplePoint": {

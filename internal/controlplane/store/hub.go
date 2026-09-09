@@ -7,16 +7,18 @@ import "sync"
 // Buffered channels coalesce bursts so a slow UI never
 // blocks the agent stream or write path.
 type Hub struct {
-	mu      sync.Mutex
-	subs    map[string]map[chan struct{}]struct{} // machineID -> set of channels
-	allSubs map[chan string]struct{}
+	mu          sync.Mutex
+	subs        map[string]map[chan struct{}]struct{} // machineID -> set of channels
+	allSubs     map[chan string]struct{}
+	clusterSubs map[chan struct{}]struct{}
 }
 
 // NewHub returns an empty fan-out hub.
 func NewHub() *Hub {
 	return &Hub{
-		subs:    map[string]map[chan struct{}]struct{}{},
-		allSubs: map[chan string]struct{}{},
+		subs:        map[string]map[chan struct{}]struct{}{},
+		allSubs:     map[chan string]struct{}{},
+		clusterSubs: map[chan struct{}]struct{}{},
 	}
 }
 
@@ -81,6 +83,36 @@ func (h *Hub) Notify(machineID string) {
 	for _, ch := range alls {
 		select {
 		case ch <- machineID:
+		default:
+		}
+	}
+}
+
+// SubscribeClusters signals any NatsCluster spec/status write.
+func (h *Hub) SubscribeClusters() (<-chan struct{}, func()) {
+	ch := make(chan struct{}, 1)
+	h.mu.Lock()
+	h.clusterSubs[ch] = struct{}{}
+	h.mu.Unlock()
+	cancel := func() {
+		h.mu.Lock()
+		delete(h.clusterSubs, ch)
+		h.mu.Unlock()
+	}
+	return ch, cancel
+}
+
+// NotifyClusters wakes cluster subscribers (non-blocking, coalesced).
+func (h *Hub) NotifyClusters() {
+	h.mu.Lock()
+	subs := make([]chan struct{}, 0, len(h.clusterSubs))
+	for ch := range h.clusterSubs {
+		subs = append(subs, ch)
+	}
+	h.mu.Unlock()
+	for _, ch := range subs {
+		select {
+		case ch <- struct{}{}:
 		default:
 		}
 	}

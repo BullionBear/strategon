@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/spec.proto.
  */
 export const file_strategyplatform_v1_spec: GenFile = /*@__PURE__*/
-  fileDesc("Ch5zdHJhdGVneXBsYXRmb3JtL3YxL3NwZWMucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEiqAQKFlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSEAoIc3RyYXRlZ3kYASABKAkSMgoIYXJ0aWZhY3QYAiABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjAKBmNvbmZpZxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSNAoGZHJpdmVyGAQgASgOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXISMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxI4Cg1kZXBsb3lfcG9saWN5GAYgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQb2xpY3kSLQoFbGVhc2UYByABKAsyHi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlU3BlYxI0CglzY2hlZHVsZXMYCCADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkNyb25TY2hlZHVsZRIMCgRhcmdzGAkgAygJEkEKA2VudhgKIAMoCzI0LnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lBc3NpZ25tZW50U3BlYy5FbnZFbnRyeRIPCgdzdG9wcGVkGAsgASgIGioKCEVudkVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiUgoOU2hhcmVkRmlsZVNwZWMSDAoEbmFtZRgBIAEoCRIyCghhcnRpZmFjdBgCIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYiWwoRTWFjaGluZVNoYXJlZFNwZWMSMgoFZmlsZXMYASADKAsyIy5zdHJhdGVneXBsYXRmb3JtLnYxLlNoYXJlZEZpbGVTcGVjEhIKCmdlbmVyYXRpb24YAiABKAMi6gEKDERlc2lyZWRTdGF0ZRISCgpnZW5lcmF0aW9uGAEgASgDEkAKC2Fzc2lnbm1lbnRzGAIgAygLMisuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TdHJhdGVneUFzc2lnbm1lbnRTcGVjEh0KFWRlc2lyZWRfYWdlbnRfdmVyc2lvbhgDIAEoBRItCglpc3N1ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjYKBnNoYXJlZBgFIAEoCzImLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVNoYXJlZFNwZWNCTVpLZ2l0aHViLmNvbS9idWxsaW9uYmVhci9zdHJhdGVnb24vZ2VuL3N0cmF0ZWd5cGxhdGZvcm0vdjE7c3RyYXRlZ3lwbGF0Zm9ybXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
+  fileDesc("Ch5zdHJhdGVneXBsYXRmb3JtL3YxL3NwZWMucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEi4AQKFlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSEAoIc3RyYXRlZ3kYASABKAkSMgoIYXJ0aWZhY3QYAiABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjAKBmNvbmZpZxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSNAoGZHJpdmVyGAQgASgOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXISMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxI4Cg1kZXBsb3lfcG9saWN5GAYgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQb2xpY3kSLQoFbGVhc2UYByABKAsyHi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlU3BlYxI0CglzY2hlZHVsZXMYCCADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkNyb25TY2hlZHVsZRIMCgRhcmdzGAkgAygJEkEKA2VudhgKIAMoCzI0LnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lBc3NpZ25tZW50U3BlYy5FbnZFbnRyeRIPCgdzdG9wcGVkGAsgASgIEjYKCXJlYWRpbmVzcxgMIAEoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVhZGluZXNzUHJvYmUaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIiCg5SZWFkaW5lc3NQcm9iZRIQCghlbmRwb2ludBgBIAEoCSJSCg5TaGFyZWRGaWxlU3BlYxIMCgRuYW1lGAEgASgJEjIKCGFydGlmYWN0GAIgASgLMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5BcnRpZmFjdFJlZiJbChFNYWNoaW5lU2hhcmVkU3BlYxIyCgVmaWxlcxgBIAMoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuU2hhcmVkRmlsZVNwZWMSEgoKZ2VuZXJhdGlvbhgCIAEoAyLqAQoMRGVzaXJlZFN0YXRlEhIKCmdlbmVyYXRpb24YASABKAMSQAoLYXNzaWdubWVudHMYAiADKAsyKy5zdHJhdGVneXBsYXRmb3JtLnYxLlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSHQoVZGVzaXJlZF9hZ2VudF92ZXJzaW9uGAMgASgFEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNgoGc2hhcmVkGAUgASgLMiYuc3RyYXRlZ3lwbGF0Zm9ybS52MS5NYWNoaW5lU2hhcmVkU3BlY0JNWktnaXRodWIuY29tL2J1bGxpb25iZWFyL3N0cmF0ZWdvbi9nZW4vc3RyYXRlZ3lwbGF0Zm9ybS92MTtzdHJhdGVneXBsYXRmb3JtdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
 
 /**
  * StrategyAssignmentSpec is a single strategy the control plane wants on a
@@ -87,6 +87,15 @@ export type StrategyAssignmentSpec = Message<"strategyplatform.v1.StrategyAssign
    * @generated from field: bool stopped = 11;
    */
   stopped: boolean;
+
+  /**
+   * Optional readiness probe. Presence turns the health window into a deadline:
+   * expiry without Ready=TRUE rolls back (if enabled) or fails — never promotes
+   * to HEALTHY. Specs without a probe keep today's grace-period behaviour.
+   *
+   * @generated from field: strategyplatform.v1.ReadinessProbe readiness = 12;
+   */
+  readiness?: ReadinessProbe | undefined;
 };
 
 /**
@@ -95,6 +104,28 @@ export type StrategyAssignmentSpec = Message<"strategyplatform.v1.StrategyAssign
  */
 export const StrategyAssignmentSpecSchema: GenMessage<StrategyAssignmentSpec> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_spec, 0);
+
+/**
+ * ReadinessProbe is an HTTP URL or unix socket path the agent probes for Ready.
+ *
+ * @generated from message strategyplatform.v1.ReadinessProbe
+ */
+export type ReadinessProbe = Message<"strategyplatform.v1.ReadinessProbe"> & {
+  /**
+   * http://127.0.0.1:8222/healthz, or a filesystem path for a unix socket
+   * that serves HTTP /healthz (same as the existing UnixSocketChecker).
+   *
+   * @generated from field: string endpoint = 1;
+   */
+  endpoint: string;
+};
+
+/**
+ * Describes the message strategyplatform.v1.ReadinessProbe.
+ * Use `create(ReadinessProbeSchema)` to create a new message.
+ */
+export const ReadinessProbeSchema: GenMessage<ReadinessProbe> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_spec, 1);
 
 /**
  * SharedFileSpec is one machine-level shared file. name is the on-disk basename
@@ -125,7 +156,7 @@ export type SharedFileSpec = Message<"strategyplatform.v1.SharedFileSpec"> & {
  * Use `create(SharedFileSpecSchema)` to create a new message.
  */
 export const SharedFileSpecSchema: GenMessage<SharedFileSpec> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 1);
+  messageDesc(file_strategyplatform_v1_spec, 2);
 
 /**
  * MachineSharedSpec is the full set of shared files desired on a machine. Like
@@ -153,7 +184,7 @@ export type MachineSharedSpec = Message<"strategyplatform.v1.MachineSharedSpec">
  * Use `create(MachineSharedSpecSchema)` to create a new message.
  */
 export const MachineSharedSpecSchema: GenMessage<MachineSharedSpec> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 2);
+  messageDesc(file_strategyplatform_v1_spec, 3);
 
 /**
  * DesiredState is the machine-level full snapshot pushed southbound. assignments
@@ -203,5 +234,5 @@ export type DesiredState = Message<"strategyplatform.v1.DesiredState"> & {
  * Use `create(DesiredStateSchema)` to create a new message.
  */
 export const DesiredStateSchema: GenMessage<DesiredState> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 3);
+  messageDesc(file_strategyplatform_v1_spec, 4);
 
