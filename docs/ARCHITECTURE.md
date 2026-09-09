@@ -2,7 +2,9 @@
 
 This document is a map of the Strategon repository: what the pieces are, how
 they talk, and where to look in the tree. For a runnable walkthrough, see the
-root [README](../README.md).
+root [README](../README.md). For the proposed apply surface and NATS
+cluster orchestrator, see
+[EPIC-declarative-orchestration.md](EPIC-declarative-orchestration.md).
 
 ## Idea in one paragraph
 
