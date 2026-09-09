@@ -6,7 +6,7 @@ import {
 	NatsClusterSpecSchema,
 	NatsClusterStatusSchema
 } from '$lib/gen/strategyplatform/v1/nats_pb';
-import { clusterGenerationLag, clusterPhaseClass, clusterStrategy } from './clusters';
+import { clusterGenerationLag, clusterPhaseClass, clusterStrategy, serverPhaseLabel } from './clusters';
 
 describe('clusterPhaseClass', () => {
 	it('maps controller phases', () => {
@@ -27,5 +27,14 @@ describe('cluster helpers', () => {
 		});
 		expect(clusterGenerationLag(c)).toBe(true);
 		expect(clusterStrategy(c)).toBe('nats');
+	});
+});
+
+describe('serverPhaseLabel', () => {
+	it('pretty-prints proto enum names', () => {
+		expect(serverPhaseLabel('DEPLOY_PHASE_HEALTHY')).toBe('Healthy');
+		expect(serverPhaseLabel('DEPLOY_PHASE_HEALTH_CHECKING')).toBe('Health Checking');
+		expect(serverPhaseLabel('HEALTHY')).toBe('Healthy');
+		expect(serverPhaseLabel('')).toBe('—');
 	});
 });

@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { client } from '$lib/api';
 	import type { NatsCluster } from '$lib/gen/strategyplatform/v1/nats_pb';
-	import { clusterGenerationLag, clusterPhaseClass, clusterStrategy } from '$lib/clusters';
+	import { clusterGenerationLag, clusterPhaseClass, clusterStrategy, serverPhaseLabel } from '$lib/clusters';
 
 	let clusters = $state<NatsCluster[]>([]);
 	let error = $state('');
@@ -137,7 +137,7 @@
 										<td class="mono muted">{srv.serverName}</td>
 										<td>
 											<a class="row-link mono" href="/machines/{srv.machine}/{strategy}">
-												{st?.phase || '—'}
+												{serverPhaseLabel(st?.phase)}
 											</a>
 										</td>
 										<td>
