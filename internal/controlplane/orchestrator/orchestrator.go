@@ -123,6 +123,16 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 		live     *pb.StrategyAssignmentSpec
 		rec      *store.MachineRecord
 	}
+	maxUnavail := cl.GetSpec().GetUpdate().GetMaxUnavailable()
+	if maxUnavail < 1 {
+		maxUnavail = 1
+	}
+	dropped := c.droppedMachines(cl)
+	undeployed, err := c.undeployMachines(ctx, cl, dropped, int(maxUnavail))
+	if err != nil {
+		return c.setAssignFailed(cl, cl.GetStatus().GetServers(), err)
+	}
+
 	members := make([]member, 0, len(servers))
 	var candidates []member
 	var inflight []member
@@ -153,13 +163,11 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 		}
 		if !ready {
 			inflight = append(inflight, m)
+			continue
 		}
+		c.clearDeadline(cl.GetMetadata().GetName(), srv.GetMachine())
 	}
 
-	maxUnavail := cl.GetSpec().GetUpdate().GetMaxUnavailable()
-	if maxUnavail < 1 {
-		maxUnavail = 1
-	}
 	waitSec := cl.GetSpec().GetUpdate().GetWaitReadySeconds()
 	if waitSec <= 0 {
 		waitSec = 60
@@ -200,8 +208,8 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 	}
 
 	wrote := 0
-	slots := int(maxUnavail) - len(inflight)
-	if slots < 0 {
+	slots := int(maxUnavail) - len(inflight) - undeployed
+	if slots < 0 || len(dropped) > undeployed {
 		slots = 0
 	}
 	for _, m := range candidates {
@@ -220,7 +228,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 			EnforceLeaseInterlock: false,
 			AllowReserved:         true,
 		}); err != nil {
-			return err
+			return c.setAssignFailed(cl, serverStatus, err)
 		}
 		c.mu.Lock()
 		c.deadlines[inflightKey{cl.GetMetadata().GetName(), m.srv.GetMachine()}] = now.Add(time.Duration(waitSec) * time.Second)
@@ -228,22 +236,17 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 		wrote++
 	}
 
-	allReady := len(candidates) == 0 && len(inflight) == 0 && len(members) > 0
+	droppedLeft := len(c.droppedMachines(cl))
+	allReady := len(candidates) == 0 && len(inflight) == 0 && len(members) > 0 && droppedLeft == 0
 	phase := "Rolling"
 	obs := cl.GetStatus().GetObservedGeneration()
 	if allReady {
 		phase = "Ready"
 		obs = cl.GetMetadata().GetGeneration()
-		c.mu.Lock()
-		for k := range c.deadlines {
-			if k.cluster == cl.GetMetadata().GetName() {
-				delete(c.deadlines, k)
-			}
-		}
-		c.mu.Unlock()
+		c.pruneClusterDeadlines(cl.GetMetadata().GetName())
 	} else if len(members) == 0 {
 		phase = "Pending"
-	} else if wrote == 0 && len(inflight) == 0 && len(candidates) > 0 {
+	} else if wrote == 0 && undeployed == 0 && len(inflight) == 0 && len(candidates) > 0 {
 		phase = "Pending"
 	}
 	return c.setStatus(cl, &pb.NatsClusterStatus{
@@ -254,43 +257,143 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.NatsCluster) error {
 }
 
 func (c *Controller) reconcileDelete(ctx context.Context, cl *pb.NatsCluster) error {
-	strategy := store.ClusterStrategy(cl)
 	maxUnavail := cl.GetSpec().GetUpdate().GetMaxUnavailable()
 	if maxUnavail < 1 {
 		maxUnavail = 1
 	}
-	remaining := 0
+	targets := c.assignedClusterMachines(cl)
+	removed, err := c.undeployMachines(ctx, cl, targets, int(maxUnavail))
+	if err != nil {
+		return c.setAssignFailed(cl, cl.GetStatus().GetServers(), err)
+	}
+	if len(targets) > removed {
+		return c.setStatus(cl, &pb.NatsClusterStatus{
+			Phase:              "Deleting",
+			Deleting:           true,
+			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
+			Reason:             "Undeploying",
+			Servers:            cl.GetStatus().GetServers(),
+		})
+	}
+	c.pruneClusterDeadlines(cl.GetMetadata().GetName())
+	return c.Store.DeleteNatsCluster(cl.GetMetadata().GetName())
+}
+
+func (c *Controller) setAssignFailed(cl *pb.NatsCluster, servers []*pb.NatsServerStatus, err error) error {
+	return c.setStatus(cl, &pb.NatsClusterStatus{
+		Phase:              "Failed",
+		ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
+		Reason:             "AssignFailed",
+		Message:            err.Error(),
+		Servers:            servers,
+	})
+}
+
+func (c *Controller) undeployMachines(ctx context.Context, cl *pb.NatsCluster, machines []string, limit int) (int, error) {
+	strategy := store.ClusterStrategy(cl)
 	removed := 0
-	for _, srv := range cl.GetSpec().GetServers() {
-		rec, ok := c.Store.GetMachine(srv.GetMachine())
+	for _, machine := range machines {
+		rec, ok := c.Store.GetMachine(machine)
 		if !ok || rec.Assignments[strategy] == nil {
+			c.clearDeadline(cl.GetMetadata().GetName(), machine)
 			continue
 		}
-		remaining++
-		if removed >= int(maxUnavail) {
+		if removed >= limit {
 			continue
 		}
 		if _, _, err := c.Assign.Apply(ctx, assign.Request{
-			MachineID:     srv.GetMachine(),
+			MachineID:     machine,
 			Strategy:      strategy,
 			Spec:          nil,
 			Action:        "NatsClusterUndeploy",
 			Detail:        cl.GetMetadata().GetName(),
 			AllowReserved: true,
 		}); err != nil {
-			return err
+			return removed, err
 		}
+		c.clearDeadline(cl.GetMetadata().GetName(), machine)
 		removed++
 	}
-	if remaining-removed > 0 {
-		return c.setStatus(cl, &pb.NatsClusterStatus{
-			Phase:              "Deleting",
-			Deleting:           true,
-			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
-			Reason:             "Undeploying",
-		})
+	return removed, nil
+}
+
+func (c *Controller) droppedMachines(cl *pb.NatsCluster) []string {
+	want := specMachines(cl)
+	var out []string
+	for _, id := range c.assignedClusterMachines(cl) {
+		if _, ok := want[id]; !ok {
+			out = append(out, id)
+		}
 	}
-	return c.Store.DeleteNatsCluster(cl.GetMetadata().GetName())
+	return out
+}
+
+func (c *Controller) assignedClusterMachines(cl *pb.NatsCluster) []string {
+	strategy := store.ClusterStrategy(cl)
+	var out []string
+	for _, id := range c.ownedAssignmentMachines(cl) {
+		rec, ok := c.Store.GetMachine(id)
+		if !ok || rec.Assignments[strategy] == nil {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+func (c *Controller) ownedAssignmentMachines(cl *pb.NatsCluster) []string {
+	strategy := store.ClusterStrategy(cl)
+	name := cl.GetMetadata().GetName()
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(id string) {
+		if id == "" {
+			return
+		}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	for _, s := range cl.GetSpec().GetServers() {
+		add(s.GetMachine())
+	}
+	for _, s := range cl.GetStatus().GetServers() {
+		add(s.GetMachine())
+	}
+	for _, rec := range c.Store.ListMachines() {
+		spec := rec.Assignments[strategy]
+		if spec != nil && spec.GetEnv()["NATS_CLUSTER_NAME"] == name {
+			add(rec.MachineID)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+func specMachines(cl *pb.NatsCluster) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, s := range cl.GetSpec().GetServers() {
+		out[s.GetMachine()] = struct{}{}
+	}
+	return out
+}
+
+func (c *Controller) clearDeadline(cluster, machine string) {
+	c.mu.Lock()
+	delete(c.deadlines, inflightKey{cluster, machine})
+	c.mu.Unlock()
+}
+
+func (c *Controller) pruneClusterDeadlines(cluster string) {
+	c.mu.Lock()
+	for k := range c.deadlines {
+		if k.cluster == cluster {
+			delete(c.deadlines, k)
+		}
+	}
+	c.mu.Unlock()
 }
 
 func (c *Controller) setStatus(cl *pb.NatsCluster, st *pb.NatsClusterStatus) error {
@@ -309,7 +412,10 @@ func computeAssignment(cl *pb.NatsCluster, self *pb.NatsServer, all []*pb.NatsSe
 		routes = append(routes, fmt.Sprintf("nats://%s:%d", s.GetRouteHost(), natsPort(s.GetClusterPort(), 6222)))
 	}
 	sort.Strings(routes)
-	args := []string{"-c", "${CONFIG}"}
+	var args []string
+	if cfg != nil {
+		args = append(args, "-c", "${CONFIG}")
+	}
 	if len(routes) > 0 {
 		args = append(args, "--routes", strings.Join(routes, ","))
 	}

@@ -350,6 +350,155 @@ func TestDesiredStateRollOrder(t *testing.T) {
 	}
 }
 
+func TestNoConfigOmitsConfigArg(t *testing.T) {
+	st := store.NewMemory(nil)
+	if err := st.RegisterArtifact(&pb.ArtifactRef{
+		Name: "nats", Version: "v1", Digest: "sha256:nats1", Uri: "file:///nats-v1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.NatsClusterSpec{
+			ArtifactVersion: "v1",
+			Strategy:        "nats",
+			Servers: []*pb.NatsServer{{
+				Machine: "m1", ServerName: "nats-m1", RouteHost: "10.0.0.1",
+				ClientPort: 4222, ClusterPort: 6222, MonitorPort: 8222,
+			}},
+			Update: &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctrl := New(st, assign.New(st, nil), nil, nil)
+	if err := ctrl.Reconcile(context.Background(), loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	joined := strings.Join(rec.Assignments["nats"].GetArgs(), " ")
+	if strings.Contains(joined, "${CONFIG}") || strings.Contains(joined, "-c") {
+		t.Fatalf("args = %v, want no -c ${CONFIG}", rec.Assignments["nats"].GetArgs())
+	}
+}
+
+func TestShrinkUndeploysDroppedMember(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 3)
+	ctx := context.Background()
+	for _, m := range []string{"m1", "m2", "m3"} {
+		if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+			t.Fatal(err)
+		}
+		markReady(t, st, m, true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if loadCluster(t, st).GetStatus().GetPhase() != "Ready" {
+		t.Fatalf("phase=%s", loadCluster(t, st).GetStatus().GetPhase())
+	}
+
+	keep := loadCluster(t, st).GetSpec().GetServers()[:2]
+	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.NatsClusterSpec{
+			ArtifactVersion: "v1",
+			ConfigVersion:   "c1",
+			Strategy:        "nats",
+			Servers:         keep,
+			Update:          &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if assigned(st, "m3") {
+		t.Fatal("dropped member m3 still assigned")
+	}
+	if !assigned(st, "m1") || !assigned(st, "m2") {
+		t.Fatal("kept members must stay assigned")
+	}
+}
+
+func TestAssignErrorWritesFailedStatus(t *testing.T) {
+	st := store.NewMemory(nil)
+	if err := st.RegisterArtifact(&pb.ArtifactRef{
+		Name: "nats", Version: "v1", Digest: "sha256:nats1", Uri: "file:///nats-v1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.ApplyNatsCluster(&pb.NatsCluster{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.NatsClusterSpec{
+			ArtifactVersion: "v1",
+			Strategy:        "nats",
+			Servers: []*pb.NatsServer{{
+				Machine: "ghost", ServerName: "nats-ghost", RouteHost: "10.0.0.9",
+			}},
+			Update: &pb.NatsClusterUpdate{MaxUnavailable: 1, WaitReadySeconds: 30},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ctrl := New(st, assign.New(st, nil), nil, nil)
+	if err := ctrl.Reconcile(context.Background(), loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	cl := loadCluster(t, st)
+	if cl.GetStatus().GetPhase() != "Failed" || cl.GetStatus().GetReason() != "AssignFailed" {
+		t.Fatalf("status = %+v", cl.GetStatus())
+	}
+	if !strings.Contains(cl.GetStatus().GetMessage(), "unknown machine") {
+		t.Fatalf("message = %q", cl.GetStatus().GetMessage())
+	}
+}
+
+func TestReadyMemberDeadlineDoesNotDegradeLaterFlap(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 1)
+	ctx := context.Background()
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	ctrl.Now = func() time.Time { return base }
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	markReady(t, st, "m1", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if loadCluster(t, st).GetStatus().GetPhase() != "Ready" {
+		t.Fatalf("phase=%s", loadCluster(t, st).GetStatus().GetPhase())
+	}
+
+	markReady(t, st, "m1", false, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	ctrl.Now = func() time.Time { return base.Add(31 * time.Second) }
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	cl := loadCluster(t, st)
+	if cl.GetStatus().GetPhase() == "Degraded" {
+		t.Fatal("stale deadline must not Degrade after a Ready member flaps")
+	}
+}
+
+func TestDeleteNeverAssignedRemovesCluster(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 2)
+	ctx := context.Background()
+	if _, err := st.MarkNatsClusterDeleting("trading"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := st.GetNatsCluster("trading"); ok {
+		t.Fatal("never-assigned deleting cluster should be removed")
+	}
+}
+
 func TestComputeAssignmentCreatedAtStable(t *testing.T) {
 	// CreatedAt on catalog refs should not prevent proto.Equal after write.
 	ctrl, st, _ := setupCluster(t, 2)
