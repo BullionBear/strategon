@@ -153,6 +153,22 @@
 							</tbody>
 						</table>
 					</div>
+					<div class="fleet-cards" style="margin-top:0.85rem">
+						{#each c.spec?.servers ?? [] as srv (srv.machine)}
+							{@const st = c.status?.servers?.find((s) => s.machine === srv.machine)}
+							<div class="fleet-card">
+								<div class="card-top">
+									<a class="mono" href="/machines/{srv.machine}"><strong>{srv.machine}</strong></a>
+									<span class="pill {st?.ready ? 'ok' : 'off'}">{st?.ready ? 'ready' : 'not ready'}</span>
+								</div>
+								<div class="card-meta">
+									<span class="mono">{srv.serverName}</span>
+									<a class="mono" href="/machines/{srv.machine}/{strategy}">{serverPhaseLabel(st?.phase)}</a>
+									<span>{st?.converged ? 'converged' : 'diverged'}</span>
+								</div>
+							</div>
+						{/each}
+					</div>
 				</div>
 			{/each}
 		</div>
@@ -206,6 +222,11 @@
 	@media (max-width: 720px) {
 		.head {
 			flex-direction: column;
+		}
+	}
+	@media (min-width: 640px) {
+		.fleet-cards {
+			display: none !important;
 		}
 	}
 </style>
