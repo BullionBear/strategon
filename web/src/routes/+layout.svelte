@@ -122,7 +122,8 @@
 			label: 'Fleet',
 			items: [
 				{ href: '/', label: 'Machines', icon: 'machines' as const },
-				{ href: '/assignments', label: 'Assignments', icon: 'assignments' as const }
+				{ href: '/assignments', label: 'Assignments', icon: 'assignments' as const },
+				{ href: '/clusters', label: 'Clusters', icon: 'clusters' as const }
 			]
 		},
 		{
@@ -264,6 +265,18 @@
 									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">
 										<path
 											d="M4 5.5h12M4 10h12M4 14.5h8"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+										/>
+									</svg>
+								{:else if item.icon === 'clusters'}
+									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+										<circle cx="5" cy="10" r="2.25" stroke="currentColor" stroke-width="1.5" />
+										<circle cx="15" cy="5.5" r="2.25" stroke="currentColor" stroke-width="1.5" />
+										<circle cx="15" cy="14.5" r="2.25" stroke="currentColor" stroke-width="1.5" />
+										<path
+											d="M7.1 9.1 12.9 6.4M7.1 10.9 12.9 13.6"
 											stroke="currentColor"
 											stroke-width="1.5"
 											stroke-linecap="round"
