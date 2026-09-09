@@ -34,6 +34,13 @@ func (s *Server) ApplyNatsCluster(ctx context.Context, req *connect.Request[pb.A
 	}
 	out, _, err := s.store.ApplyNatsCluster(next)
 	if err != nil {
+		// The store re-checks ownership under its write lock, so a race that
+		// slipped past rejectUnownedStrategy surfaces here as the same class of
+		// error the admission check would have returned.
+		var conflict *store.ReservationConflictError
+		if errors.As(err, &conflict) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	_ = s.store.AppendAudit(&pb.AuditEntry{

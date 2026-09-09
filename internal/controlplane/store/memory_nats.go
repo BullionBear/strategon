@@ -27,6 +27,15 @@ func (m *Memory) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, boo
 	name := cluster.GetMetadata().GetName()
 	m.mu.Lock()
 	cur := m.clusters[name]
+	// Ownership is re-checked here, under the write lock, because the API-layer
+	// admission check is a separate read. Skipped when the spec is unchanged so
+	// a re-apply stays idempotent.
+	if cur == nil || !proto.Equal(cur.GetSpec(), cluster.GetSpec()) {
+		if err := reservationConflict(clustersByName(m.clusters), cluster); err != nil {
+			m.mu.Unlock()
+			return nil, false, err
+		}
+	}
 	if cur == nil {
 		uid, err := newClusterUID()
 		if err != nil {
@@ -141,6 +150,66 @@ func (m *Memory) ReservedBy(machineID, strategy string) (string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return reservedByLocked(m.clusters, machineID, strategy)
+}
+
+// ReservationConflictError reports that a machine+strategy is already owned by
+// a different NatsCluster. Callers map it to FailedPrecondition.
+type ReservationConflictError struct {
+	MachineID string
+	Strategy  string
+	Owner     string
+}
+
+func (e *ReservationConflictError) Error() string {
+	return fmt.Sprintf("machine %q strategy %q is owned by NatsCluster %q",
+		e.MachineID, e.Strategy, e.Owner)
+}
+
+// reservationConflict reports whether any machine in next's spec is already
+// claimed by a different, non-deleting cluster in existing.
+//
+// This is the authoritative ownership guard and must run under the same lock
+// (memory) or transaction (Postgres) as the write: an admission check in the
+// API layer is a separate read, so two concurrent applies can both pass it and
+// both land, leaving two controllers rewriting one machine's assignment on
+// every tick. existing is expected in a stable order so the reported owner is
+// deterministic when several clusters conflict.
+func reservationConflict(existing []*pb.NatsCluster, next *pb.NatsCluster) error {
+	strategy := ClusterStrategy(next)
+	name := next.GetMetadata().GetName()
+	for _, srv := range next.GetSpec().GetServers() {
+		for _, c := range existing {
+			if c.GetMetadata().GetName() == name || c.GetStatus().GetDeleting() {
+				continue
+			}
+			if ClusterStrategy(c) != strategy {
+				continue
+			}
+			for _, es := range c.GetSpec().GetServers() {
+				if es.GetMachine() != srv.GetMachine() {
+					continue
+				}
+				return &ReservationConflictError{
+					MachineID: srv.GetMachine(),
+					Strategy:  strategy,
+					Owner:     c.GetMetadata().GetName(),
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// clustersByName returns the cluster map as a name-sorted slice.
+func clustersByName(clusters map[string]*pb.NatsCluster) []*pb.NatsCluster {
+	out := make([]*pb.NatsCluster, 0, len(clusters))
+	for _, c := range clusters {
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].GetMetadata().GetName() < out[j].GetMetadata().GetName()
+	})
+	return out
 }
 
 func reservedByLocked(clusters map[string]*pb.NatsCluster, machineID, strategy string) (string, bool) {

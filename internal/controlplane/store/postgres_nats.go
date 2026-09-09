@@ -12,10 +12,55 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// natsClusterApplyLock is the pg_advisory_xact_lock key that serializes
+// ApplyNatsCluster so the ownership check and the write cannot interleave.
+// Applies are rare (a human or GitOps action), so serializing them is free.
+const natsClusterApplyLock int64 = 0x6e6174736331 // "natsc1"
+
 func (p *Postgres) notifyClusters() {
 	if p.hub != nil {
 		p.hub.NotifyClusters()
 	}
+}
+
+// checkReservationTx enforces cluster ownership inside the apply transaction.
+func checkReservationTx(ctx context.Context, q querier, next *pb.NatsCluster) error {
+	existing, err := listNatsClustersTx(ctx, q)
+	if err != nil {
+		return err
+	}
+	return reservationConflict(existing, next)
+}
+
+// listNatsClustersTx loads every cluster through the given querier so the read
+// joins the caller's transaction.
+func listNatsClustersTx(ctx context.Context, q querier) ([]*pb.NatsCluster, error) {
+	rows, err := q.Query(ctx, `SELECT name FROM nats_clusters ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, 8)
+	for rows.Next() {
+		var n string
+		if err := rows.Scan(&n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		names = append(names, n)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	out := make([]*pb.NatsCluster, 0, len(names))
+	for _, n := range names {
+		c, err := loadNatsCluster(ctx, q, n, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func (p *Postgres) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, bool, error) {
@@ -31,11 +76,20 @@ func (p *Postgres) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, b
 	var out *pb.NatsCluster
 	var changed bool
 	err := p.inTx(ctx, func(tx pgx.Tx) error {
+		// Serialize applies. Row locks cannot guard ownership here: the
+		// conflicting cluster may not exist yet, and FOR UPDATE does not block
+		// a concurrent INSERT of it.
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock($1)`, natsClusterApplyLock); err != nil {
+			return err
+		}
 		cur, err := loadNatsCluster(ctx, tx, name, true)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
+			if err := checkReservationTx(ctx, tx, cluster); err != nil {
+				return err
+			}
 			uid, err := newClusterUID()
 			if err != nil {
 				return err
@@ -60,6 +114,11 @@ func (p *Postgres) ApplyNatsCluster(cluster *pb.NatsCluster) (*pb.NatsCluster, b
 			out = cur
 			changed = false
 			return nil
+		}
+		if specChanged {
+			if err := checkReservationTx(ctx, tx, cluster); err != nil {
+				return err
+			}
 		}
 		next := proto.Clone(cur).(*pb.NatsCluster)
 		next.Spec = proto.Clone(cluster.GetSpec()).(*pb.NatsClusterSpec)
