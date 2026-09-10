@@ -58,16 +58,19 @@ func printCluster(w io.Writer, c *pb.AssignmentSet) {
 		fmt.Fprintf(w, "  config: %s\n", spec.GetConfigVersion())
 	}
 	fmt.Fprintf(w, "  strategy: %s\n", emptyDash(spec.GetStrategy()))
+	if k := st.GetAssignmentKey(); k != "" {
+		fmt.Fprintf(w, "  assignmentKey: %s\n", k)
+	}
 	if u := spec.GetUpdate(); u != nil {
 		fmt.Fprintf(w, "  update: maxUnavailable=%d waitReadySeconds=%d\n", u.GetMaxUnavailable(), u.GetWaitReadySeconds())
 	}
-	statusByMachine := map[string]*pb.MemberStatus{}
+	statusByMember := map[string]*pb.MemberStatus{}
 	for _, s := range st.GetMembers() {
-		statusByMachine[s.GetMachine()] = s
+		statusByMember[s.GetMachine()+"\x00"+s.GetName()] = s
 	}
 	fmt.Fprintf(w, "  servers:\n")
 	for _, srv := range spec.GetMembers() {
-		ss := statusByMachine[srv.GetMachine()]
+		ss := statusByMember[srv.GetMachine()+"\x00"+srv.GetName()]
 		phase, ready, conv := "—", false, false
 		if ss != nil {
 			phase = emptyDash(ss.GetPhase())

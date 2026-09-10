@@ -43,7 +43,7 @@ func TestValidateStrategy(t *testing.T) {
 	if err := ValidateStrategy("ok-strat"); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []string{"", "..", "a/b", `a\b`, "../x"} {
+	for _, bad := range []string{"", ".", "..", "a/b", `a\b`, "../x"} {
 		if err := ValidateStrategy(bad); err == nil {
 			t.Fatalf("ValidateStrategy(%q) should fail", bad)
 		}

@@ -200,4 +200,7 @@ type Store interface {
 
 	// ReservedBy reports the cluster that owns machineID+strategy, if any.
 	ReservedBy(machineID, strategy string) (cluster string, ok bool)
+
+	// ReservedSlots returns every strategy name reserved on machineID.
+	ReservedSlots(machineID string) []string
 }

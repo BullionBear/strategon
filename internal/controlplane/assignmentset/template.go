@@ -182,3 +182,18 @@ func expand(s string, vals map[string]string, where string) (string, error) {
 	}
 	return out, nil
 }
+
+// ValidateMemberName rejects names that cannot be a WorkDir segment
+// (<base>/<name>). Same rules as the agent's strategy-name check.
+// Callers must persist the trimmed name; this function does not rewrite.
+func ValidateMemberName(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("empty member name")
+	}
+	// "." joins to the agent base directory; ".." and slashes escape it.
+	if name == "." || name == ".." || strings.ContainsAny(name, `/\`) || strings.Contains(name, "..") {
+		return fmt.Errorf("invalid member name %q", name)
+	}
+	return nil
+}

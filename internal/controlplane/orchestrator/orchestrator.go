@@ -1,5 +1,5 @@
 // Package orchestrator reconciles AssignmentSet objects into rolling
-// per-machine assignments. It never talks to agents except through
+// per-member assignments. It never talks to agents except through
 // assign.Service (the same write path as human verbs).
 package orchestrator
 
@@ -35,7 +35,16 @@ type Controller struct {
 }
 
 type inflightKey struct {
-	cluster, machine string
+	cluster, machine, name string
+}
+
+type assignmentSlot struct {
+	machine, strategy string
+}
+
+type specMember struct {
+	idx int
+	srv *pb.SetMember
 }
 
 // New constructs a controller. Hub may be nil (tests that call ReconcileAll).
@@ -90,7 +99,7 @@ func (c *Controller) Run(ctx context.Context) {
 func (c *Controller) ReconcileAll(ctx context.Context) {
 	for _, cl := range c.Store.ListAssignmentSets() {
 		if err := c.Reconcile(ctx, cl); err != nil {
-			c.Logger.Warn("nats cluster reconcile", "cluster", cl.GetMetadata().GetName(), "err", err)
+			c.Logger.Warn("assignment set reconcile", "cluster", cl.GetMetadata().GetName(), "err", err)
 		}
 	}
 }
@@ -100,7 +109,6 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 	if cl.GetStatus().GetDeleting() {
 		return c.reconcileDelete(ctx, cl)
 	}
-	strategy := store.SetStrategy(cl)
 	art, cfg, err := resolveClusterArtifacts(c.Store, cl)
 	if err != nil {
 		return c.setStatus(cl, &pb.AssignmentSetStatus{
@@ -109,36 +117,38 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 			Reason:             "Artifact",
 			Message:            err.Error(),
 			Members:            cl.GetStatus().GetMembers(),
+			AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
 		})
 	}
 
-	servers := append([]*pb.SetMember(nil), cl.GetSpec().GetMembers()...)
-	sort.Slice(servers, func(i, j int) bool { return servers[i].GetMachine() < servers[j].GetMachine() })
+	ordered := orderedSpecMembers(cl)
 
 	type member struct {
 		srv      *pb.SetMember
 		computed *pb.StrategyAssignmentSpec
 		view     *pb.StrategyView
 		live     *pb.StrategyAssignmentSpec
+		legacy   *pb.StrategyAssignmentSpec
 		rec      *store.MachineRecord
 	}
 	maxUnavail := cl.GetSpec().GetUpdate().GetMaxUnavailable()
 	if maxUnavail < 1 {
 		maxUnavail = 1
 	}
-	dropped := c.droppedMachines(cl)
-	undeployed, err := c.undeployMachines(ctx, cl, dropped, int(maxUnavail))
+	dropped := c.droppedSlots(cl)
+	undeployed, err := c.undeploySlots(ctx, cl, dropped, int(maxUnavail))
 	if err != nil {
 		return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 	}
 
-	members := make([]member, 0, len(servers))
+	members := make([]member, 0, len(ordered))
 	var candidates []member
 	var inflight []member
-	serverStatus := make([]*pb.MemberStatus, 0, len(servers))
+	serverStatus := make([]*pb.MemberStatus, 0, len(ordered))
 
-	for i, srv := range servers {
-		computed, err := computeAssignment(cl, i, art, cfg)
+	for _, item := range ordered {
+		srv := item.srv
+		computed, err := computeAssignment(cl, item.idx, art, cfg)
 		if err != nil {
 			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 		}
@@ -146,9 +156,13 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 		if !ok {
 			rec = &store.MachineRecord{MachineID: srv.GetMachine(), Assignments: map[string]*pb.StrategyAssignmentSpec{}, Status: map[string]*pb.StrategyAssignmentStatus{}}
 		}
-		live := rec.Assignments[strategy]
-		sv := view.BuildStrategyView(rec, strategy, c.Store, nil, nil)
+		slotName := srv.GetName()
+		live := rec.Assignments[slotName]
+		sv := view.BuildStrategyView(rec, slotName, c.Store, nil, nil)
 		m := member{srv: srv, computed: computed, view: sv, live: live, rec: rec}
+		if fam, ok := familyLeftover(cl, srv.GetMachine()); ok {
+			m.legacy = rec.Assignments[fam]
+		}
 		members = append(members, m)
 		ready := view.IsConverged(sv) && view.ReadyConditionTrue(sv)
 		match := live != nil && proto.Equal(live, computed)
@@ -167,7 +181,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 			inflight = append(inflight, m)
 			continue
 		}
-		c.clearDeadline(cl.GetMetadata().GetName(), srv.GetMachine())
+		c.clearDeadline(cl.GetMetadata().GetName(), srv.GetMachine(), srv.GetName())
 	}
 
 	waitSec := waitReadySeconds(cl)
@@ -179,10 +193,10 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 		phase := m.view.GetPhase()
 		if phase == pb.DeployPhase_DEPLOY_PHASE_FAILED || phase == pb.DeployPhase_DEPLOY_PHASE_ROLLED_BACK {
 			stopPhase = "Failed"
-			stopReason = fmt.Sprintf("machine %s phase %s", m.srv.GetMachine(), phase)
+			stopReason = fmt.Sprintf("member %s/%s phase %s", m.srv.GetMachine(), m.srv.GetName(), phase)
 			break
 		}
-		key := inflightKey{cl.GetMetadata().GetName(), m.srv.GetMachine()}
+		key := inflightKey{cl.GetMetadata().GetName(), m.srv.GetMachine(), m.srv.GetName()}
 		c.mu.Lock()
 		dl, ok := c.deadlines[key]
 		if !ok {
@@ -192,7 +206,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 		c.mu.Unlock()
 		if now.After(dl) && !view.ReadyConditionTrue(m.view) {
 			stopPhase = "Degraded"
-			stopReason = fmt.Sprintf("machine %s waitReadySeconds elapsed", m.srv.GetMachine())
+			stopReason = fmt.Sprintf("member %s/%s waitReadySeconds elapsed", m.srv.GetMachine(), m.srv.GetName())
 			break
 		}
 	}
@@ -202,23 +216,29 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 			Reason:             "RollStopped",
 			Message:            stopReason,
-			Members:            serverStatus,
+			Members:            c.withRetainedDrops(cl, serverStatus),
+			AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
 		})
 	}
 
 	wrote := 0
-	slots := int(maxUnavail) - len(inflight) - undeployed
-	if slots < 0 || len(dropped) > undeployed {
-		slots = 0
+	budget := int(maxUnavail) - len(inflight) - undeployed
+	if budget < 0 {
+		budget = 0
 	}
 	for _, m := range candidates {
-		if wrote >= slots {
+		if wrote >= budget {
 			break
+		}
+		if m.legacy != nil {
+			if err := c.undeploySlot(ctx, cl, assignmentSlot{m.srv.GetMachine(), store.SetStrategy(cl)}); err != nil {
+				return c.setAssignFailed(cl, serverStatus, err)
+			}
 		}
 		detail := fmt.Sprintf("cluster=%s generation=%d", cl.GetMetadata().GetName(), cl.GetMetadata().GetGeneration())
 		if _, _, err := c.Assign.Apply(ctx, assign.Request{
 			MachineID:             m.srv.GetMachine(),
-			Strategy:              strategy,
+			Strategy:              m.srv.GetName(),
 			Spec:                  m.computed,
 			Action:                "AssignmentSet",
 			Detail:                detail,
@@ -230,12 +250,12 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 			return c.setAssignFailed(cl, serverStatus, err)
 		}
 		c.mu.Lock()
-		c.deadlines[inflightKey{cl.GetMetadata().GetName(), m.srv.GetMachine()}] = now.Add(time.Duration(waitSec) * time.Second)
+		c.deadlines[inflightKey{cl.GetMetadata().GetName(), m.srv.GetMachine(), m.srv.GetName()}] = now.Add(time.Duration(waitSec) * time.Second)
 		c.mu.Unlock()
 		wrote++
 	}
 
-	droppedLeft := len(c.droppedMachines(cl))
+	droppedLeft := len(c.droppedSlots(cl))
 	allReady := len(candidates) == 0 && len(inflight) == 0 && len(members) > 0 && droppedLeft == 0
 	phase := "Rolling"
 	obs := cl.GetStatus().GetObservedGeneration()
@@ -248,10 +268,15 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 	} else if wrote == 0 && undeployed == 0 && len(inflight) == 0 && len(candidates) > 0 {
 		phase = "Pending"
 	}
+	key := cl.GetStatus().GetAssignmentKey()
+	if c.transitionComplete(cl) {
+		key = store.AssignmentKeyMember
+	}
 	return c.setStatus(cl, &pb.AssignmentSetStatus{
 		Phase:              phase,
 		ObservedGeneration: obs,
-		Members:            serverStatus,
+		Members:            c.withRetainedDrops(cl, serverStatus),
+		AssignmentKey:      key,
 	})
 }
 
@@ -260,8 +285,8 @@ func (c *Controller) reconcileDelete(ctx context.Context, cl *pb.AssignmentSet) 
 	if maxUnavail < 1 {
 		maxUnavail = 1
 	}
-	targets := c.assignedClusterMachines(cl)
-	removed, err := c.undeployMachines(ctx, cl, targets, int(maxUnavail))
+	targets := c.assignedSlots(cl)
+	removed, err := c.undeploySlots(ctx, cl, targets, int(maxUnavail))
 	if err != nil {
 		return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 	}
@@ -272,6 +297,7 @@ func (c *Controller) reconcileDelete(ctx context.Context, cl *pb.AssignmentSet) 
 			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 			Reason:             "Undeploying",
 			Members:            cl.GetStatus().GetMembers(),
+			AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
 		})
 	}
 	c.pruneClusterDeadlines(cl.GetMetadata().GetName())
@@ -284,99 +310,214 @@ func (c *Controller) setAssignFailed(cl *pb.AssignmentSet, servers []*pb.MemberS
 		ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 		Reason:             "AssignFailed",
 		Message:            err.Error(),
-		Members:            servers,
+		Members:            c.withRetainedDrops(cl, servers),
+		AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
 	})
 }
 
-func (c *Controller) undeployMachines(ctx context.Context, cl *pb.AssignmentSet, machines []string, limit int) (int, error) {
-	strategy := store.SetStrategy(cl)
+func (c *Controller) undeploySlots(ctx context.Context, cl *pb.AssignmentSet, slots []assignmentSlot, limit int) (int, error) {
 	removed := 0
-	for _, machine := range machines {
-		rec, ok := c.Store.GetMachine(machine)
-		if !ok || rec.Assignments[strategy] == nil {
-			c.clearDeadline(cl.GetMetadata().GetName(), machine)
+	for _, s := range slots {
+		rec, ok := c.Store.GetMachine(s.machine)
+		if !ok || rec.Assignments[s.strategy] == nil {
+			c.clearDeadline(cl.GetMetadata().GetName(), s.machine, s.strategy)
 			continue
 		}
 		if removed >= limit {
 			continue
 		}
-		if _, _, err := c.Assign.Apply(ctx, assign.Request{
-			MachineID:     machine,
-			Strategy:      strategy,
-			Spec:          nil,
-			Action:        "AssignmentSetUndeploy",
-			Detail:        cl.GetMetadata().GetName(),
-			AllowReserved: true,
-		}); err != nil {
+		if err := c.undeploySlot(ctx, cl, s); err != nil {
 			return removed, err
 		}
-		c.clearDeadline(cl.GetMetadata().GetName(), machine)
 		removed++
 	}
 	return removed, nil
 }
 
-func (c *Controller) droppedMachines(cl *pb.AssignmentSet) []string {
-	want := specMachines(cl)
-	var out []string
-	for _, id := range c.assignedClusterMachines(cl) {
-		if _, ok := want[id]; !ok {
-			out = append(out, id)
-		}
+func (c *Controller) undeploySlot(ctx context.Context, cl *pb.AssignmentSet, s assignmentSlot) error {
+	if _, _, err := c.Assign.Apply(ctx, assign.Request{
+		MachineID:     s.machine,
+		Strategy:      s.strategy,
+		Spec:          nil,
+		Action:        "AssignmentSetUndeploy",
+		Detail:        cl.GetMetadata().GetName(),
+		AllowReserved: true,
+	}); err != nil {
+		return err
 	}
-	return out
+	c.clearDeadline(cl.GetMetadata().GetName(), s.machine, s.strategy)
+	return nil
 }
 
-func (c *Controller) assignedClusterMachines(cl *pb.AssignmentSet) []string {
-	strategy := store.SetStrategy(cl)
-	var out []string
-	for _, id := range c.ownedAssignmentMachines(cl) {
-		rec, ok := c.Store.GetMachine(id)
-		if !ok || rec.Assignments[strategy] == nil {
+func (c *Controller) droppedSlots(cl *pb.AssignmentSet) []assignmentSlot {
+	want := specSlots(cl)
+	var out []assignmentSlot
+	for _, s := range c.assignedSlots(cl) {
+		if _, ok := want[s]; ok {
 			continue
 		}
-		out = append(out, id)
+		if _, ok := familyLeftover(cl, s.machine); ok && s.strategy == store.SetStrategy(cl) {
+			// Family leftover on a machine that still has spec members is a
+			// paired replace, not a drop.
+			continue
+		}
+		out = append(out, s)
 	}
 	return out
 }
 
-// ownedAssignmentMachines is every machine this set has written to: the current
-// spec plus whatever the last status recorded, so a member dropped from the
-// spec is still undeployed. Status is persisted, so this survives a restart.
-func (c *Controller) ownedAssignmentMachines(cl *pb.AssignmentSet) []string {
-	seen := map[string]struct{}{}
-	var out []string
-	add := func(id string) {
-		if id == "" {
+func (c *Controller) assignedSlots(cl *pb.AssignmentSet) []assignmentSlot {
+	var out []assignmentSlot
+	for _, s := range c.ownedSlots(cl) {
+		rec, ok := c.Store.GetMachine(s.machine)
+		if !ok || rec.Assignments[s.strategy] == nil {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func (c *Controller) ownedSlots(cl *pb.AssignmentSet) []assignmentSlot {
+	seen := map[assignmentSlot]struct{}{}
+	var out []assignmentSlot
+	add := func(machine, strategy string) {
+		if machine == "" || strategy == "" {
 			return
 		}
-		if _, ok := seen[id]; ok {
+		s := assignmentSlot{machine: machine, strategy: strategy}
+		if _, ok := seen[s]; ok {
 			return
 		}
-		seen[id] = struct{}{}
-		out = append(out, id)
+		seen[s] = struct{}{}
+		out = append(out, s)
 	}
-	for _, s := range cl.GetSpec().GetMembers() {
-		add(s.GetMachine())
+	for _, m := range cl.GetSpec().GetMembers() {
+		add(m.GetMachine(), m.GetName())
 	}
-	for _, s := range cl.GetStatus().GetMembers() {
-		add(s.GetMachine())
+	for _, m := range cl.GetStatus().GetMembers() {
+		add(m.GetMachine(), m.GetName())
 	}
-	sort.Strings(out)
+	if !usesMemberKey(cl) {
+		cat := store.SetStrategy(cl)
+		machines := map[string]struct{}{}
+		for _, m := range cl.GetSpec().GetMembers() {
+			machines[m.GetMachine()] = struct{}{}
+		}
+		for _, m := range cl.GetStatus().GetMembers() {
+			machines[m.GetMachine()] = struct{}{}
+		}
+		for machine := range machines {
+			namedFamily := false
+			for _, m := range cl.GetSpec().GetMembers() {
+				if m.GetMachine() == machine && m.GetName() == cat {
+					namedFamily = true
+					break
+				}
+			}
+			if namedFamily {
+				continue
+			}
+			add(machine, cat)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].machine != out[j].machine {
+			return out[i].machine < out[j].machine
+		}
+		return out[i].strategy < out[j].strategy
+	})
 	return out
 }
 
-func specMachines(cl *pb.AssignmentSet) map[string]struct{} {
-	out := map[string]struct{}{}
+func specSlots(cl *pb.AssignmentSet) map[assignmentSlot]struct{} {
+	out := map[assignmentSlot]struct{}{}
 	for _, s := range cl.GetSpec().GetMembers() {
-		out[s.GetMachine()] = struct{}{}
+		out[assignmentSlot{machine: s.GetMachine(), strategy: s.GetName()}] = struct{}{}
 	}
 	return out
 }
 
-func (c *Controller) clearDeadline(cluster, machine string) {
+// withRetainedDrops appends status rows for assigned slots that are no longer
+// in spec. Reconcile used to overwrite status.members with spec-only rows in
+// the same tick as a partial undeploy, so extra drops vanished from ownedSlots
+// and were never undeployed.
+func (c *Controller) withRetainedDrops(cl *pb.AssignmentSet, specStatus []*pb.MemberStatus) []*pb.MemberStatus {
+	if cl == nil {
+		return specStatus
+	}
+	want := specSlots(cl)
+	seen := map[assignmentSlot]struct{}{}
+	out := make([]*pb.MemberStatus, 0, len(specStatus)+4)
+	for _, s := range specStatus {
+		if s == nil {
+			continue
+		}
+		seen[assignmentSlot{machine: s.GetMachine(), strategy: s.GetName()}] = struct{}{}
+		out = append(out, s)
+	}
+	for _, s := range c.droppedSlots(cl) {
+		if _, ok := want[s]; ok {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		rec, ok := c.Store.GetMachine(s.machine)
+		if !ok || rec.Assignments[s.strategy] == nil {
+			continue
+		}
+		sv := view.BuildStrategyView(rec, s.strategy, c.Store, nil, nil)
+		out = append(out, &pb.MemberStatus{
+			Machine:   s.machine,
+			Name:      s.strategy,
+			Ready:     view.IsConverged(sv) && view.ReadyConditionTrue(sv),
+			Phase:     sv.GetPhase().String(),
+			Converged: sv.GetConverged(),
+		})
+		seen[s] = struct{}{}
+	}
+	return out
+}
+
+func (c *Controller) transitionComplete(cl *pb.AssignmentSet) bool {
+	if len(cl.GetSpec().GetMembers()) == 0 {
+		return false
+	}
+	for _, m := range cl.GetSpec().GetMembers() {
+		rec, ok := c.Store.GetMachine(m.GetMachine())
+		if !ok || rec.Assignments[m.GetName()] == nil {
+			return false
+		}
+	}
+	// Dropped machines still holding a family (or member) slot must finish
+	// draining before the key flips; otherwise ownedSlots stops emitting
+	// (machine, catalog) and the process is orphaned.
+	if len(c.droppedSlots(cl)) > 0 {
+		return false
+	}
+	if !usesMemberKey(cl) {
+		for _, s := range c.assignedSlots(cl) {
+			if s.strategy == store.SetStrategy(cl) && !specHasMember(cl, s.machine, s.strategy) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func specHasMember(cl *pb.AssignmentSet, machine, name string) bool {
+	for _, m := range cl.GetSpec().GetMembers() {
+		if m.GetMachine() == machine && m.GetName() == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Controller) clearDeadline(cluster, machine, name string) {
 	c.mu.Lock()
-	delete(c.deadlines, inflightKey{cluster, machine})
+	delete(c.deadlines, inflightKey{cluster, machine, name})
 	c.mu.Unlock()
 }
 
@@ -391,6 +532,9 @@ func (c *Controller) pruneClusterDeadlines(cluster string) {
 }
 
 func (c *Controller) setStatus(cl *pb.AssignmentSet, st *pb.AssignmentSetStatus) error {
+	if st.GetAssignmentKey() == "" {
+		st.AssignmentKey = cl.GetStatus().GetAssignmentKey()
+	}
 	if proto.Equal(cl.GetStatus(), st) {
 		return nil
 	}
@@ -403,8 +547,12 @@ func computeAssignment(cl *pb.AssignmentSet, idx int, art, cfg *pb.ArtifactRef) 
 		return nil, err
 	}
 	tmpl := cl.GetSpec().GetTemplate()
+	members := cl.GetSpec().GetMembers()
+	if idx < 0 || idx >= len(members) {
+		return nil, fmt.Errorf("member index %d out of range", idx)
+	}
 	spec := &pb.StrategyAssignmentSpec{
-		Strategy: store.SetStrategy(cl),
+		Strategy: members[idx].GetName(),
 		Artifact: proto.Clone(art).(*pb.ArtifactRef),
 		Stopped:  false,
 		Args:     rendered.Args,
@@ -438,7 +586,7 @@ func computeAssignment(cl *pb.AssignmentSet, idx int, art, cfg *pb.ArtifactRef) 
 // defaultDeployPolicy is used when the template omits one. Auto-rollback is on:
 // on a first roll there is no previous version, so the agent reports FAILED
 // (an honest terminal signal); on an upgrade the member returns on the previous
-// version instead of staying dead. Either way the roll stops.
+// version rather than staying dead. Either way the roll stops.
 func defaultDeployPolicy(cl *pb.AssignmentSet) *pb.DeployPolicy {
 	return &pb.DeployPolicy{
 		Startsecs:           2,
@@ -476,4 +624,53 @@ func resolveClusterArtifacts(st store.Store, cl *pb.AssignmentSet) (art, cfg *pb
 		}
 	}
 	return art, cfg, nil
+}
+
+// orderedSpecMembers sorts members by (machine, name) while keeping the
+// original spec index so Expand/computeAssignment read the right entry.
+func orderedSpecMembers(cl *pb.AssignmentSet) []specMember {
+	raw := cl.GetSpec().GetMembers()
+	out := make([]specMember, len(raw))
+	for i, srv := range raw {
+		out[i] = specMember{idx: i, srv: srv}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.srv.GetMachine() != b.srv.GetMachine() {
+			return a.srv.GetMachine() < b.srv.GetMachine()
+		}
+		if a.srv.GetName() != b.srv.GetName() {
+			return a.srv.GetName() < b.srv.GetName()
+		}
+		return a.idx < b.idx
+	})
+	return out
+}
+
+func usesMemberKey(cl *pb.AssignmentSet) bool {
+	return cl.GetStatus().GetAssignmentKey() == store.AssignmentKeyMember
+}
+
+// familyLeftover reports the catalog slot still owned on machine while the
+// set has not flipped assignment_key, and no spec member on that machine is
+// already named the catalog.
+func familyLeftover(cl *pb.AssignmentSet, machine string) (string, bool) {
+	if usesMemberKey(cl) {
+		return "", false
+	}
+	cat := store.SetStrategy(cl)
+	owned := false
+	for _, m := range cl.GetSpec().GetMembers() {
+		if m.GetMachine() != machine {
+			continue
+		}
+		owned = true
+		if m.GetName() == cat {
+			return "", false
+		}
+	}
+	if !owned {
+		return "", false
+	}
+	return cat, true
 }

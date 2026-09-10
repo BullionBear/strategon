@@ -2,7 +2,14 @@
 	import { onMount } from 'svelte';
 	import { client } from '$lib/api';
 	import type { AssignmentSet } from '$lib/gen/strategyplatform/v1/assignmentset_pb';
-	import { setGenerationLag, setPhaseClass, setStrategy, memberPhaseLabel } from '$lib/sets';
+	import {
+		memberPhaseLabel,
+		memberRowKey,
+		memberStatusOf,
+		setGenerationLag,
+		setPhaseClass,
+		setStrategy
+	} from '$lib/sets';
 
 	let sets = $state<AssignmentSet[]>([]);
 	let error = $state('');
@@ -63,8 +70,8 @@
 	{:else if sets.length === 0}
 		<p class="muted" style="margin-top:1.25rem">
 			No AssignmentSets yet. Apply <span class="mono">examples/nats/cluster.yaml</span> with the
-			CLI. The controller — not this page — writes each machine's
-			<span class="mono">nats</span> assignment.
+			CLI. The controller — not this page — writes each member's assignment
+			(<span class="mono">member.name</span>).
 		</p>
 	{:else}
 		<div class="list" style="margin-top:1.25rem">
@@ -73,14 +80,14 @@
 				{@const phase = c.status?.phase || 'Pending'}
 				{@const gen = c.metadata?.generation ?? 0n}
 				{@const obs = c.status?.observedGeneration ?? 0n}
-				{@const strategy = setStrategy(c)}
+				{@const catalog = setStrategy(c)}
 				{@const lag = setGenerationLag(c)}
 				<div class="panel set">
 					<div class="head">
 						<div>
 							<h2 class="mono">{name}</h2>
 							<p class="muted tiny">
-								strategy <span class="mono">{strategy}</span>
+								catalog <span class="mono">{catalog}</span>
 								· artifact <span class="mono">{c.spec?.artifactVersion || '—'}</span>
 								{#if c.spec?.configVersion}
 									· config <span class="mono">{c.spec.configVersion}</span>
@@ -128,15 +135,15 @@
 								</tr>
 							</thead>
 							<tbody>
-								{#each c.spec?.members ?? [] as srv (srv.machine)}
-									{@const st = c.status?.members?.find((s) => s.machine === srv.machine)}
+								{#each c.spec?.members ?? [] as srv (memberRowKey(srv.machine, srv.name))}
+									{@const st = memberStatusOf(c, srv.machine, srv.name)}
 									<tr>
 										<td>
 											<a class="row-link mono" href="/machines/{srv.machine}">{srv.machine}</a>
 										</td>
 										<td class="mono muted">{srv.name}</td>
 										<td>
-											<a class="row-link mono" href="/machines/{srv.machine}/{strategy}">
+											<a class="row-link mono" href="/machines/{srv.machine}/{srv.name}">
 												{memberPhaseLabel(st?.phase)}
 											</a>
 										</td>
@@ -154,8 +161,8 @@
 						</table>
 					</div>
 					<div class="fleet-cards" style="margin-top:0.85rem">
-						{#each c.spec?.members ?? [] as srv (srv.machine)}
-							{@const st = c.status?.members?.find((s) => s.machine === srv.machine)}
+						{#each c.spec?.members ?? [] as srv (memberRowKey(srv.machine, srv.name))}
+							{@const st = memberStatusOf(c, srv.machine, srv.name)}
 							<div class="fleet-card">
 								<div class="card-top">
 									<a class="mono" href="/machines/{srv.machine}"><strong>{srv.machine}</strong></a>
@@ -163,7 +170,7 @@
 								</div>
 								<div class="card-meta">
 									<span class="mono">{srv.name}</span>
-									<a class="mono" href="/machines/{srv.machine}/{strategy}">{memberPhaseLabel(st?.phase)}</a>
+									<a class="mono" href="/machines/{srv.machine}/{srv.name}">{memberPhaseLabel(st?.phase)}</a>
 									<span>{st?.converged ? 'converged' : 'diverged'}</span>
 								</div>
 							</div>

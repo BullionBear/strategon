@@ -4,9 +4,18 @@ import { ObjectMetaSchema } from '$lib/gen/strategyplatform/v1/common_pb';
 import {
 	AssignmentSetSchema,
 	AssignmentSetSpecSchema,
-	AssignmentSetStatusSchema
+	AssignmentSetStatusSchema,
+	MemberStatusSchema,
+	SetMemberSchema
 } from '$lib/gen/strategyplatform/v1/assignmentset_pb';
-import { setGenerationLag, setPhaseClass, setStrategy, memberPhaseLabel } from './sets';
+import {
+	memberPhaseLabel,
+	memberRowKey,
+	memberStatusOf,
+	setGenerationLag,
+	setPhaseClass,
+	setStrategy
+} from './sets';
 
 describe('setPhaseClass', () => {
 	it('maps controller phases', () => {
@@ -36,5 +45,39 @@ describe('memberPhaseLabel', () => {
 		expect(memberPhaseLabel('DEPLOY_PHASE_HEALTH_CHECKING')).toBe('Health Checking');
 		expect(memberPhaseLabel('HEALTHY')).toBe('Healthy');
 		expect(memberPhaseLabel('')).toBe('—');
+	});
+});
+
+describe('member row identity', () => {
+	it('keys same-host members separately and matches status by machine+name', () => {
+		expect(memberRowKey('m1', 'nats-a')).not.toBe(memberRowKey('m1', 'nats-b'));
+		const c = create(AssignmentSetSchema, {
+			spec: create(AssignmentSetSpecSchema, {
+				members: [
+					create(SetMemberSchema, { machine: 'm1', name: 'nats-a' }),
+					create(SetMemberSchema, { machine: 'm1', name: 'nats-b' })
+				]
+			}),
+			status: create(AssignmentSetStatusSchema, {
+				members: [
+					create(MemberStatusSchema, {
+						machine: 'm1',
+						name: 'nats-a',
+						ready: true,
+						phase: 'DEPLOY_PHASE_HEALTHY',
+						converged: true
+					}),
+					create(MemberStatusSchema, {
+						machine: 'm1',
+						name: 'nats-b',
+						ready: false,
+						phase: 'DEPLOY_PHASE_DEPLOYING',
+						converged: false
+					})
+				]
+			})
+		});
+		expect(memberStatusOf(c, 'm1', 'nats-a')?.ready).toBe(true);
+		expect(memberStatusOf(c, 'm1', 'nats-b')?.phase).toBe('DEPLOY_PHASE_DEPLOYING');
 	});
 });

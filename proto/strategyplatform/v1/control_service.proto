@@ -130,6 +130,10 @@ message ApplyAssignmentRequest {
   ResourceLimits limits = 10;
   LeaseSpec lease = 11;
   ReadinessProbe readiness = 12;
+  // Optional catalog artifact name. Empty uses strategy (or, on update, the
+  // name already stored on the assignment). Set this to deploy a slot whose
+  // name differs from the binary, e.g. strategy=nats-m4 artifact=nats.
+  string artifact = 13;
 }
 
 message ApplyAssignmentResponse {

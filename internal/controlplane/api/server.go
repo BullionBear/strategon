@@ -278,9 +278,12 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 	}
 
 	existing := rec.Assignments[msg.GetStrategy()]
-	artName := msg.GetStrategy()
-	if existing != nil && existing.GetArtifact().GetName() != "" {
-		artName = existing.GetArtifact().GetName()
+	artName := msg.GetArtifact()
+	if artName == "" {
+		artName = msg.GetStrategy()
+		if existing != nil && existing.GetArtifact().GetName() != "" {
+			artName = existing.GetArtifact().GetName()
+		}
 	}
 	art, err := s.resolveArtifact(artName, msg.GetStrategy(), msg.GetArtifactVersion())
 	if err != nil {

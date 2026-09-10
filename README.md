@@ -145,7 +145,9 @@ Requirements and limits:
 `strategon apply -f` sends an `AssignmentSet` document to `ApplyAssignmentSet`.
 The control plane stores the object only; a rolling controller writes one
 member assignment at a time (`maxUnavailable`), advancing only when the
-in-flight member is converged **and** Ready.
+in-flight member is converged **and** Ready. The assignment slot is
+`member.name` (WorkDir `<base>/<name>`); `spec.strategy` is the catalog
+family. Several members may share a machine when names and ports differ.
 
 An `AssignmentSet` is workload-agnostic. Per-member identity and any peer list
 come from a template the manifest supplies:
