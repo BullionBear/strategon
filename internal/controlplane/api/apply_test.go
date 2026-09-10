@@ -295,6 +295,36 @@ func TestApplyAssignmentExplicitArtifact(t *testing.T) {
 	}
 }
 
+func TestApplyAssignmentSetTrimsMemberName(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	if _, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	got, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "trading"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Members: []*pb.SetMember{{
+					Machine: "m1", Name: "  nats-m1  ",
+					Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"},
+				}},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name := got.Msg.GetSet().GetSpec().GetMembers()[0].GetName(); name != "nats-m1" {
+		t.Fatalf("stored name = %q, want trimmed nats-m1", name)
+	}
+}
+
 func TestApplyAssignmentSetRejectsBadMemberName(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
@@ -316,6 +346,20 @@ func TestApplyAssignmentSetRejectsBadMemberName(t *testing.T) {
 	}))
 	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("bad member name: %v", err)
+	}
+
+	_, err = client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "dot"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Members:         []*pb.SetMember{{Machine: "m1", Name: ".", Vars: map[string]string{"route_host": "10.0.0.1"}}},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("dot member name: %v", err)
 	}
 }
 

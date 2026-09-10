@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
@@ -120,6 +121,7 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 		if srv.GetMachine() == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: machine is required", i))
 		}
+		srv.Name = strings.TrimSpace(srv.GetName())
 		if srv.GetName() == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: name is required", i))
 		}
@@ -172,46 +174,54 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 }
 
 func (s *Server) rejectUnownedSlots(clusterName string, spec *pb.AssignmentSetSpec) error {
-	for _, srv := range spec.GetMembers() {
-		if err := s.rejectSlot(clusterName, srv.GetMachine(), srv.GetName()); err != nil {
-			return err
-		}
-	}
 	existing, ok := s.store.GetAssignmentSet(clusterName)
 	checkFamily := !ok || existing.GetStatus().GetAssignmentKey() == ""
-	if !checkFamily {
-		return nil
-	}
-	cat := spec.GetStrategy()
-	seen := map[string]struct{}{}
-	for _, srv := range spec.GetMembers() {
-		if srv.GetName() == cat {
-			continue
-		}
-		if _, dup := seen[srv.GetMachine()]; dup {
-			continue
-		}
-		seen[srv.GetMachine()] = struct{}{}
-		if err := s.rejectSlot(clusterName, srv.GetMachine(), cat); err != nil {
-			return err
-		}
-	}
-	return nil
-}
 
-func (s *Server) rejectSlot(clusterName, machine, strategy string) error {
-	owner, reserved := s.store.ReservedBy(machine, strategy)
-	if reserved && owner != clusterName {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("machine %q strategy %q is owned by AssignmentSet %q", machine, strategy, owner))
+	type slot struct{ machine, strategy string }
+	var checks []slot
+	seen := map[slot]struct{}{}
+	add := func(machine, strategy string) {
+		k := slot{machine, strategy}
+		if _, ok := seen[k]; ok {
+			return
+		}
+		seen[k] = struct{}{}
+		checks = append(checks, k)
 	}
-	rec, ok := s.store.GetMachine(machine)
-	if !ok || rec.Assignments[strategy] == nil {
-		return nil
+	for _, srv := range spec.GetMembers() {
+		add(srv.GetMachine(), srv.GetName())
 	}
-	if !reserved {
-		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("machine %q already has an unowned %q assignment", machine, strategy))
+	if checkFamily {
+		cat := spec.GetStrategy()
+		for _, srv := range spec.GetMembers() {
+			if srv.GetName() != cat {
+				add(srv.GetMachine(), cat)
+			}
+		}
+	}
+
+	reservedOn := map[string]map[string]struct{}{}
+	for _, ch := range checks {
+		if reservedOn[ch.machine] == nil {
+			m := map[string]struct{}{}
+			for _, name := range s.store.ReservedSlots(ch.machine) {
+				m[name] = struct{}{}
+			}
+			reservedOn[ch.machine] = m
+		}
+		if _, reserved := reservedOn[ch.machine][ch.strategy]; reserved {
+			owner, _ := s.store.ReservedBy(ch.machine, ch.strategy)
+			if owner != clusterName {
+				return connect.NewError(connect.CodeFailedPrecondition,
+					fmt.Errorf("machine %q strategy %q is owned by AssignmentSet %q", ch.machine, ch.strategy, owner))
+			}
+			continue
+		}
+		rec, ok := s.store.GetMachine(ch.machine)
+		if ok && rec.Assignments[ch.strategy] != nil {
+			return connect.NewError(connect.CodeFailedPrecondition,
+				fmt.Errorf("machine %q already has an unowned %q assignment", ch.machine, ch.strategy))
+		}
 	}
 	return nil
 }

@@ -752,6 +752,123 @@ func TestDeleteUnmigratedSetDrainsFamilySlots(t *testing.T) {
 	}
 }
 
+func TestLegacyShrinkAfterPartialMigrateDoesNotOrphanFamilySlot(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 3)
+	ctx := context.Background()
+	seedLegacyFamily(t, st, loadCluster(t, st))
+
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if !assignedSlot(st, "m1", "nats-m1") || assignedSlot(st, "m1", "nats") {
+		t.Fatal("first tick should pair-migrate m1")
+	}
+	markReady(t, st, "m1", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+
+	cur := loadCluster(t, st)
+	keep := keepMembers(cur, "m1")
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.AssignmentSetSpec{
+			ArtifactVersion: cur.GetSpec().GetArtifactVersion(),
+			ConfigVersion:   cur.GetSpec().GetConfigVersion(),
+			Strategy:        cur.GetSpec().GetStrategy(),
+			Template:        cur.GetSpec().GetTemplate(),
+			Members:         keep,
+			Update:          cur.GetSpec().GetUpdate(),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if loadCluster(t, st).GetStatus().GetAssignmentKey() == store.AssignmentKeyMember {
+		t.Fatal("must not flip assignment_key while a dropped machine still holds nats")
+	}
+	if assignedSlot(st, "m2", "nats") {
+		t.Fatal("first shrink tick should undeploy one leftover family slot")
+	}
+	if !assignedSlot(st, "m3", "nats") {
+		t.Fatal("maxUnavailable:1 must leave m3 nats assigned after the first shrink tick")
+	}
+	if !statusHasMember(loadCluster(t, st), "m3", "nats") {
+		t.Fatal("status must retain the leftover family drop so the next tick can see it")
+	}
+
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if assignedSlot(st, "m3", "nats") {
+		t.Fatal("second tick must undeploy leftover nats on m3")
+	}
+	if !assignedSlot(st, "m1", "nats-m1") {
+		t.Fatal("kept member lost")
+	}
+	if loadCluster(t, st).GetStatus().GetAssignmentKey() != store.AssignmentKeyMember {
+		t.Fatalf("assignment_key=%q after leftover drain", loadCluster(t, st).GetStatus().GetAssignmentKey())
+	}
+}
+
+func TestShrinkDropsExceedingMaxUnavailableEventuallyDrainsAll(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 3)
+	ctx := context.Background()
+	for _, m := range []string{"m1", "m2", "m3"} {
+		if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+			t.Fatal(err)
+		}
+		markReady(t, st, m, true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if loadCluster(t, st).GetStatus().GetPhase() != "Ready" {
+		t.Fatalf("phase=%s", loadCluster(t, st).GetStatus().GetPhase())
+	}
+	if loadCluster(t, st).GetStatus().GetAssignmentKey() != store.AssignmentKeyMember {
+		t.Fatalf("assignment_key=%q", loadCluster(t, st).GetStatus().GetAssignmentKey())
+	}
+
+	cur := loadCluster(t, st)
+	if _, _, err := st.ApplyAssignmentSet(&pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "trading"},
+		Spec: &pb.AssignmentSetSpec{
+			ArtifactVersion: cur.GetSpec().GetArtifactVersion(),
+			ConfigVersion:   cur.GetSpec().GetConfigVersion(),
+			Strategy:        cur.GetSpec().GetStrategy(),
+			Template:        cur.GetSpec().GetTemplate(),
+			Members:         keepMembers(cur, "m1"),
+			Update:          cur.GetSpec().GetUpdate(),
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if assigned(st, "m2") {
+		t.Fatal("first shrink tick should undeploy one dropped member")
+	}
+	if !assigned(st, "m3") {
+		t.Fatal("maxUnavailable:1 must leave the second drop assigned")
+	}
+	if !statusHasMember(loadCluster(t, st), "m3", slotName("m3")) {
+		t.Fatal("status must retain the extra drop across the partial undeploy")
+	}
+
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	if assigned(st, "m2") || assigned(st, "m3") {
+		t.Fatalf("both drops must be undeployed, m2=%v m3=%v", assigned(st, "m2"), assigned(st, "m3"))
+	}
+	if !assigned(st, "m1") {
+		t.Fatal("kept member lost")
+	}
+}
+
 func TestAssignmentKeyFlipStopsFamilyDrain(t *testing.T) {
 	ctrl, st, _ := setupCluster(t, 1)
 	ctx := context.Background()
@@ -822,6 +939,30 @@ func setupSameHost(t *testing.T, names []string) (*Controller, *store.Memory) {
 		t.Fatal(err)
 	}
 	return New(st, assign.New(st, nil), nil, nil), st
+}
+
+func keepMembers(cl *pb.AssignmentSet, machines ...string) []*pb.SetMember {
+	want := map[string]struct{}{}
+	for _, m := range machines {
+		want[m] = struct{}{}
+	}
+	var out []*pb.SetMember
+	for _, srv := range cl.GetSpec().GetMembers() {
+		if _, ok := want[srv.GetMachine()]; !ok {
+			continue
+		}
+		out = append(out, proto.Clone(srv).(*pb.SetMember))
+	}
+	return out
+}
+
+func statusHasMember(cl *pb.AssignmentSet, machine, name string) bool {
+	for _, m := range cl.GetStatus().GetMembers() {
+		if m.GetMachine() == machine && m.GetName() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func seedLegacyFamily(t *testing.T, st store.Store, cl *pb.AssignmentSet) {

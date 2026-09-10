@@ -53,7 +53,7 @@ func ValidateStrategy(strategy string) error {
 	if strategy == "" {
 		return fmt.Errorf("empty strategy")
 	}
-	if strings.ContainsAny(strategy, `/\`) || strategy == ".." || strings.Contains(strategy, "..") {
+	if strategy == "." || strategy == ".." || strings.ContainsAny(strategy, `/\`) || strings.Contains(strategy, "..") {
 		return fmt.Errorf("invalid strategy name")
 	}
 	if filepath.IsAbs(strategy) {

@@ -216,7 +216,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 			Reason:             "RollStopped",
 			Message:            stopReason,
-			Members:            serverStatus,
+			Members:            c.withRetainedDrops(cl, serverStatus),
 			AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
 		})
 	}
@@ -275,7 +275,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 	return c.setStatus(cl, &pb.AssignmentSetStatus{
 		Phase:              phase,
 		ObservedGeneration: obs,
-		Members:            serverStatus,
+		Members:            c.withRetainedDrops(cl, serverStatus),
 		AssignmentKey:      key,
 	})
 }
@@ -310,7 +310,7 @@ func (c *Controller) setAssignFailed(cl *pb.AssignmentSet, servers []*pb.MemberS
 		ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
 		Reason:             "AssignFailed",
 		Message:            err.Error(),
-		Members:            servers,
+		Members:            c.withRetainedDrops(cl, servers),
 		AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
 	})
 }
@@ -438,24 +438,81 @@ func specSlots(cl *pb.AssignmentSet) map[assignmentSlot]struct{} {
 	return out
 }
 
+// withRetainedDrops appends status rows for assigned slots that are no longer
+// in spec. Reconcile used to overwrite status.members with spec-only rows in
+// the same tick as a partial undeploy, so extra drops vanished from ownedSlots
+// and were never undeployed.
+func (c *Controller) withRetainedDrops(cl *pb.AssignmentSet, specStatus []*pb.MemberStatus) []*pb.MemberStatus {
+	if cl == nil {
+		return specStatus
+	}
+	want := specSlots(cl)
+	seen := map[assignmentSlot]struct{}{}
+	out := make([]*pb.MemberStatus, 0, len(specStatus)+4)
+	for _, s := range specStatus {
+		if s == nil {
+			continue
+		}
+		seen[assignmentSlot{machine: s.GetMachine(), strategy: s.GetName()}] = struct{}{}
+		out = append(out, s)
+	}
+	for _, s := range c.droppedSlots(cl) {
+		if _, ok := want[s]; ok {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		rec, ok := c.Store.GetMachine(s.machine)
+		if !ok || rec.Assignments[s.strategy] == nil {
+			continue
+		}
+		sv := view.BuildStrategyView(rec, s.strategy, c.Store, nil, nil)
+		out = append(out, &pb.MemberStatus{
+			Machine:   s.machine,
+			Name:      s.strategy,
+			Ready:     view.IsConverged(sv) && view.ReadyConditionTrue(sv),
+			Phase:     sv.GetPhase().String(),
+			Converged: sv.GetConverged(),
+		})
+		seen[s] = struct{}{}
+	}
+	return out
+}
+
 func (c *Controller) transitionComplete(cl *pb.AssignmentSet) bool {
+	if len(cl.GetSpec().GetMembers()) == 0 {
+		return false
+	}
 	for _, m := range cl.GetSpec().GetMembers() {
 		rec, ok := c.Store.GetMachine(m.GetMachine())
 		if !ok || rec.Assignments[m.GetName()] == nil {
 			return false
 		}
 	}
+	// Dropped machines still holding a family (or member) slot must finish
+	// draining before the key flips; otherwise ownedSlots stops emitting
+	// (machine, catalog) and the process is orphaned.
+	if len(c.droppedSlots(cl)) > 0 {
+		return false
+	}
 	if !usesMemberKey(cl) {
-		for _, m := range cl.GetSpec().GetMembers() {
-			if fam, ok := familyLeftover(cl, m.GetMachine()); ok {
-				rec, exists := c.Store.GetMachine(m.GetMachine())
-				if exists && rec.Assignments[fam] != nil {
-					return false
-				}
+		for _, s := range c.assignedSlots(cl) {
+			if s.strategy == store.SetStrategy(cl) && !specHasMember(cl, s.machine, s.strategy) {
+				return false
 			}
 		}
 	}
-	return len(cl.GetSpec().GetMembers()) > 0
+	return true
+}
+
+func specHasMember(cl *pb.AssignmentSet, machine, name string) bool {
+	for _, m := range cl.GetSpec().GetMembers() {
+		if m.GetMachine() == machine && m.GetName() == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Controller) clearDeadline(cluster, machine, name string) {

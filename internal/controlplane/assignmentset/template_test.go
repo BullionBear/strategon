@@ -205,7 +205,7 @@ func TestValidateMemberName(t *testing.T) {
 	if err := ValidateMemberName("nats-m1"); err != nil {
 		t.Fatal(err)
 	}
-	for _, bad := range []string{"", "nats/m1", "..", "a..b", `nats\m1`} {
+	for _, bad := range []string{"", ".", "..", "nats/m1", "a..b", `nats\m1`, "   "} {
 		if err := ValidateMemberName(bad); err == nil {
 			t.Fatalf("ValidateMemberName(%q) should fail", bad)
 		}
