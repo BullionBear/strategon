@@ -26,10 +26,15 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/health"
 	"github.com/bullionbear/strategon/internal/agent/supervisor"
 	"github.com/bullionbear/strategon/internal/clock"
+	"github.com/bullionbear/strategon/internal/volume"
 	"google.golang.org/protobuf/proto"
 )
 
 var placeholderRE = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+
+// volumePlaceholderRE matches ${VOLUME:name}. Names may contain '.' and '-'
+// (e.g. nats-a-data); do not reuse placeholderRE — that family stops at '-'.
+var volumePlaceholderRE = regexp.MustCompile(`\$\{VOLUME:([^}/]+)\}`)
 
 const (
 	conditionLive            = "Live"
@@ -92,6 +97,11 @@ type Reconciler struct {
 	sharedGeneration int64
 	sharedActual     map[string]*sharedFileState
 
+	desiredVolumesPresent bool
+	desiredVolumes        map[string]struct{}
+	volumesGeneration     int64
+	volumeErrors          map[string]string
+
 	desiredCh chan *pb.DesiredState
 	exitCh    chan processExit
 	workerCh  chan workerEvent
@@ -134,17 +144,19 @@ func New(deps Deps) *Reconciler {
 		deps.Artifacts.ReleaseRetention = deps.ReleaseRetention
 	}
 	return &Reconciler{
-		desired:       map[string]*pb.StrategyAssignmentSpec{},
-		actual:        map[string]*strategyState{},
-		desiredShared: map[string]*pb.SharedFileSpec{},
-		sharedActual:  map[string]*sharedFileState{},
-		desiredCh:     make(chan *pb.DesiredState, 8),
-		exitCh:        make(chan processExit, 16),
-		workerCh:      make(chan workerEvent, 32),
-		sharedCh:      make(chan sharedWorkerEvent, 32),
-		healthCh:      make(chan healthResult, 32),
-		deps:          deps,
-		tickInterval:  tick,
+		desired:        map[string]*pb.StrategyAssignmentSpec{},
+		actual:         map[string]*strategyState{},
+		desiredShared:  map[string]*pb.SharedFileSpec{},
+		sharedActual:   map[string]*sharedFileState{},
+		desiredVolumes: map[string]struct{}{},
+		volumeErrors:   map[string]string{},
+		desiredCh:      make(chan *pb.DesiredState, 8),
+		exitCh:         make(chan processExit, 16),
+		workerCh:       make(chan workerEvent, 32),
+		sharedCh:       make(chan sharedWorkerEvent, 32),
+		healthCh:       make(chan healthResult, 32),
+		deps:           deps,
+		tickInterval:   tick,
 	}
 }
 
@@ -230,6 +242,7 @@ func (r *Reconciler) applyDesired(ds *pb.DesiredState) {
 	}
 	r.generation = ds.GetGeneration()
 	r.applyDesiredShared(ds)
+	r.applyDesiredVolumes(ds)
 	next := map[string]*pb.StrategyAssignmentSpec{}
 	for _, a := range ds.GetAssignments() {
 		next[a.GetStrategy()] = a
@@ -254,6 +267,7 @@ func (r *Reconciler) reconcile() {
 	// sharedPresent (absent only) so a fresh machine does not start before the
 	// catalog lands — stale digests do not freeze the machine.
 	r.reconcileShared()
+	r.reconcileVolumes()
 	for name, spec := range r.desired {
 		st := r.actual[name]
 		if st == nil {
@@ -272,6 +286,7 @@ func (r *Reconciler) reconcile() {
 
 func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyState) {
 	st.stopGraceSeconds = spec.GetDeployPolicy().GetStopGraceSeconds()
+	st.volumeMounts = volumeMountNames(spec)
 	if st.backoff.Blocked(r.now()) {
 		return // backoff not elapsed; tick will wake us
 	}
@@ -292,7 +307,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		// above) paces the restarts.
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING &&
 			st.proc == nil && versionMatches(spec, st) {
-			if !r.awaitSharedReady(st) {
+			if !r.awaitSharedReady(st) || !r.awaitVolumeReady(st, spec) {
 				return
 			}
 			r.startProcess(spec, st, true)
@@ -315,7 +330,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 
 	case versionMatches(spec, st) && st.proc == nil:
 		r.promoteRunningLabels(spec, st)
-		if !r.awaitSharedReady(st) {
+		if !r.awaitSharedReady(st) || !r.awaitVolumeReady(st, spec) {
 			return
 		}
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_STOPPED {
@@ -340,7 +355,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 			}
 			return
 		}
-		if !r.awaitSharedReady(st) {
+		if !r.awaitSharedReady(st) || !r.awaitVolumeReady(st, spec) {
 			return
 		}
 		r.beginDeploy(spec, st)
@@ -391,6 +406,13 @@ func (r *Reconciler) retireStrategy(st *strategyState) {
 // / post-deploy crash during the window). When false (steady-state crash
 // restart) the process is live again so phase returns to HEALTHY.
 func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState, healthCheck bool) {
+	if err := r.volumeWriterConflictErr(st.strategy, spec.GetVolumeMounts()); err != nil {
+		if st.lastError != err.Error() {
+			st.lastError = err.Error()
+			r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", err.Error())
+		}
+		return
+	}
 	if healthCheck {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_STARTING
 	}
@@ -461,7 +483,11 @@ func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec, launch *pb.
 	out.Driver = driver.KindExec
 	out.BinaryPath = r.deps.Artifacts.CurrentBinaryPath(spec.GetStrategy())
 	out.WorkDir = r.deps.Artifacts.StrategyDir(spec.GetStrategy())
-	out.Env = envPairs(spec.GetEnv())
+	env, err := r.renderEnv(spec, launch, envPairs(spec.GetEnv()))
+	if err != nil {
+		return driver.StartSpec{}, err
+	}
+	out.Env = env
 	return out, nil
 }
 
@@ -493,7 +519,11 @@ func (r *Reconciler) buildOCIStartSpec(spec *pb.StrategyAssignmentSpec, launch *
 	out.Rootfs = rootfs
 	out.Argv = argv
 	out.ImageEnv = append([]string(nil), meta.Env...)
-	out.Env = mergeEnv(meta.Env, spec.GetEnv())
+	env, err := r.renderEnv(spec, launch, mergeEnv(meta.Env, spec.GetEnv()))
+	if err != nil {
+		return driver.StartSpec{}, err
+	}
+	out.Env = env
 	out.WorkDir = work
 	out.WorkBind = work
 	out.SharedBind = r.deps.Artifacts.SharedRoot()
@@ -504,6 +534,40 @@ func (r *Reconciler) buildOCIStartSpec(spec *pb.StrategyAssignmentSpec, launch *
 		if err == nil {
 			out.ConfigBind = cfgPath
 		}
+	}
+	binds, err := r.ociVolumeBinds(spec)
+	if err != nil {
+		return driver.StartSpec{}, err
+	}
+	out.VolumeBinds = binds
+	return out, nil
+}
+
+func (r *Reconciler) ociVolumeBinds(spec *pb.StrategyAssignmentSpec) ([]driver.VolumeBind, error) {
+	mounts := spec.GetVolumeMounts()
+	if len(mounts) == 0 {
+		return nil, nil
+	}
+	work := r.deps.Artifacts.WorkDir(spec.GetStrategy())
+	shared := r.deps.Artifacts.SharedRoot()
+	cfg := ""
+	if c := spec.GetConfig(); c != nil && c.GetDigest() != "" {
+		cfg = r.deps.Artifacts.CurrentConfigPath(spec.GetStrategy(), c)
+	}
+	out := make([]driver.VolumeBind, 0, len(mounts))
+	for _, m := range mounts {
+		host, err := filepath.Abs(r.deps.Artifacts.VolumeDir(m.GetName()))
+		if err != nil {
+			return nil, fmt.Errorf("volume %q: %w", m.GetName(), err)
+		}
+		cpath := m.GetContainerPath()
+		if strings.Contains(host, ":") || strings.Contains(cpath, ":") {
+			return nil, fmt.Errorf("volume %q path contains ':'", m.GetName())
+		}
+		if volume.ShadowsBindSame(cpath, work, shared, cfg) {
+			return nil, fmt.Errorf("volume %q container_path %s shadows work/shared/config bind", m.GetName(), cpath)
+		}
+		out = append(out, driver.VolumeBind{Host: host, Container: cpath})
 	}
 	return out, nil
 }
@@ -565,7 +629,80 @@ func (r *Reconciler) renderArgs(spec *pb.StrategyAssignmentSpec, launch *pb.Arti
 		if err != nil {
 			return nil, err
 		}
+		rendered, err = r.expandVolumePlaceholders(rendered, spec, launch)
+		if err != nil {
+			return nil, err
+		}
 		out[i] = rendered
+	}
+	return out, nil
+}
+
+func (r *Reconciler) renderEnv(spec *pb.StrategyAssignmentSpec, launch *pb.ArtifactRef, pairs []string) ([]string, error) {
+	if pairs == nil {
+		pairs = []string{}
+	}
+	out := make([]string, len(pairs))
+	for i, p := range pairs {
+		k, v, ok := strings.Cut(p, "=")
+		if !ok {
+			out[i] = p
+			continue
+		}
+		rendered, err := r.expandVolumePlaceholders(v, spec, launch)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = k + "=" + rendered
+	}
+	return out, nil
+}
+
+func (r *Reconciler) expandVolumePlaceholders(s string, spec *pb.StrategyAssignmentSpec, launch *pb.ArtifactRef) (string, error) {
+	if !strings.Contains(s, "${VOLUME:") {
+		return s, nil
+	}
+	oci := launch != nil && launch.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE
+	mounts := make(map[string]*pb.VolumeMount, len(spec.GetVolumeMounts()))
+	for _, m := range spec.GetVolumeMounts() {
+		mounts[m.GetName()] = m
+	}
+	var firstErr error
+	out := volumePlaceholderRE.ReplaceAllStringFunc(s, func(match string) string {
+		if firstErr != nil {
+			return match
+		}
+		sub := volumePlaceholderRE.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			firstErr = fmt.Errorf("invalid volume placeholder %s", match)
+			return match
+		}
+		name := sub[1]
+		if err := volume.ValidateName(name); err != nil {
+			firstErr = fmt.Errorf("volume placeholder %s: %w", match, err)
+			return match
+		}
+		m, ok := mounts[name]
+		if !ok {
+			firstErr = fmt.Errorf("unknown volume %q (not in volumeMounts)", name)
+			return match
+		}
+		if oci {
+			return m.GetContainerPath()
+		}
+		if r.deps.Artifacts == nil {
+			firstErr = fmt.Errorf("resolve ${VOLUME:%s}: no artifact manager", name)
+			return match
+		}
+		abs, err := filepath.Abs(r.deps.Artifacts.VolumeDir(name))
+		if err != nil {
+			firstErr = fmt.Errorf("resolve ${VOLUME:%s}: %w", name, err)
+			return match
+		}
+		return abs
+	})
+	if firstErr != nil {
+		return "", firstErr
 	}
 	return out, nil
 }

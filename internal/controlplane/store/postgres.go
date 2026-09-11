@@ -148,14 +148,16 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 		Status:            map[string]*pb.StrategyAssignmentStatus{},
 		PreviousArtifacts: map[string]*pb.ArtifactRef{},
 		SharedFiles:       map[string]*pb.SharedFileSpec{},
+		Volumes:           map[string]*pb.VolumeSpec{},
 	}
-	var register, resources, processes, sharedStatus []byte
+	var register, resources, processes, sharedStatus, volumesStatus []byte
 	err := q.QueryRow(ctx, `SELECT register, reachable, agent_version, agent_build_version,
 		last_resources, last_processes, last_heartbeat, generation, observed_gen,
-		shared_generation, shared_status FROM machines WHERE machine_id=$1`, id).
+		shared_generation, shared_status, volumes_generation, volumes_status
+		FROM machines WHERE machine_id=$1`, id).
 		Scan(&register, &rec.Reachable, &rec.AgentVersion, &rec.AgentBuildVersion, &resources, &processes,
 			&rec.LastHeartbeat, &rec.Generation, &rec.ObservedGen,
-			&rec.SharedGeneration, &sharedStatus)
+			&rec.SharedGeneration, &sharedStatus, &rec.VolumesGeneration, &volumesStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -184,6 +186,12 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 	if sharedStatus != nil {
 		rec.SharedStatus = &pb.MachineSharedStatus{}
 		if err := proto.Unmarshal(sharedStatus, rec.SharedStatus); err != nil {
+			return nil, false, err
+		}
+	}
+	if volumesStatus != nil {
+		rec.VolumesStatus = &pb.MachineVolumeStatus{}
+		if err := proto.Unmarshal(volumesStatus, rec.VolumesStatus); err != nil {
 			return nil, false, err
 		}
 	}
@@ -231,7 +239,26 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 		}); err != nil {
 		return nil, false, err
 	}
+	if err := loadVolumeNames(ctx, q, id, rec); err != nil {
+		return nil, false, err
+	}
 	return rec, true, nil
+}
+
+func loadVolumeNames(ctx context.Context, q querier, id string, rec *MachineRecord) error {
+	rows, err := q.Query(ctx, `SELECT name FROM machine_volumes WHERE machine_id=$1`, id)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		rec.Volumes[name] = &pb.VolumeSpec{Name: name}
+	}
+	return rows.Err()
 }
 
 // loadInto runs a (key, bytes) query and calls fn for each row.
@@ -494,6 +521,98 @@ func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) 
 	return sharedGen, desiredGen, changed, nil
 }
 
+func (p *Postgres) CreateVolume(machineID, name string) (volGen, desiredGen int64, changed bool, err error) {
+	ctx, cancel := opCtx()
+	defer cancel()
+	now := time.Now().Unix()
+	err = p.inTx(ctx, func(tx pgx.Tx) error {
+		var curVol, curDesired int64
+		err := tx.QueryRow(ctx,
+			`SELECT volumes_generation, generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
+			machineID).Scan(&curVol, &curDesired)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("create volume: unknown machine %s", machineID)
+		}
+		if err != nil {
+			return err
+		}
+		var exists int
+		if err := tx.QueryRow(ctx,
+			`SELECT COUNT(*) FROM machine_volumes WHERE machine_id=$1 AND name=$2`,
+			machineID, name).Scan(&exists); err != nil {
+			return err
+		}
+		if exists > 0 {
+			volGen, desiredGen, changed = curVol, curDesired, false
+			return nil
+		}
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO machine_volumes (machine_id, name, updated_at) VALUES ($1,$2,$3)`,
+			machineID, name, now); err != nil {
+			return err
+		}
+		if err := tx.QueryRow(ctx,
+			`UPDATE machines SET volumes_generation = volumes_generation + 1,
+				generation = generation + 1
+			 WHERE machine_id=$1
+			 RETURNING volumes_generation, generation`,
+			machineID).Scan(&volGen, &desiredGen); err != nil {
+			return err
+		}
+		changed = true
+		return nil
+	})
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if changed {
+		p.notify(machineID)
+	}
+	return volGen, desiredGen, changed, nil
+}
+
+func (p *Postgres) DeleteVolume(machineID, name string) (volGen, desiredGen int64, changed bool, err error) {
+	ctx, cancel := opCtx()
+	defer cancel()
+	err = p.inTx(ctx, func(tx pgx.Tx) error {
+		var curVol, curDesired int64
+		err := tx.QueryRow(ctx,
+			`SELECT volumes_generation, generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
+			machineID).Scan(&curVol, &curDesired)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("delete volume: unknown machine %s", machineID)
+		}
+		if err != nil {
+			return err
+		}
+		tag, err := tx.Exec(ctx, `DELETE FROM machine_volumes WHERE machine_id=$1 AND name=$2`, machineID, name)
+		if err != nil {
+			return err
+		}
+		if tag.RowsAffected() == 0 {
+			volGen, desiredGen, changed = curVol, curDesired, false
+			return nil
+		}
+		if err := tx.QueryRow(ctx,
+			`UPDATE machines SET volumes_generation = volumes_generation + 1,
+				generation = generation + 1
+			 WHERE machine_id=$1
+			 RETURNING volumes_generation, generation`,
+			machineID).Scan(&volGen, &desiredGen); err != nil {
+			return err
+		}
+		changed = true
+		return nil
+	})
+	if err != nil {
+		return 0, 0, false, err
+	}
+	if changed {
+		p.notify(machineID)
+	}
+	return volGen, desiredGen, changed, nil
+}
+
 func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	ctx, cancel := opCtx()
 	defer cancel()
@@ -534,6 +653,17 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 			}
 			if _, err := tx.Exec(ctx,
 				`UPDATE machines SET shared_status = $2 WHERE machine_id=$1`,
+				machineID, b); err != nil {
+				return err
+			}
+		}
+		if report.GetVolumes() != nil {
+			b, err := proto.Marshal(report.GetVolumes())
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx,
+				`UPDATE machines SET volumes_status = $2 WHERE machine_id=$1`,
 				machineID, b); err != nil {
 				return err
 			}

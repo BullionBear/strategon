@@ -134,8 +134,11 @@ Requirements and limits:
   (capability is reported only at Register).
 - Payload is PID 1: SIGTERM is ignored unless the process installs a handler;
   stop waits `stop_grace` then SIGKILL.
-- cwd is `<base>/<strategy>/work` (not StrategyDir). Only `${CONFIG}` is
-  valid in args; `${RELEASE_DIR}` and `${BINARY}` are rejected.
+- cwd is `<base>/<strategy>/work` (not StrategyDir). `${CONFIG}` and
+  `${VOLUME:name}` are valid in args; `${RELEASE_DIR}` and `${BINARY}` are
+  rejected. `${VOLUME:name}` also expands in env (to `containerPath` on
+  OCI, host `VolumeDir` on EXEC). Rootfs is remounted read-only after
+  start; persist image-default paths (`/var/lib/…`) via `volumeMounts`.
 - No registry pull, no `/sys/fs/cgroup` inside the container, no per-run
   writable overlay. Old releases are GC'd (`--release-retention`, default 3);
   `Rollback` to a GC'd `target_version` re-downloads.
@@ -162,7 +165,10 @@ members:
 ```
 
 The control plane expands `${set.*}`, `${member.*}` and `${peers}`; `${CONFIG}`
-is left for the agent. An unknown placeholder is rejected at apply time.
+and `${VOLUME:name}` are left for the agent. An unknown placeholder is
+rejected at apply time. Machine volumes are ensure-only (`kind:
+MachineVolumes` or `strategon volume create`); assignment apply mounts
+by name and does not create them.
 
 A NATS cluster is therefore a manifest, not a feature — see
 [examples/nats/](examples/nats/). Running something else with the same shape

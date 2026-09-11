@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"github.com/bullionbear/strategon/internal/volume"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -70,6 +71,13 @@ func (s *Service) Apply(_ context.Context, req Request) (gen int64, changed bool
 		if blocked, reason := store.DeploymentBlockedByLease(s.Store, req.MachineID, req.Strategy); blocked {
 			return 0, false, connect.NewError(connect.CodeFailedPrecondition,
 				fmt.Errorf("migration interlocking: lease for %q %s", req.Strategy, reason))
+		}
+	}
+	if req.Spec != nil && !req.Spec.GetStopped() {
+		if rec, ok := s.Store.GetMachine(req.MachineID); ok {
+			if err := volume.LiveWriterConflict(req.Strategy, req.Spec.GetVolumeMounts(), rec.Assignments); err != nil {
+				return 0, false, connect.NewError(connect.CodeFailedPrecondition, err)
+			}
 		}
 	}
 	gen, changed, err = s.Store.SetAssignment(req.MachineID, req.Strategy, req.Spec)

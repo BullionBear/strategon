@@ -307,6 +307,62 @@ func TestUpsertMachineStoresBuildVersion(t *testing.T) {
 	}
 }
 
+func TestCreateDeleteVolumeDesiredNilVsEmpty(t *testing.T) {
+	s := NewMemory(nil)
+	if _, err := s.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 1}); err != nil {
+		t.Fatal(err)
+	}
+	ds, _ := s.DesiredState("m1")
+	if ds.GetVolumes() != nil {
+		t.Fatalf("fresh machine must send nil volumes, got %+v", ds.GetVolumes())
+	}
+
+	vg1, dg1, changed, err := s.CreateVolume("m1", "data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || vg1 != 1 || dg1 != 1 {
+		t.Fatalf("create volGen=%d desiredGen=%d changed=%v", vg1, dg1, changed)
+	}
+	ds, _ = s.DesiredState("m1")
+	if ds.GetVolumes() == nil || ds.GetVolumes().GetGeneration() != 1 || len(ds.GetVolumes().GetVolumes()) != 1 {
+		t.Fatalf("desired volumes = %+v", ds.GetVolumes())
+	}
+	vgNoop, _, changed, err := s.CreateVolume("m1", "data")
+	if err != nil || changed || vgNoop != 1 {
+		t.Fatalf("identical create should be no-op: gen=%d changed=%v err=%v", vgNoop, changed, err)
+	}
+
+	if err := s.ApplyStatus("m1", &pb.StatusReport{
+		Volumes: &pb.MachineVolumeStatus{
+			ObservedGeneration: 1,
+			Volumes:            []*pb.VolumeStatus{{Name: "data", Ready: true}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := s.GetMachine("m1")
+	if rec.VolumesStatus == nil || !rec.VolumesStatus.GetVolumes()[0].GetReady() {
+		t.Fatalf("volumes status = %+v", rec.VolumesStatus)
+	}
+
+	vg2, dg2, changed, err := s.DeleteVolume("m1", "data")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !changed || vg2 != 2 || dg2 != 2 {
+		t.Fatalf("delete volGen=%d desiredGen=%d changed=%v", vg2, dg2, changed)
+	}
+	ds, _ = s.DesiredState("m1")
+	if ds.GetVolumes() == nil || ds.GetVolumes().GetGeneration() != 2 || len(ds.GetVolumes().GetVolumes()) != 0 {
+		t.Fatalf("empty list must still be sent after last delete: %+v", ds.GetVolumes())
+	}
+	_, _, changed, err = s.DeleteVolume("m1", "data")
+	if err != nil || changed {
+		t.Fatalf("missing delete should be no-op: changed=%v err=%v", changed, err)
+	}
+}
+
 func TestApplyStatusPrunesRetiredStrategies(t *testing.T) {
 	s := NewMemory(nil)
 	s.UpsertMachine(&pb.Register{MachineId: "m1"})

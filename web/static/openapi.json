@@ -245,6 +245,64 @@
         }
       }
     },
+    "/strategyplatform.v1.ControlPlaneService/CreateVolume": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "CreateVolume",
+        "operationId": "strategyplatform.v1.ControlPlaneService.CreateVolume",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.CreateVolumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.CreateVolumeResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/DeleteAssignmentSet": {
       "post": {
         "tags": [
@@ -296,6 +354,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/strategyplatform.v1.DeleteAssignmentSetResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/DeleteVolume": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "DeleteVolume",
+        "operationId": "strategyplatform.v1.ControlPlaneService.DeleteVolume",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.DeleteVolumeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.DeleteVolumeResponse"
                 }
               }
             }
@@ -879,6 +995,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/strategyplatform.v1.ListSharedFilesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ListVolumes": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ListVolumes",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ListVolumes",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ListVolumesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ListVolumesResponse"
                 }
               }
             }
@@ -1520,6 +1694,13 @@
             "type": "string",
             "title": "artifact",
             "description": "Optional catalog artifact name. Empty uses strategy (or, on update, the\n name already stored on the assignment). Set this to deploy a slot whose\n name differs from the binary, e.g. strategy=nats-m4 artifact=nats."
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.VolumeMount"
+            },
+            "title": "volume_mounts"
           }
         },
         "title": "ApplyAssignmentRequest",
@@ -1799,7 +1980,12 @@
           "path": {
             "type": "string",
             "title": "path",
-            "description": "relative to strategy WorkDir; \"\" or \".\" = root"
+            "description": "relative to strategy WorkDir or volume root; \"\" or \".\" = root"
+          },
+          "volume": {
+            "type": "string",
+            "title": "volume",
+            "description": "When set, browse \u003cbase\u003e/volumes/\u003cvolume\u003e and strategy is ignored."
           }
         },
         "title": "BrowseDirRequest",
@@ -1930,6 +2116,37 @@
         "title": "CreateArtifactUploadResponse",
         "additionalProperties": false
       },
+      "strategyplatform.v1.CreateVolumeRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          }
+        },
+        "title": "CreateVolumeRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.CreateVolumeResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64",
+            "description": "MachineVolumeSpec.generation"
+          }
+        },
+        "title": "CreateVolumeResponse",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.CronAction": {
         "type": "string",
         "title": "CronAction",
@@ -1990,6 +2207,36 @@
       "strategyplatform.v1.DeleteAssignmentSetResponse": {
         "type": "object",
         "title": "DeleteAssignmentSetResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DeleteVolumeRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "name": {
+            "type": "string",
+            "title": "name"
+          }
+        },
+        "title": "DeleteVolumeRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DeleteVolumeResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "DeleteVolumeResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.DeployPhase": {
@@ -2161,6 +2408,11 @@
               "type": "string"
             },
             "title": "paths"
+          },
+          "volume": {
+            "type": "string",
+            "title": "volume",
+            "description": "When set, fetch from \u003cbase\u003e/volumes/\u003cvolume\u003e and strategy is ignored."
           }
         },
         "title": "DownloadFilesRequest",
@@ -2415,6 +2667,31 @@
         "title": "ListSharedFilesResponse",
         "additionalProperties": false
       },
+      "strategyplatform.v1.ListVolumesRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          }
+        },
+        "title": "ListVolumesRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListVolumesResponse": {
+        "type": "object",
+        "properties": {
+          "volumes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.VolumeView"
+            },
+            "title": "volumes"
+          }
+        },
+        "title": "ListVolumesResponse",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.Machine": {
         "type": "object",
         "properties": {
@@ -2667,6 +2944,13 @@
           "peers": {
             "title": "peers",
             "$ref": "#/components/schemas/strategyplatform.v1.PeerList"
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.VolumeMount"
+            },
+            "title": "volume_mounts"
           }
         },
         "title": "MemberTemplate",
@@ -3370,6 +3654,14 @@
             "type": "boolean",
             "title": "stopped",
             "description": "Desired run state from StrategyAssignmentSpec.stopped."
+          },
+          "volumeMounts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.VolumeMount"
+            },
+            "title": "volume_mounts",
+            "description": "Desired volume mounts from StrategyAssignmentSpec (name → container_path)."
           }
         },
         "title": "StrategyView",
@@ -3413,6 +3705,66 @@
           }
         },
         "title": "UndeployResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.VolumeMount": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name",
+            "description": "after CP expand: a real volume name"
+          },
+          "containerPath": {
+            "type": "string",
+            "title": "container_path",
+            "description": "always required; EXEC ignores at start"
+          }
+        },
+        "title": "VolumeMount",
+        "additionalProperties": false,
+        "description": "VolumeMount references a machine-level volume by name."
+      },
+      "strategyplatform.v1.VolumeView": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          },
+          "ready": {
+            "type": "boolean",
+            "title": "ready"
+          },
+          "sizeBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "size_bytes",
+            "format": "int64"
+          },
+          "lastError": {
+            "type": "string",
+            "title": "last_error"
+          },
+          "mountedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "mounted_by"
+          },
+          "pinnedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "pinned_by",
+            "description": "desired assignments that list this mount"
+          }
+        },
+        "title": "VolumeView",
         "additionalProperties": false
       }
     }

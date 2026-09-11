@@ -3,6 +3,7 @@ import type { DirEntry } from '$lib/gen/strategyplatform/v1/agent_service_pb';
 import { TransferKind } from '$lib/gen/strategyplatform/v1/agent_service_pb';
 
 export const MIN_FILE_BROWSE_AGENT_VERSION = 2;
+export const MIN_VOLUME_BROWSE_AGENT_VERSION = 3;
 
 export type DownloadProgress = {
 	bytes: number;
@@ -26,8 +27,8 @@ export function parentPath(p: string): string {
 }
 
 /** Breadcrumb segments for a relative path. */
-export function pathCrumbs(p: string): { label: string; path: string }[] {
-	const crumbs: { label: string; path: string }[] = [{ label: 'WorkDir', path: '.' }];
+export function pathCrumbs(p: string, rootLabel = 'WorkDir'): { label: string; path: string }[] {
+	const crumbs: { label: string; path: string }[] = [{ label: rootLabel, path: '.' }];
 	if (!p || p === '.' || p === '/') return crumbs;
 	const parts = p.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
 	let cur = '';
@@ -42,9 +43,10 @@ export async function browseDir(
 	machineId: string,
 	strategy: string,
 	path: string,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	volume?: string
 ): Promise<{ entries: DirEntry[]; path: string }> {
-	const res = await client.browseDir({ machineId, strategy, path }, { signal });
+	const res = await client.browseDir({ machineId, strategy, path, volume: volume ?? '' }, { signal });
 	return { entries: res.entries, path: res.path || path || '.' };
 }
 
@@ -59,6 +61,7 @@ export async function downloadFiles(
 	opts?: {
 		signal?: AbortSignal;
 		onProgress?: (p: DownloadProgress) => void;
+		volume?: string;
 	}
 ): Promise<{ filename: string; bytes: number; transferKind: TransferKind }> {
 	const chunks: Uint8Array[] = [];
@@ -66,7 +69,10 @@ export async function downloadFiles(
 	let transferKind = TransferKind.UNSPECIFIED;
 	let bytes = 0;
 
-	const stream = client.downloadFiles({ machineId, strategy, paths }, { signal: opts?.signal });
+	const stream = client.downloadFiles(
+		{ machineId, strategy, paths, volume: opts?.volume ?? '' },
+		{ signal: opts?.signal }
+	);
 	for await (const chunk of stream) {
 		if (chunk.filename) filename = chunk.filename;
 		if (chunk.transferKind !== TransferKind.UNSPECIFIED) {

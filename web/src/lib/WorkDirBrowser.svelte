@@ -4,6 +4,7 @@
 	import { formatBytes, formatClock } from '$lib/fleet';
 	import {
 		MIN_FILE_BROWSE_AGENT_VERSION,
+		MIN_VOLUME_BROWSE_AGENT_VERSION,
 		browseDir,
 		downloadFiles,
 		joinPath,
@@ -12,12 +13,13 @@
 
 	interface Props {
 		machineId: string;
-		strategy: string;
+		strategy?: string;
 		reachable: boolean;
 		agentVersion: number;
+		volume?: string;
 	}
 
-	let { machineId, strategy, reachable, agentVersion }: Props = $props();
+	let { machineId, strategy = '', reachable, agentVersion, volume = '' }: Props = $props();
 
 	let path = $state('.');
 	let entries = $state<DirEntry[]>([]);
@@ -28,8 +30,9 @@
 	let progressBytes = $state(0);
 	let progressName = $state('');
 
-	const supported = $derived(agentVersion >= MIN_FILE_BROWSE_AGENT_VERSION);
-	const crumbs = $derived(pathCrumbs(path));
+	const minVer = $derived(volume ? MIN_VOLUME_BROWSE_AGENT_VERSION : MIN_FILE_BROWSE_AGENT_VERSION);
+	const supported = $derived(agentVersion >= minVer);
+	const crumbs = $derived(pathCrumbs(path, volume || 'WorkDir'));
 	const allSelected = $derived(
 		entries.length > 0 && entries.every((e) => selected.has(joinPath(path, e.name)))
 	);
@@ -45,7 +48,7 @@
 		error = '';
 		selected = new Set();
 		try {
-			const res = await browseDir(machineId, strategy, nextPath, loadAc.signal);
+			const res = await browseDir(machineId, strategy, nextPath, loadAc.signal, volume || undefined);
 			path = res.path || nextPath || '.';
 			entries = [...res.entries].sort((a, b) => {
 				if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
@@ -95,6 +98,7 @@
 		try {
 			await downloadFiles(machineId, strategy, [...selected], {
 				signal: dlAc.signal,
+				volume: volume || undefined,
 				onProgress: (p) => {
 					progressBytes = p.bytes;
 					progressName = p.filename;
@@ -138,11 +142,11 @@
 	let lastLoadKey: string | null = null;
 
 	$effect(() => {
-		if (!reachable || !supported || !machineId || !strategy) {
+		if (!reachable || !supported || !machineId || (!volume && !strategy)) {
 			lastLoadKey = null; // re-load when the target next becomes browsable
 			return;
 		}
-		const key = `${machineId}\n${strategy}`;
+		const key = `${machineId}\n${strategy}\n${volume}`;
 		if (key === lastLoadKey) return;
 		lastLoadKey = key;
 		load('.');
@@ -152,8 +156,14 @@
 <div class="workdir panel">
 	<div class="toolbar">
 		<div>
-			<h2>WorkDir files</h2>
-			<p class="muted tiny">Browse and download files under this strategy's working directory</p>
+			<h2>{volume ? `Volume ${volume}` : 'WorkDir files'}</h2>
+			<p class="muted tiny">
+				{#if volume}
+					Browse and download files under this machine volume
+				{:else}
+					Browse and download files under this strategy's working directory
+				{/if}
+			</p>
 		</div>
 		<div class="actions">
 			<button
@@ -170,7 +180,7 @@
 		<p class="pill bad">Machine unreachable — connect the agent to browse files.</p>
 	{:else if !supported}
 		<p class="pill lag">
-			Agent version {agentVersion} does not support file browse (need ≥ {MIN_FILE_BROWSE_AGENT_VERSION}).
+			Agent version {agentVersion} does not support {volume ? 'volume' : 'file'} browse (need ≥ {minVer}).
 		</p>
 	{:else}
 		<nav class="crumbs" aria-label="Path">

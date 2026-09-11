@@ -1,6 +1,9 @@
 package driver
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 const (
 	flagOCIInit   = "--oci-init"
@@ -10,17 +13,19 @@ const (
 	flagOCIShared = "--oci-shared"
 	flagOCIConfig = "--oci-config"
 	flagOCICWD    = "--oci-cwd"
+	flagOCIVolume = "--oci-volume"
 )
 
 // InitArgs is the non-secret flag set passed to --oci-init. Env stays on
 // cmd.Env and must never appear here.
 type InitArgs struct {
-	Rootfs string
-	Work   string
-	Shared string
-	Config string
-	CWD    string
-	Argv   []string
+	Rootfs  string
+	Work    string
+	Shared  string
+	Config  string
+	CWD     string
+	Volumes []VolumeBind
+	Argv    []string
 }
 
 // BuildInitArgs returns the argv for a re-exec of this binary as --oci-init.
@@ -35,6 +40,9 @@ func BuildInitArgs(spec StartSpec) []string {
 	}
 	if spec.ConfigBind != "" {
 		args = append(args, flagOCIConfig+"="+spec.ConfigBind)
+	}
+	for _, b := range spec.VolumeBinds {
+		args = append(args, flagOCIVolume+"="+b.Host+":"+b.Container)
 	}
 	if len(spec.Argv) > 0 {
 		args = append(args, "--")
@@ -67,12 +75,33 @@ func parseInitFlag(args []string) (InitArgs, error) {
 			out.Config = val
 		case flagOCICWD:
 			out.CWD = val
+		case flagOCIVolume:
+			host, container, ok := splitVolumeBind(val)
+			if !ok {
+				return InitArgs{}, fmt.Errorf("oci-init: invalid %s=%s", flagOCIVolume, val)
+			}
+			out.Volumes = append(out.Volumes, VolumeBind{Host: host, Container: container})
 		default:
 			return InitArgs{}, fmt.Errorf("oci-init: unknown flag %q", key)
 		}
 		i++
 	}
 	return out, nil
+}
+
+func splitVolumeBind(s string) (host, container string, ok bool) {
+	i := strings.Index(s, ":/")
+	if i <= 0 {
+		return "", "", false
+	}
+	host, container = s[:i], s[i+1:]
+	if !strings.HasPrefix(host, "/") || !strings.HasPrefix(container, "/") {
+		return "", "", false
+	}
+	if strings.Contains(host, ":") || strings.Contains(container[1:], ":") {
+		return "", "", false
+	}
+	return host, container, true
 }
 
 func splitFlag(s string) (key, val string, ok bool) {

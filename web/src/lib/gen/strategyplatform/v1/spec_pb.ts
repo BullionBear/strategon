@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/spec.proto.
  */
 export const file_strategyplatform_v1_spec: GenFile = /*@__PURE__*/
-  fileDesc("Ch5zdHJhdGVneXBsYXRmb3JtL3YxL3NwZWMucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEi4AQKFlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSEAoIc3RyYXRlZ3kYASABKAkSMgoIYXJ0aWZhY3QYAiABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjAKBmNvbmZpZxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSNAoGZHJpdmVyGAQgASgOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXISMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxI4Cg1kZXBsb3lfcG9saWN5GAYgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQb2xpY3kSLQoFbGVhc2UYByABKAsyHi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlU3BlYxI0CglzY2hlZHVsZXMYCCADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkNyb25TY2hlZHVsZRIMCgRhcmdzGAkgAygJEkEKA2VudhgKIAMoCzI0LnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lBc3NpZ25tZW50U3BlYy5FbnZFbnRyeRIPCgdzdG9wcGVkGAsgASgIEjYKCXJlYWRpbmVzcxgMIAEoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVhZGluZXNzUHJvYmUaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIiCg5SZWFkaW5lc3NQcm9iZRIQCghlbmRwb2ludBgBIAEoCSJSCg5TaGFyZWRGaWxlU3BlYxIMCgRuYW1lGAEgASgJEjIKCGFydGlmYWN0GAIgASgLMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5BcnRpZmFjdFJlZiJbChFNYWNoaW5lU2hhcmVkU3BlYxIyCgVmaWxlcxgBIAMoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuU2hhcmVkRmlsZVNwZWMSEgoKZ2VuZXJhdGlvbhgCIAEoAyLqAQoMRGVzaXJlZFN0YXRlEhIKCmdlbmVyYXRpb24YASABKAMSQAoLYXNzaWdubWVudHMYAiADKAsyKy5zdHJhdGVneXBsYXRmb3JtLnYxLlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSHQoVZGVzaXJlZF9hZ2VudF92ZXJzaW9uGAMgASgFEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNgoGc2hhcmVkGAUgASgLMiYuc3RyYXRlZ3lwbGF0Zm9ybS52MS5NYWNoaW5lU2hhcmVkU3BlY0JNWktnaXRodWIuY29tL2J1bGxpb25iZWFyL3N0cmF0ZWdvbi9nZW4vc3RyYXRlZ3lwbGF0Zm9ybS92MTtzdHJhdGVneXBsYXRmb3JtdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
+  fileDesc("Ch5zdHJhdGVneXBsYXRmb3JtL3YxL3NwZWMucHJvdG8SE3N0cmF0ZWd5cGxhdGZvcm0udjEimQUKFlN0cmF0ZWd5QXNzaWdubWVudFNwZWMSEAoIc3RyYXRlZ3kYASABKAkSMgoIYXJ0aWZhY3QYAiABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjAKBmNvbmZpZxgDIAEoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuQXJ0aWZhY3RSZWYSNAoGZHJpdmVyGAQgASgOMiQuc3RyYXRlZ3lwbGF0Zm9ybS52MS5FeGVjdXRpb25Ecml2ZXISMwoGbGltaXRzGAUgASgLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5SZXNvdXJjZUxpbWl0cxI4Cg1kZXBsb3lfcG9saWN5GAYgASgLMiEuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQb2xpY3kSLQoFbGVhc2UYByABKAsyHi5zdHJhdGVneXBsYXRmb3JtLnYxLkxlYXNlU3BlYxI0CglzY2hlZHVsZXMYCCADKAsyIS5zdHJhdGVneXBsYXRmb3JtLnYxLkNyb25TY2hlZHVsZRIMCgRhcmdzGAkgAygJEkEKA2VudhgKIAMoCzI0LnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lBc3NpZ25tZW50U3BlYy5FbnZFbnRyeRIPCgdzdG9wcGVkGAsgASgIEjYKCXJlYWRpbmVzcxgMIAEoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuUmVhZGluZXNzUHJvYmUSNwoNdm9sdW1lX21vdW50cxgNIAMoCzIgLnN0cmF0ZWd5cGxhdGZvcm0udjEuVm9sdW1lTW91bnQaKgoIRW52RW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASIzCgtWb2x1bWVNb3VudBIMCgRuYW1lGAEgASgJEhYKDmNvbnRhaW5lcl9wYXRoGAIgASgJIiIKDlJlYWRpbmVzc1Byb2JlEhAKCGVuZHBvaW50GAEgASgJIlIKDlNoYXJlZEZpbGVTcGVjEgwKBG5hbWUYASABKAkSMgoIYXJ0aWZhY3QYAiABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmIlsKEU1hY2hpbmVTaGFyZWRTcGVjEjIKBWZpbGVzGAEgAygLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5TaGFyZWRGaWxlU3BlYxISCgpnZW5lcmF0aW9uGAIgASgDIqMCCgxEZXNpcmVkU3RhdGUSEgoKZ2VuZXJhdGlvbhgBIAEoAxJACgthc3NpZ25tZW50cxgCIAMoCzIrLnN0cmF0ZWd5cGxhdGZvcm0udjEuU3RyYXRlZ3lBc3NpZ25tZW50U3BlYxIdChVkZXNpcmVkX2FnZW50X3ZlcnNpb24YAyABKAUSLQoJaXNzdWVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI2CgZzaGFyZWQYBSABKAsyJi5zdHJhdGVneXBsYXRmb3JtLnYxLk1hY2hpbmVTaGFyZWRTcGVjEjcKB3ZvbHVtZXMYBiABKAsyJi5zdHJhdGVneXBsYXRmb3JtLnYxLk1hY2hpbmVWb2x1bWVTcGVjIhoKClZvbHVtZVNwZWMSDAoEbmFtZRgBIAEoCSJZChFNYWNoaW5lVm9sdW1lU3BlYxIwCgd2b2x1bWVzGAEgAygLMh8uc3RyYXRlZ3lwbGF0Zm9ybS52MS5Wb2x1bWVTcGVjEhIKCmdlbmVyYXRpb24YAiABKANCTVpLZ2l0aHViLmNvbS9idWxsaW9uYmVhci9zdHJhdGVnb24vZ2VuL3N0cmF0ZWd5cGxhdGZvcm0vdjE7c3RyYXRlZ3lwbGF0Zm9ybXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
 
 /**
  * StrategyAssignmentSpec is a single strategy the control plane wants on a
@@ -96,6 +96,16 @@ export type StrategyAssignmentSpec = Message<"strategyplatform.v1.StrategyAssign
    * @generated from field: strategyplatform.v1.ReadinessProbe readiness = 12;
    */
   readiness?: ReadinessProbe | undefined;
+
+  /**
+   * Named machine volumes to expose to this process. container_path is
+   * always required (including EXEC-only assignments) so one manifest
+   * validates for both drivers. EXEC ignores container_path at start;
+   * OCI bind-mounts <base>/volumes/<name> there.
+   *
+   * @generated from field: repeated strategyplatform.v1.VolumeMount volume_mounts = 13;
+   */
+  volumeMounts: VolumeMount[];
 };
 
 /**
@@ -104,6 +114,34 @@ export type StrategyAssignmentSpec = Message<"strategyplatform.v1.StrategyAssign
  */
 export const StrategyAssignmentSpecSchema: GenMessage<StrategyAssignmentSpec> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_spec, 0);
+
+/**
+ * VolumeMount references a machine-level volume by name.
+ *
+ * @generated from message strategyplatform.v1.VolumeMount
+ */
+export type VolumeMount = Message<"strategyplatform.v1.VolumeMount"> & {
+  /**
+   * after CP expand: a real volume name
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * always required; EXEC ignores at start
+   *
+   * @generated from field: string container_path = 2;
+   */
+  containerPath: string;
+};
+
+/**
+ * Describes the message strategyplatform.v1.VolumeMount.
+ * Use `create(VolumeMountSchema)` to create a new message.
+ */
+export const VolumeMountSchema: GenMessage<VolumeMount> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_spec, 1);
 
 /**
  * ReadinessProbe is an HTTP URL or unix socket path the agent probes for Ready.
@@ -125,7 +163,7 @@ export type ReadinessProbe = Message<"strategyplatform.v1.ReadinessProbe"> & {
  * Use `create(ReadinessProbeSchema)` to create a new message.
  */
 export const ReadinessProbeSchema: GenMessage<ReadinessProbe> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 1);
+  messageDesc(file_strategyplatform_v1_spec, 2);
 
 /**
  * SharedFileSpec is one machine-level shared file. name is the on-disk basename
@@ -156,7 +194,7 @@ export type SharedFileSpec = Message<"strategyplatform.v1.SharedFileSpec"> & {
  * Use `create(SharedFileSpecSchema)` to create a new message.
  */
 export const SharedFileSpecSchema: GenMessage<SharedFileSpec> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 2);
+  messageDesc(file_strategyplatform_v1_spec, 3);
 
 /**
  * MachineSharedSpec is the full set of shared files desired on a machine. Like
@@ -184,7 +222,7 @@ export type MachineSharedSpec = Message<"strategyplatform.v1.MachineSharedSpec">
  * Use `create(MachineSharedSpecSchema)` to create a new message.
  */
 export const MachineSharedSpecSchema: GenMessage<MachineSharedSpec> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 3);
+  messageDesc(file_strategyplatform_v1_spec, 4);
 
 /**
  * DesiredState is the machine-level full snapshot pushed southbound. assignments
@@ -227,6 +265,14 @@ export type DesiredState = Message<"strategyplatform.v1.DesiredState"> & {
    * @generated from field: strategyplatform.v1.MachineSharedSpec shared = 5;
    */
   shared?: MachineSharedSpec | undefined;
+
+  /**
+   * Machine-level named volumes. Presence is load-bearing: unset (nil)
+   * means "do not touch disk" (old CP); empty list means desired is empty.
+   *
+   * @generated from field: strategyplatform.v1.MachineVolumeSpec volumes = 6;
+   */
+  volumes?: MachineVolumeSpec | undefined;
 };
 
 /**
@@ -234,5 +280,52 @@ export type DesiredState = Message<"strategyplatform.v1.DesiredState"> & {
  * Use `create(DesiredStateSchema)` to create a new message.
  */
 export const DesiredStateSchema: GenMessage<DesiredState> = /*@__PURE__*/
-  messageDesc(file_strategyplatform_v1_spec, 4);
+  messageDesc(file_strategyplatform_v1_spec, 5);
+
+/**
+ * VolumeSpec is one named directory under <base>/volumes/<name>.
+ *
+ * @generated from message strategyplatform.v1.VolumeSpec
+ */
+export type VolumeSpec = Message<"strategyplatform.v1.VolumeSpec"> & {
+  /**
+   * clean basename
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message strategyplatform.v1.VolumeSpec.
+ * Use `create(VolumeSpecSchema)` to create a new message.
+ */
+export const VolumeSpecSchema: GenMessage<VolumeSpec> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_spec, 6);
+
+/**
+ * MachineVolumeSpec is the desired volume inventory on a machine.
+ * Incremental human RPCs (CreateVolume / DeleteVolume) write this set;
+ * the agent converges when the message is present.
+ *
+ * @generated from message strategyplatform.v1.MachineVolumeSpec
+ */
+export type MachineVolumeSpec = Message<"strategyplatform.v1.MachineVolumeSpec"> & {
+  /**
+   * @generated from field: repeated strategyplatform.v1.VolumeSpec volumes = 1;
+   */
+  volumes: VolumeSpec[];
+
+  /**
+   * @generated from field: int64 generation = 2;
+   */
+  generation: bigint;
+};
+
+/**
+ * Describes the message strategyplatform.v1.MachineVolumeSpec.
+ * Use `create(MachineVolumeSpecSchema)` to create a new message.
+ */
+export const MachineVolumeSpecSchema: GenMessage<MachineVolumeSpec> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_spec, 7);
 

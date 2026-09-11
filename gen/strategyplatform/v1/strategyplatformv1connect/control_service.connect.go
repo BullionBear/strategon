@@ -81,6 +81,15 @@ const (
 	// ControlPlaneServiceListSharedFilesProcedure is the fully-qualified name of the
 	// ControlPlaneService's ListSharedFiles RPC.
 	ControlPlaneServiceListSharedFilesProcedure = "/strategyplatform.v1.ControlPlaneService/ListSharedFiles"
+	// ControlPlaneServiceCreateVolumeProcedure is the fully-qualified name of the ControlPlaneService's
+	// CreateVolume RPC.
+	ControlPlaneServiceCreateVolumeProcedure = "/strategyplatform.v1.ControlPlaneService/CreateVolume"
+	// ControlPlaneServiceDeleteVolumeProcedure is the fully-qualified name of the ControlPlaneService's
+	// DeleteVolume RPC.
+	ControlPlaneServiceDeleteVolumeProcedure = "/strategyplatform.v1.ControlPlaneService/DeleteVolume"
+	// ControlPlaneServiceListVolumesProcedure is the fully-qualified name of the ControlPlaneService's
+	// ListVolumes RPC.
+	ControlPlaneServiceListVolumesProcedure = "/strategyplatform.v1.ControlPlaneService/ListVolumes"
 	// ControlPlaneServiceWatchMachineProcedure is the fully-qualified name of the ControlPlaneService's
 	// WatchMachine RPC.
 	ControlPlaneServiceWatchMachineProcedure = "/strategyplatform.v1.ControlPlaneService/WatchMachine"
@@ -129,6 +138,9 @@ var (
 	controlPlaneServiceSetScheduleMethodDescriptor            = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSchedule")
 	controlPlaneServiceSetSharedFilesMethodDescriptor         = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSharedFiles")
 	controlPlaneServiceListSharedFilesMethodDescriptor        = controlPlaneServiceServiceDescriptor.Methods().ByName("ListSharedFiles")
+	controlPlaneServiceCreateVolumeMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("CreateVolume")
+	controlPlaneServiceDeleteVolumeMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("DeleteVolume")
+	controlPlaneServiceListVolumesMethodDescriptor            = controlPlaneServiceServiceDescriptor.Methods().ByName("ListVolumes")
 	controlPlaneServiceWatchMachineMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("WatchMachine")
 	controlPlaneServiceListAuditMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("ListAudit")
 	controlPlaneServiceRegisterArtifactMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("RegisterArtifact")
@@ -159,6 +171,9 @@ type ControlPlaneServiceClient interface {
 	// Machine-level shared files (full overwrite; independent of assignments).
 	SetSharedFiles(context.Context, *connect.Request[v1.SetSharedFilesRequest]) (*connect.Response[v1.SetSharedFilesResponse], error)
 	ListSharedFiles(context.Context, *connect.Request[v1.ListSharedFilesRequest]) (*connect.Response[v1.ListSharedFilesResponse], error)
+	CreateVolume(context.Context, *connect.Request[v1.CreateVolumeRequest]) (*connect.Response[v1.CreateVolumeResponse], error)
+	DeleteVolume(context.Context, *connect.Request[v1.DeleteVolumeRequest]) (*connect.Response[v1.DeleteVolumeResponse], error)
+	ListVolumes(context.Context, *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error)
 	// UI real-time panel: machine status and deploy progress push.
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest]) (*connect.ServerStreamForClient[v1.MachineStatusEvent], error)
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
@@ -282,6 +297,24 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceListSharedFilesMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		createVolume: connect.NewClient[v1.CreateVolumeRequest, v1.CreateVolumeResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceCreateVolumeProcedure,
+			connect.WithSchema(controlPlaneServiceCreateVolumeMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		deleteVolume: connect.NewClient[v1.DeleteVolumeRequest, v1.DeleteVolumeResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceDeleteVolumeProcedure,
+			connect.WithSchema(controlPlaneServiceDeleteVolumeMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		listVolumes: connect.NewClient[v1.ListVolumesRequest, v1.ListVolumesResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceListVolumesProcedure,
+			connect.WithSchema(controlPlaneServiceListVolumesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		watchMachine: connect.NewClient[v1.GetMachineRequest, v1.MachineStatusEvent](
 			httpClient,
 			baseURL+ControlPlaneServiceWatchMachineProcedure,
@@ -357,6 +390,9 @@ type controlPlaneServiceClient struct {
 	setSchedule            *connect.Client[v1.SetScheduleRequest, v1.SetScheduleResponse]
 	setSharedFiles         *connect.Client[v1.SetSharedFilesRequest, v1.SetSharedFilesResponse]
 	listSharedFiles        *connect.Client[v1.ListSharedFilesRequest, v1.ListSharedFilesResponse]
+	createVolume           *connect.Client[v1.CreateVolumeRequest, v1.CreateVolumeResponse]
+	deleteVolume           *connect.Client[v1.DeleteVolumeRequest, v1.DeleteVolumeResponse]
+	listVolumes            *connect.Client[v1.ListVolumesRequest, v1.ListVolumesResponse]
 	watchMachine           *connect.Client[v1.GetMachineRequest, v1.MachineStatusEvent]
 	listAudit              *connect.Client[v1.ListAuditRequest, v1.ListAuditResponse]
 	registerArtifact       *connect.Client[v1.RegisterArtifactRequest, v1.RegisterArtifactResponse]
@@ -448,6 +484,21 @@ func (c *controlPlaneServiceClient) ListSharedFiles(ctx context.Context, req *co
 	return c.listSharedFiles.CallUnary(ctx, req)
 }
 
+// CreateVolume calls strategyplatform.v1.ControlPlaneService.CreateVolume.
+func (c *controlPlaneServiceClient) CreateVolume(ctx context.Context, req *connect.Request[v1.CreateVolumeRequest]) (*connect.Response[v1.CreateVolumeResponse], error) {
+	return c.createVolume.CallUnary(ctx, req)
+}
+
+// DeleteVolume calls strategyplatform.v1.ControlPlaneService.DeleteVolume.
+func (c *controlPlaneServiceClient) DeleteVolume(ctx context.Context, req *connect.Request[v1.DeleteVolumeRequest]) (*connect.Response[v1.DeleteVolumeResponse], error) {
+	return c.deleteVolume.CallUnary(ctx, req)
+}
+
+// ListVolumes calls strategyplatform.v1.ControlPlaneService.ListVolumes.
+func (c *controlPlaneServiceClient) ListVolumes(ctx context.Context, req *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error) {
+	return c.listVolumes.CallUnary(ctx, req)
+}
+
 // WatchMachine calls strategyplatform.v1.ControlPlaneService.WatchMachine.
 func (c *controlPlaneServiceClient) WatchMachine(ctx context.Context, req *connect.Request[v1.GetMachineRequest]) (*connect.ServerStreamForClient[v1.MachineStatusEvent], error) {
 	return c.watchMachine.CallServerStream(ctx, req)
@@ -513,6 +564,9 @@ type ControlPlaneServiceHandler interface {
 	// Machine-level shared files (full overwrite; independent of assignments).
 	SetSharedFiles(context.Context, *connect.Request[v1.SetSharedFilesRequest]) (*connect.Response[v1.SetSharedFilesResponse], error)
 	ListSharedFiles(context.Context, *connect.Request[v1.ListSharedFilesRequest]) (*connect.Response[v1.ListSharedFilesResponse], error)
+	CreateVolume(context.Context, *connect.Request[v1.CreateVolumeRequest]) (*connect.Response[v1.CreateVolumeResponse], error)
+	DeleteVolume(context.Context, *connect.Request[v1.DeleteVolumeRequest]) (*connect.Response[v1.DeleteVolumeResponse], error)
+	ListVolumes(context.Context, *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error)
 	// UI real-time panel: machine status and deploy progress push.
 	WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest], *connect.ServerStream[v1.MachineStatusEvent]) error
 	ListAudit(context.Context, *connect.Request[v1.ListAuditRequest]) (*connect.Response[v1.ListAuditResponse], error)
@@ -632,6 +686,24 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceListSharedFilesMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceCreateVolumeHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceCreateVolumeProcedure,
+		svc.CreateVolume,
+		connect.WithSchema(controlPlaneServiceCreateVolumeMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceDeleteVolumeHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceDeleteVolumeProcedure,
+		svc.DeleteVolume,
+		connect.WithSchema(controlPlaneServiceDeleteVolumeMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceListVolumesHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceListVolumesProcedure,
+		svc.ListVolumes,
+		connect.WithSchema(controlPlaneServiceListVolumesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	controlPlaneServiceWatchMachineHandler := connect.NewServerStreamHandler(
 		ControlPlaneServiceWatchMachineProcedure,
 		svc.WatchMachine,
@@ -720,6 +792,12 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceSetSharedFilesHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceListSharedFilesProcedure:
 			controlPlaneServiceListSharedFilesHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceCreateVolumeProcedure:
+			controlPlaneServiceCreateVolumeHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceDeleteVolumeProcedure:
+			controlPlaneServiceDeleteVolumeHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceListVolumesProcedure:
+			controlPlaneServiceListVolumesHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceWatchMachineProcedure:
 			controlPlaneServiceWatchMachineHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceListAuditProcedure:
@@ -809,6 +887,18 @@ func (UnimplementedControlPlaneServiceHandler) SetSharedFiles(context.Context, *
 
 func (UnimplementedControlPlaneServiceHandler) ListSharedFiles(context.Context, *connect.Request[v1.ListSharedFilesRequest]) (*connect.Response[v1.ListSharedFilesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListSharedFiles is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) CreateVolume(context.Context, *connect.Request[v1.CreateVolumeRequest]) (*connect.Response[v1.CreateVolumeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.CreateVolume is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) DeleteVolume(context.Context, *connect.Request[v1.DeleteVolumeRequest]) (*connect.Response[v1.DeleteVolumeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.DeleteVolume is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ListVolumes(context.Context, *connect.Request[v1.ListVolumesRequest]) (*connect.Response[v1.ListVolumesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListVolumes is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) WatchMachine(context.Context, *connect.Request[v1.GetMachineRequest], *connect.ServerStream[v1.MachineStatusEvent]) error {

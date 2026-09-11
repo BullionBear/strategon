@@ -239,6 +239,102 @@ func TestWorkDirBrowseAndDownloadEndToEnd(t *testing.T) {
 	}
 }
 
+func TestVolumeBrowseAndDownload(t *testing.T) {
+	hub := store.NewHub()
+	st := store.NewMemory(hub)
+	broker := filetransfer.New()
+	agentSrv := grpcstream.New(st, grpcstream.WithResync(time.Hour), grpcstream.WithBroker(broker))
+	humanSrv := api.NewWithBroker(st, hub, agentSrv, broker, nil)
+
+	mux := http.NewServeMux()
+	agentPath, agentHandler := strategyplatformv1connect.NewAgentServiceHandler(agentSrv)
+	mux.Handle(agentPath, agentHandler)
+	humanPath, humanHandler := strategyplatformv1connect.NewControlPlaneServiceHandler(humanSrv)
+	mux.Handle(humanPath, humanHandler)
+	ts := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
+	ts.Start()
+	defer ts.Close()
+
+	humanClient := strategyplatformv1connect.NewControlPlaneServiceClient(http.DefaultClient, ts.URL)
+	base := t.TempDir()
+	artifacts := artifact.NewManager(base, artifact.LocalFetcher{})
+	if _, err := artifacts.EnsureVolumeDir("mftik-data"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifacts.VolumeDir("mftik-data"), "state.json"), []byte(`{"ok":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out := make(chan *pb.AgentMessage, 64)
+	httpClient := &http.Client{Transport: &http2.Transport{
+		AllowHTTP: true,
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		},
+	}}
+	agentClient := &stream.Client{
+		Register: &pb.Register{
+			MachineId:    "m-vol",
+			Hostname:     "test",
+			AgentVersion: 3,
+		},
+		Client:    strategyplatformv1connect.NewAgentServiceClient(httpClient, ts.URL, connect.WithGRPC()),
+		Out:       out,
+		Submit:    func(*pb.DesiredState) {},
+		Artifacts: artifacts,
+		Clock:     clock.Real{},
+		Heartbeat: 100 * time.Millisecond,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go agentClient.Run(ctx)
+	waitUntil(t, 5*time.Second, func() bool {
+		rec, ok := st.GetMachine("m-vol")
+		return ok && rec.Reachable && rec.AgentVersion >= 3
+	}, "agent to register")
+
+	browse, err := humanClient.BrowseDir(ctx, connect.NewRequest(&pb.BrowseDirRequest{
+		MachineId: "m-vol",
+		Volume:    "mftik-data",
+		Path:      ".",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range browse.Msg.GetEntries() {
+		if e.GetName() == "state.json" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("missing state.json: %v", browse.Msg.GetEntries())
+	}
+
+	single, err := humanClient.DownloadFiles(ctx, connect.NewRequest(&pb.DownloadFilesRequest{
+		MachineId: "m-vol",
+		Volume:    "mftik-data",
+		Paths:     []string{"state.json"},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	for single.Receive() {
+		buf.Write(single.Msg().GetData())
+		if single.Msg().GetEof() {
+			break
+		}
+	}
+	if err := single.Err(); err != nil && err != io.EOF {
+		t.Fatal(err)
+	}
+	if buf.String() != `{"ok":true}` {
+		t.Fatalf("download = %q", buf.String())
+	}
+}
+
 func waitUntil(t *testing.T, timeout time.Duration, cond func() bool, what string) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

@@ -28,6 +28,17 @@ message StrategyAssignmentSpec {
   // expiry without Ready=TRUE rolls back (if enabled) or fails — never promotes
   // to HEALTHY. Specs without a probe keep today's grace-period behaviour.
   ReadinessProbe readiness = 12;
+  // Named machine volumes to expose to this process. container_path is
+  // always required (including EXEC-only assignments) so one manifest
+  // validates for both drivers. EXEC ignores container_path at start;
+  // OCI bind-mounts <base>/volumes/<name> there.
+  repeated VolumeMount volume_mounts = 13;
+}
+
+// VolumeMount references a machine-level volume by name.
+message VolumeMount {
+  string name = 1;            // after CP expand: a real volume name
+  string container_path = 2;  // always required; EXEC ignores at start
 }
 
 // ReadinessProbe is an HTTP URL or unix socket path the agent probes for Ready.
@@ -64,4 +75,20 @@ message DesiredState {
   int32 desired_agent_version = 3; // target agent version for self-update canary
   google.protobuf.Timestamp issued_at = 4;
   MachineSharedSpec shared = 5; // machine-level shared files (full snapshot)
+  // Machine-level named volumes. Presence is load-bearing: unset (nil)
+  // means "do not touch disk" (old CP); empty list means desired is empty.
+  MachineVolumeSpec volumes = 6;
+}
+
+// VolumeSpec is one named directory under <base>/volumes/<name>.
+message VolumeSpec {
+  string name = 1; // clean basename
+}
+
+// MachineVolumeSpec is the desired volume inventory on a machine.
+// Incremental human RPCs (CreateVolume / DeleteVolume) write this set;
+// the agent converges when the message is present.
+message MachineVolumeSpec {
+  repeated VolumeSpec volumes = 1;
+  int64 generation = 2;
 }

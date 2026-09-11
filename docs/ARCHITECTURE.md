@@ -127,23 +127,26 @@ agent-initiated `Connect` bidi stream.
 - Control plane correlates with an in-memory broker (`filetransfer.Broker`)
   keyed by `request_id`. Southbound sends go through a per-machine send
   channel owned by the Connect loop (no concurrent `stream.Send`).
-- Path safety: agent jails all access with `os.OpenRoot(strategyDir)`.
+- Path safety: agent jails all access with `os.OpenRoot` on `StrategyDir`
+  or, when `volume` is set, `VolumeDir(name)`.
 - Caps: single file ≤ 256 MiB; tarball ≤ 500 files and ≤ 512 MiB uncompressed;
   browse timeout 30s; download timeout 5m; chunk size 64 KiB.
-- Capability gate: `agent_version >= 2`. Older agents Nack unknown payloads.
+- Capability gate: WorkDir browse `agent_version >= 2`; volume browse
+  `agent_version >= 3`. Older agents Nack unknown payloads.
 - Audit: a successful download (EOF) appends `action=DownloadFiles` with
   `detail` including paths, filename, transfer kind, and byte count. Failed
   agent validation does not write an audit entry.
 
 ## Core concepts
 
-### Three layers: artifact, deployment, machine-shared
+### Four layers: artifact, deployment, machine-shared, volumes
 
 | Layer | Scope | What it versions |
 |-------|--------|------------------|
 | **Artifact** | catalog | Content-addressed binary / config / shared-file blob |
 | **Deployment** | machine × strategy | Immutable combination (binary + config + args/env) |
 | **MachineShared** | machine | Mutable reference data shared by all strategies |
+| **Volume** | machine × name | Durable named directory (`<base>/volumes/<name>`) |
 
 A **machine** is one agent identity. Its **spec** holds strategy assignments
 (`StrategyAssignmentSpec` in `proto/.../spec.proto`): artifact + optional
@@ -158,7 +161,17 @@ independent of assignment generations. Operators set them via
 <base>/shared/store/<digest>/<name>.fetched_at  # install time (GC order)
 <base>/shared/<name> -> store/...     # atomic symlink switch
 <base>/<strategy>/releases/<v>/shared -> ../../../shared
+<base>/volumes/<name>                 # machine-level named volume (0700)
 ```
+
+**What persists across a restart / release GC:**
+
+| Path | Lives across GC? | Notes |
+|------|------------------|--------|
+| `<base>/<strategy>/work` | yes | OCI cwd / scratch |
+| `<base>/shared/<name>` | yes | next-start reference data |
+| `<base>/volumes/<name>` | yes | durable process data; not tied to assignment name |
+| `releases/<ver>/rootfs` | no | remounted read-only after pivot; GC deletes old tags |
 
 Every release gets `releases/<v>/shared` on Download even when no shared
 files are desired yet — so a later `SetSharedFiles` works without
@@ -251,21 +264,41 @@ desired is OCI but `current` points at a previous BINARY release.
 
 `EXECUTION_DRIVER_OCI` is in-process rootless userns (single UID map, host
 network). The agent re-execs `/proc/self/exe --oci-init`, bind-mounts
-`work/`, `<base>/shared`, and the config file (host `current` is a symlink;
-the rootfs gets a real `current/` directory), then `pivot_root` and `exec`.
-WatchExit / Signal / Adopt stay on the exec driver (same host PID).
+`work/`, `<base>/shared`, the config file (host `current` is a symlink;
+the rootfs gets a real `current/` directory), and each `volumeMount` at
+its `containerPath`, then `pivot_root`, mounts tmpfs on `/tmp`, remounts
+`/` read-only (`MS_RDONLY` plus `MS_NOSUID|MS_NODEV`; not `MS_NOEXEC`,
+or the payload cannot exec), and
+`exec`. WatchExit / Signal / Adopt stay on the exec driver (same host PID).
 
 Path contract (OCI ≠ EXEC):
 
 | | EXEC | OCI |
 |--|--|--|
 | cwd | `StrategyDir` | `<base>/<strategy>/work` |
-| placeholders | `${CONFIG}`, `${RELEASE_DIR}`, `${BINARY}` | `${CONFIG}` only |
+| placeholders | `${CONFIG}`, `${RELEASE_DIR}`, `${BINARY}`, `${VOLUME:name}` | `${CONFIG}`, `${VOLUME:name}` |
+| `${VOLUME:name}` | host `VolumeDir(name)` | that mount's `containerPath` |
+| env expansion | `${VOLUME:*}` only | `${VOLUME:*}` only |
+
+OCI binds (inside the container):
+
+| Host | Container |
+|------|-----------|
+| `<base>/<strategy>/work` | same host path (`bindSame`) |
+| `<base>/shared` | same host path |
+| config file | same host path |
+| `<base>/volumes/<name>` | `volumeMounts[].containerPath` |
+
+`${VOLUME:name}` is legal in args and env on both drivers. Other
+placeholders stay args-only. Resolution is keyed off the **launch
+artifact**, not `spec.driver`, so auto-rollback from OCI to a previous
+BINARY still expands the same mount list.
 
 Known limits: payload is PID 1 (SIGTERM may be discarded); rootfs is
-writable and persists across restarts; no `/sys/fs/cgroup` in the
-container; release GC (`--release-retention`) makes
-`RollbackRequest.target_version` a re-fetch if that version was deleted.
+read-only after start (undeclared writes are EROFS); `/tmp` is tmpfs;
+no `/sys/fs/cgroup` in the container; release GC (`--release-retention`)
+makes `RollbackRequest.target_version` a re-fetch if that version was
+deleted.
 Unprivileged user ns is probed at Register; enabling it later requires an
 agent restart.
 

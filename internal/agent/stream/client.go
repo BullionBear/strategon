@@ -9,6 +9,7 @@ package stream
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/artifact"
 	"github.com/bullionbear/strategon/internal/agent/filebrowse"
 	"github.com/bullionbear/strategon/internal/clock"
+	"github.com/bullionbear/strategon/internal/volume"
 )
 
 // Client is the agent-side stream client.
@@ -217,17 +219,26 @@ func (c *Client) listDir(req *pb.ListDir) *pb.DirListing {
 		out.Error = "file browse not configured"
 		return out
 	}
-	if err := filebrowse.ValidateStrategy(req.GetStrategy()); err != nil {
-		out.Error = err.Error()
-		return out
-	}
-	root, err := filebrowse.Root(c.Artifacts.StrategyDir(req.GetStrategy()))
+	root, err := c.browseRoot(req.GetStrategy(), req.GetVolume())
 	if err != nil {
 		out.Error = err.Error()
 		return out
 	}
 	defer root.Close()
 	return filebrowse.List(root, req.GetRequestId(), req.GetPath())
+}
+
+func (c *Client) browseRoot(strategy, volName string) (*os.Root, error) {
+	if volName != "" {
+		if err := volume.ValidateName(volName); err != nil {
+			return nil, err
+		}
+		return filebrowse.Root(c.Artifacts.VolumeDir(volName))
+	}
+	if err := filebrowse.ValidateStrategy(strategy); err != nil {
+		return nil, err
+	}
+	return filebrowse.Root(c.Artifacts.StrategyDir(strategy))
 }
 
 func (c *Client) handleFetchFiles(ctx context.Context, req *pb.FetchFiles, send filebrowse.SendFunc) {
@@ -250,17 +261,7 @@ func (c *Client) handleFetchFiles(ctx context.Context, req *pb.FetchFiles, send 
 			})
 			return
 		}
-		if err := filebrowse.ValidateStrategy(req.GetStrategy()); err != nil {
-			_ = send(ctx, &pb.AgentMessage{
-				Payload: &pb.AgentMessage_FileChunk{FileChunk: &pb.FileChunk{
-					RequestId: req.GetRequestId(),
-					Error:     err.Error(),
-					Eof:       true,
-				}},
-			})
-			return
-		}
-		root, err := filebrowse.Root(c.Artifacts.StrategyDir(req.GetStrategy()))
+		root, err := c.browseRoot(req.GetStrategy(), req.GetVolume())
 		if err != nil {
 			_ = send(ctx, &pb.AgentMessage{
 				Payload: &pb.AgentMessage_FileChunk{FileChunk: &pb.FileChunk{
@@ -272,7 +273,11 @@ func (c *Client) handleFetchFiles(ctx context.Context, req *pb.FetchFiles, send 
 			return
 		}
 		defer root.Close()
-		if err := filebrowse.Fetch(ctx, root, req.GetStrategy(), req.GetRequestId(), req.GetPaths(), send); err != nil {
+		label := req.GetStrategy()
+		if req.GetVolume() != "" {
+			label = req.GetVolume()
+		}
+		if err := filebrowse.Fetch(ctx, root, label, req.GetRequestId(), req.GetPaths(), send); err != nil {
 			c.logger().Warn("fetch files failed", "request_id", req.GetRequestId(), "err", err)
 		}
 	}()

@@ -55,3 +55,17 @@ message MachineSharedStatus {
   int64 observed_generation = 1; // MachineSharedSpec.generation this reflects
   repeated SharedFileStatus files = 2;
 }
+
+// VolumeStatus is written only by the agent.
+message VolumeStatus {
+  string name = 1;
+  bool ready = 2;          // directory exists under <base>/volumes/<name>
+  int64 size_bytes = 3;    // last computed; 0 if never walked
+  string last_error = 4;
+  repeated string mounted_by = 5; // running assignment names
+}
+
+message MachineVolumeStatus {
+  int64 observed_generation = 1; // MachineVolumeSpec.generation this reflects
+  repeated VolumeStatus volumes = 2;
+}

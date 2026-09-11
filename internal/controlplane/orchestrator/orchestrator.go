@@ -16,6 +16,7 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/assignmentset"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/controlplane/view"
+	"github.com/bullionbear/strategon/internal/volume"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -157,6 +158,12 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 			rec = &store.MachineRecord{MachineID: srv.GetMachine(), Assignments: map[string]*pb.StrategyAssignmentSpec{}, Status: map[string]*pb.StrategyAssignmentStatus{}}
 		}
 		slotName := srv.GetName()
+		if err := volume.EnsureInventory(srv.GetMachine(), rec.Volumes, computed.GetVolumeMounts()); err != nil {
+			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
+		}
+		if err := volume.LiveWriterConflict(slotName, computed.GetVolumeMounts(), rec.Assignments); err != nil {
+			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
+		}
 		live := rec.Assignments[slotName]
 		sv := view.BuildStrategyView(rec, slotName, c.Store, nil, nil)
 		m := member{srv: srv, computed: computed, view: sv, live: live, rec: rec}
@@ -579,6 +586,9 @@ func computeAssignment(cl *pb.AssignmentSet, idx int, art, cfg *pb.ArtifactRef) 
 		spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_OCI
 	} else {
 		spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_EXEC
+	}
+	if len(rendered.VolumeMounts) > 0 {
+		spec.VolumeMounts = rendered.VolumeMounts
 	}
 	return spec, nil
 }
