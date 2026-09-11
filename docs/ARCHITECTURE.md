@@ -267,7 +267,8 @@ network). The agent re-execs `/proc/self/exe --oci-init`, bind-mounts
 `work/`, `<base>/shared`, the config file (host `current` is a symlink;
 the rootfs gets a real `current/` directory), and each `volumeMount` at
 its `containerPath`, then `pivot_root`, mounts tmpfs on `/tmp`, remounts
-`/` read-only (`MS_RDONLY` plus `MS_NOSUID|MS_NODEV|MS_NOEXEC`), and
+`/` read-only (`MS_RDONLY` plus `MS_NOSUID|MS_NODEV`; not `MS_NOEXEC`,
+or the payload cannot exec), and
 `exec`. WatchExit / Signal / Adopt stay on the exec driver (same host PID).
 
 Path contract (OCI ≠ EXEC):

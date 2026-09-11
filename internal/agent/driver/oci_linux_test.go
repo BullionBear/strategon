@@ -191,7 +191,8 @@ func TestOCIDriverPayloadReachesExec(t *testing.T) {
 	go func() { exited <- d.WatchExit(p, time.Now) }()
 	select {
 	case info := <-exited:
-		t.Fatalf("payload exited during init (code %d); --oci-init failed before exec", info.Code)
+		body, _ := os.ReadFile(OCIInitLogPath(work))
+		t.Fatalf("payload exited during init (code %d); --oci-init failed before exec\nlog: %s", info.Code, body)
 	case <-time.After(time.Second):
 	}
 	if err := d.Signal(p, syscall.SIGKILL); err != nil {

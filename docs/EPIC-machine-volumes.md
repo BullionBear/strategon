@@ -172,10 +172,10 @@ OCI `--oci-init` takes repeated `--oci-volume=/host:/container` and
 bind-mounts host ≠ container path. EXEC ignores `VolumeBinds`.
 
 After binds, cwd mkdir, `/.oldroot` removal, and a tmpfs on `/tmp`,
-rootfs is remounted `MS_RDONLY` carrying the underlying
-`MS_NOSUID|MS_NODEV|MS_NOEXEC` lock flags (rootless userns remount
-without them is `EPERM`). Writes to undeclared paths become EROFS
-instead of silent data in `releases/`.
+rootfs is remounted `MS_RDONLY` carrying `MS_NOSUID|MS_NODEV` (dropping
+those locked flags is `EPERM` in a rootless userns). `/` is not remounted
+`MS_NOEXEC` — the payload lives there and must exec. Writes to undeclared
+paths become EROFS instead of silent data in `releases/`.
 
 `size_bytes` is not a `du` on every heartbeat. Reports send the last
 computed value or 0.

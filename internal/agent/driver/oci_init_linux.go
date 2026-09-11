@@ -116,10 +116,11 @@ func applyRootfs(ia InitArgs) error {
 	if err := unix.Mount("tmpfs", "/tmp", "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "mode=1777"); err != nil {
 		return fmt.Errorf("mount tmpfs /tmp: %w", err)
 	}
-	// Remount after tmpfs so /tmp stays writable. Carry the lock flags the
-	// host bind is locked with — dropping them on remount is EPERM in a
-	// rootless userns (same class as mount proc).
-	if err := unix.Mount("", "/", "", unix.MS_REMOUNT|unix.MS_BIND|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
+	// Remount after tmpfs so /tmp stays writable. Include nosuid/nodev so a
+	// remount does not drop those locked flags (EPERM in a rootless userns,
+	// same class as mount proc). Do not set MS_NOEXEC: the payload lives on
+	// this rootfs and must be executable.
+	if err := unix.Mount("", "/", "", unix.MS_REMOUNT|unix.MS_BIND|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, ""); err != nil {
 		return fmt.Errorf("remount rootfs ro: %w", err)
 	}
 
