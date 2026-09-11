@@ -94,6 +94,7 @@ func (m *Memory) UpsertMachine(reg *pb.Register) (*MachineRecord, error) {
 			Status:            map[string]*pb.StrategyAssignmentStatus{},
 			PreviousArtifacts: map[string]*pb.ArtifactRef{},
 			SharedFiles:       map[string]*pb.SharedFileSpec{},
+			Volumes:           map[string]*pb.VolumeSpec{},
 		}
 		m.machines[reg.GetMachineId()] = rec
 	}
@@ -196,6 +197,9 @@ func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	if report.GetShared() != nil {
 		rec.SharedStatus = proto.Clone(report.GetShared()).(*pb.MachineSharedStatus)
 	}
+	if report.GetVolumes() != nil {
+		rec.VolumesStatus = proto.Clone(report.GetVolumes()).(*pb.MachineVolumeStatus)
+	}
 	m.mu.Unlock()
 	m.notify(machineID)
 	return nil
@@ -229,6 +233,51 @@ func (m *Memory) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (s
 	m.mu.Unlock()
 	m.notify(machineID)
 	return sharedGen, desiredGen, true, nil
+}
+
+func (m *Memory) CreateVolume(machineID, name string) (int64, int64, bool, error) {
+	m.mu.Lock()
+	rec, ok := m.machines[machineID]
+	if !ok {
+		m.mu.Unlock()
+		return 0, 0, false, fmt.Errorf("create volume: unknown machine %s", machineID)
+	}
+	if rec.Volumes == nil {
+		rec.Volumes = map[string]*pb.VolumeSpec{}
+	}
+	if rec.Volumes[name] != nil {
+		vg, dg := rec.VolumesGeneration, rec.Generation
+		m.mu.Unlock()
+		return vg, dg, false, nil
+	}
+	rec.Volumes[name] = &pb.VolumeSpec{Name: name}
+	rec.VolumesGeneration++
+	rec.Generation++
+	vg, dg := rec.VolumesGeneration, rec.Generation
+	m.mu.Unlock()
+	m.notify(machineID)
+	return vg, dg, true, nil
+}
+
+func (m *Memory) DeleteVolume(machineID, name string) (int64, int64, bool, error) {
+	m.mu.Lock()
+	rec, ok := m.machines[machineID]
+	if !ok {
+		m.mu.Unlock()
+		return 0, 0, false, fmt.Errorf("delete volume: unknown machine %s", machineID)
+	}
+	if rec.Volumes == nil || rec.Volumes[name] == nil {
+		vg, dg := rec.VolumesGeneration, rec.Generation
+		m.mu.Unlock()
+		return vg, dg, false, nil
+	}
+	delete(rec.Volumes, name)
+	rec.VolumesGeneration++
+	rec.Generation++
+	vg, dg := rec.VolumesGeneration, rec.Generation
+	m.mu.Unlock()
+	m.notify(machineID)
+	return vg, dg, true, nil
 }
 
 // sharedFilesEqual compares name → artifact digest maps (version/uri ignored
@@ -642,11 +691,28 @@ func buildDesiredState(rec *MachineRecord) *pb.DesiredState {
 			Generation: rec.SharedGeneration,
 		}
 	}
+	volNames := make([]string, 0, len(rec.Volumes))
+	for n := range rec.Volumes {
+		volNames = append(volNames, n)
+	}
+	sort.Strings(volNames)
+	vols := make([]*pb.VolumeSpec, 0, len(volNames))
+	for _, n := range volNames {
+		vols = append(vols, proto.Clone(rec.Volumes[n]).(*pb.VolumeSpec))
+	}
+	var volumes *pb.MachineVolumeSpec
+	if rec.VolumesGeneration > 0 || len(vols) > 0 {
+		volumes = &pb.MachineVolumeSpec{
+			Volumes:    vols,
+			Generation: rec.VolumesGeneration,
+		}
+	}
 	return &pb.DesiredState{
 		Generation:  rec.Generation,
 		Assignments: assignments,
 		IssuedAt:    timestamppb.Now(),
 		Shared:      shared,
+		Volumes:     volumes,
 	}
 }
 
@@ -661,10 +727,12 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 		Generation:        rec.Generation,
 		ObservedGen:       rec.ObservedGen,
 		SharedGeneration:  rec.SharedGeneration,
+		VolumesGeneration: rec.VolumesGeneration,
 		Assignments:       map[string]*pb.StrategyAssignmentSpec{},
 		Status:            map[string]*pb.StrategyAssignmentStatus{},
 		PreviousArtifacts: map[string]*pb.ArtifactRef{},
 		SharedFiles:       map[string]*pb.SharedFileSpec{},
+		Volumes:           map[string]*pb.VolumeSpec{},
 	}
 	if rec.Register != nil {
 		cp.Register = proto.Clone(rec.Register).(*pb.Register)
@@ -678,6 +746,9 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	if rec.SharedStatus != nil {
 		cp.SharedStatus = proto.Clone(rec.SharedStatus).(*pb.MachineSharedStatus)
 	}
+	if rec.VolumesStatus != nil {
+		cp.VolumesStatus = proto.Clone(rec.VolumesStatus).(*pb.MachineVolumeStatus)
+	}
 	for k, v := range rec.Assignments {
 		cp.Assignments[k] = proto.Clone(v).(*pb.StrategyAssignmentSpec)
 	}
@@ -689,6 +760,9 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	}
 	for k, v := range rec.SharedFiles {
 		cp.SharedFiles[k] = proto.Clone(v).(*pb.SharedFileSpec)
+	}
+	for k, v := range rec.Volumes {
+		cp.Volumes[k] = proto.Clone(v).(*pb.VolumeSpec)
 	}
 	return cp
 }

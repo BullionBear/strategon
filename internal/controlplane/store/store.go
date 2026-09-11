@@ -62,6 +62,9 @@ type MachineRecord struct {
 	SharedGeneration int64
 	SharedFiles      map[string]*pb.SharedFileSpec // name -> spec with ArtifactRef
 	SharedStatus     *pb.MachineSharedStatus       // latest agent-reported status
+	VolumesGeneration int64
+	Volumes           map[string]*pb.VolumeSpec // name -> spec
+	VolumesStatus     *pb.MachineVolumeStatus
 }
 
 // Store is the control-plane persistence boundary.
@@ -91,11 +94,20 @@ type Store interface {
 	// resolved ArtifactRefs (digest + uri). Returns (sharedGen, desiredGen, changed).
 	SetSharedFiles(machineID string, files []*pb.SharedFileSpec) (sharedGen, desiredGen int64, changed bool, err error)
 
+	// CreateVolume adds a named volume to the machine inventory. Identical
+	// name is a no-op. Returns (volumesGen, desiredGen, changed).
+	CreateVolume(machineID, name string) (volGen, desiredGen int64, changed bool, err error)
+
+	// DeleteVolume removes a named volume from desired inventory. The caller
+	// is responsible for occupancy checks. Missing name is a no-op.
+	DeleteVolume(machineID, name string) (volGen, desiredGen int64, changed bool, err error)
+
 	// ApplyStatus records an agent-reported StatusReport. The report's
 	// Assignments are a full snapshot of strategies the agent still tracks;
 	// statuses for strategies absent from the report are pruned (so a finished
 	// undeploy/drain does not leave a DRAINING tombstone in the UI).
 	// report.Shared is persisted as the machine's shared_status when present.
+	// report.Volumes is persisted as volumes_status when present.
 	ApplyStatus(machineID string, report *pb.StatusReport) error
 
 	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent versions).

@@ -352,6 +352,7 @@ func (r *Reconciler) buildStatusReport() *pb.StatusReport {
 		ObservedGeneration: r.observedGenA.Load(),
 		Assignments:        assignments,
 		Shared:             r.buildSharedStatus(),
+		Volumes:            r.buildVolumeStatus(),
 	}
 }
 
@@ -380,6 +381,13 @@ func statusKey(sr *pb.StatusReport) string {
 		fmt.Fprintf(&b, "shared:og=%d;", sh.GetObservedGeneration())
 		for _, f := range sh.GetFiles() {
 			fmt.Fprintf(&b, "%s:d=%s,err=%s;", f.GetName(), f.GetRunningDigest(), f.GetLastError())
+		}
+	}
+	if vol := sr.GetVolumes(); vol != nil {
+		fmt.Fprintf(&b, "volumes:og=%d;", vol.GetObservedGeneration())
+		for _, v := range vol.GetVolumes() {
+			fmt.Fprintf(&b, "%s:ready=%v,err=%s,mounted=%s;",
+				v.GetName(), v.GetReady(), v.GetLastError(), strings.Join(v.GetMountedBy(), ","))
 		}
 	}
 	return b.String()

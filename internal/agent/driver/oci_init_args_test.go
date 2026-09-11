@@ -47,3 +47,41 @@ func TestParseInitFlag(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+func TestBuildInitArgsVolumes(t *testing.T) {
+	args := BuildInitArgs(StartSpec{
+		Rootfs:     "/r",
+		WorkBind:   "/w",
+		SharedBind: "/s",
+		WorkDir:    "/w",
+		VolumeBinds: []VolumeBind{
+			{Host: "/base/volumes/data", Container: "/var/lib/mftik"},
+		},
+		Argv: []string{"true"},
+	})
+	var saw string
+	for _, a := range args {
+		if strings.HasPrefix(a, flagOCIVolume+"=") {
+			saw = a
+		}
+	}
+	if saw != flagOCIVolume+"=/base/volumes/data:/var/lib/mftik" {
+		t.Fatalf("volume flag = %q args=%v", saw, args)
+	}
+	got, err := parseInitFlag(args[1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Volumes) != 1 || got.Volumes[0].Host != "/base/volumes/data" || got.Volumes[0].Container != "/var/lib/mftik" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestSplitVolumeBindRejectsColonInPaths(t *testing.T) {
+	if _, _, ok := splitVolumeBind("/tmp/foo:bar:/data"); ok {
+		t.Fatal("colon in host should fail")
+	}
+	if _, _, ok := splitVolumeBind("relative:/data"); ok {
+		t.Fatal("relative host should fail")
+	}
+}

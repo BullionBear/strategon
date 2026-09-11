@@ -16,6 +16,7 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/assignmentset"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/controlplane/view"
+	"github.com/bullionbear/strategon/internal/volume"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -155,6 +156,9 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 		rec, ok := c.Store.GetMachine(srv.GetMachine())
 		if !ok {
 			rec = &store.MachineRecord{MachineID: srv.GetMachine(), Assignments: map[string]*pb.StrategyAssignmentSpec{}, Status: map[string]*pb.StrategyAssignmentStatus{}}
+		}
+		if err := volume.EnsureInventory(srv.GetMachine(), rec.Volumes, computed.GetVolumeMounts()); err != nil {
+			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 		}
 		slotName := srv.GetName()
 		live := rec.Assignments[slotName]
@@ -579,6 +583,9 @@ func computeAssignment(cl *pb.AssignmentSet, idx int, art, cfg *pb.ArtifactRef) 
 		spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_OCI
 	} else {
 		spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_EXEC
+	}
+	if len(rendered.VolumeMounts) > 0 {
+		spec.VolumeMounts = rendered.VolumeMounts
 	}
 	return spec, nil
 }

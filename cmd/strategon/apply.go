@@ -50,6 +50,7 @@ type memberTmplYAML struct {
 	Readiness    readinessYAML     `yaml:"readiness"`
 	DeployPolicy *deployPolicyYAML `yaml:"deployPolicy"`
 	Peers        peersYAML         `yaml:"peers"`
+	VolumeMounts []volumeMountYAML `yaml:"volumeMounts"`
 }
 
 type readinessYAML struct {
@@ -101,6 +102,23 @@ type assignmentSpecYAML struct {
 	Limits             *limitsYAML       `yaml:"limits"`
 	Lease              *leaseYAML        `yaml:"lease"`
 	Readiness          *readinessYAML    `yaml:"readiness"`
+	VolumeMounts       []volumeMountYAML `yaml:"volumeMounts"`
+}
+
+type volumeMountYAML struct {
+	Name             string `yaml:"name"`
+	ContainerPath    string `yaml:"containerPath"`
+	ContainerPathAlt string `yaml:"container_path"`
+}
+
+type machineVolumesSpecYAML struct {
+	MachineID    string           `yaml:"machineId"`
+	MachineIDAlt string           `yaml:"machine_id"`
+	Volumes      []volumeSpecYAML `yaml:"volumes"`
+}
+
+type volumeSpecYAML struct {
+	Name string `yaml:"name"`
 }
 
 type policyYAML struct {
@@ -190,10 +208,12 @@ func applyDoc(ctx context.Context, client strategyplatformv1connect.ControlPlane
 		return applyAssignmentSet(ctx, client, doc)
 	case "strategyassignment":
 		return applyAssignment(ctx, client, doc)
+	case "machinevolumes":
+		return applyMachineVolumes(ctx, client, doc)
 	case "":
 		return ApplyResult{}, fmt.Errorf("missing kind")
 	default:
-		return ApplyResult{}, fmt.Errorf("unknown kind %q: expected AssignmentSet or StrategyAssignment", kind)
+		return ApplyResult{}, fmt.Errorf("unknown kind %q: expected AssignmentSet, StrategyAssignment, or MachineVolumes", kind)
 	}
 }
 
@@ -215,8 +235,9 @@ func applyAssignmentSet(ctx context.Context, client strategyplatformv1connect.Co
 		})
 	}
 	tmpl := &pb.MemberTemplate{
-		Args: spec.Template.Args,
-		Env:  spec.Template.Env,
+		Args:         spec.Template.Args,
+		Env:          spec.Template.Env,
+		VolumeMounts: protoMounts(spec.Template.VolumeMounts),
 	}
 	if spec.Template.Readiness.Endpoint != "" {
 		tmpl.Readiness = &pb.ReadinessProbe{Endpoint: spec.Template.Readiness.Endpoint}
@@ -299,6 +320,7 @@ func applyAssignment(ctx context.Context, client strategyplatformv1connect.Contr
 		Limits:          spec.limits(),
 		Lease:           spec.lease(),
 		Readiness:       spec.readiness(),
+		VolumeMounts:    protoMounts(spec.VolumeMounts),
 	}
 	resp, err := client.ApplyAssignment(ctx, connect.NewRequest(req))
 	if err != nil {
@@ -409,4 +431,53 @@ func pickInt64(a, b int64) int64 {
 
 func formatApply(res ApplyResult) string {
 	return fmt.Sprintf("%s/%s applied via %s generation=%d", res.Kind, res.Name, res.RPC, res.Generation)
+}
+
+func protoMounts(in []volumeMountYAML) []*pb.VolumeMount {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*pb.VolumeMount, 0, len(in))
+	for _, m := range in {
+		out = append(out, &pb.VolumeMount{
+			Name:          m.Name,
+			ContainerPath: firstNonEmpty(m.ContainerPath, m.ContainerPathAlt),
+		})
+	}
+	return out
+}
+
+func applyMachineVolumes(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, doc yamlDoc) (ApplyResult, error) {
+	var spec machineVolumesSpecYAML
+	if err := doc.Spec.Decode(&spec); err != nil {
+		return ApplyResult{}, fmt.Errorf("MachineVolumes spec: %w", err)
+	}
+	machine := firstNonEmpty(spec.MachineID, spec.MachineIDAlt, doc.Metadata.Name)
+	if machine == "" {
+		return ApplyResult{}, fmt.Errorf("MachineVolumes metadata.name (machine id) is required")
+	}
+	if len(spec.Volumes) == 0 {
+		return ApplyResult{}, fmt.Errorf("MachineVolumes spec.volumes is required")
+	}
+	var lastGen int64
+	for _, v := range spec.Volumes {
+		name := strings.TrimSpace(v.Name)
+		if name == "" {
+			return ApplyResult{}, fmt.Errorf("MachineVolumes volume name is required")
+		}
+		resp, err := client.CreateVolume(ctx, connect.NewRequest(&pb.CreateVolumeRequest{
+			MachineId: machine,
+			Name:      name,
+		}))
+		if err != nil {
+			return ApplyResult{}, fmt.Errorf("CreateVolume %s/%s: %w", machine, name, err)
+		}
+		lastGen = resp.Msg.GetGeneration()
+	}
+	return ApplyResult{
+		Kind:       "MachineVolumes",
+		Name:       machine,
+		RPC:        "CreateVolume",
+		Generation: lastGen,
+	}, nil
 }

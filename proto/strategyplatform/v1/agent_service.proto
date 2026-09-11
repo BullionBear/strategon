@@ -77,6 +77,7 @@ message StatusReport {
   int64 observed_generation = 1;
   repeated StrategyAssignmentStatus assignments = 2;
   MachineSharedStatus shared = 3;
+  MachineVolumeStatus volumes = 4;
 }
 
 // List a directory under a strategy's WorkDir. path is relative to the
@@ -85,6 +86,8 @@ message ListDir {
   string request_id = 1;
   string strategy = 2;
   string path = 3;
+  // When set, jail is <base>/volumes/<volume> and strategy is ignored.
+  string volume = 4;
 }
 
 // Fetch one or more files under a strategy's WorkDir. One path streams the
@@ -93,6 +96,8 @@ message FetchFiles {
   string request_id = 1;
   string strategy = 2;
   repeated string paths = 3;
+  // When set, jail is <base>/volumes/<volume> and strategy is ignored.
+  string volume = 4;
 }
 
 message DirEntry {

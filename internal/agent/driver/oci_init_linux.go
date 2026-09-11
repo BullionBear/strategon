@@ -64,6 +64,11 @@ func applyRootfs(ia InitArgs) error {
 			return fmt.Errorf("bind %s: %w", p, err)
 		}
 	}
+	for _, b := range ia.Volumes {
+		if err := bindVolume(rootfs, b.Host, b.Container); err != nil {
+			return fmt.Errorf("bind volume %s: %w", b.Container, err)
+		}
+	}
 
 	// procfs must be mounted before pivot_root, while the host's /proc is
 	// still in this mount namespace. The kernel's mount_too_revealing() only
@@ -103,6 +108,19 @@ func applyRootfs(ia InitArgs) error {
 		if err := os.Chdir(cwd); err != nil {
 			return fmt.Errorf("chdir %s: %w", cwd, err)
 		}
+	}
+
+	if err := os.MkdirAll("/tmp", 0o1777); err != nil {
+		return fmt.Errorf("mkdir /tmp: %w", err)
+	}
+	if err := unix.Mount("tmpfs", "/tmp", "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "mode=1777"); err != nil {
+		return fmt.Errorf("mount tmpfs /tmp: %w", err)
+	}
+	// Remount after tmpfs so /tmp stays writable. Carry the lock flags the
+	// host bind is locked with — dropping them on remount is EPERM in a
+	// rootless userns (same class as mount proc).
+	if err := unix.Mount("", "/", "", unix.MS_REMOUNT|unix.MS_BIND|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
+		return fmt.Errorf("remount rootfs ro: %w", err)
 	}
 
 	if len(ia.Argv) == 0 {
@@ -151,6 +169,25 @@ func discardStdio() error {
 		return err
 	}
 	return unix.Dup2(fd, 2)
+}
+
+func bindVolume(rootfs, hostPath, containerPath string) error {
+	if hostPath == "" || containerPath == "" {
+		return fmt.Errorf("empty volume bind")
+	}
+	abs, err := filepath.Abs(hostPath)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return err
+	}
+	rel := strings.TrimPrefix(filepath.Clean(containerPath), string(os.PathSeparator))
+	target := filepath.Join(rootfs, rel)
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		return err
+	}
+	return unix.Mount(abs, target, "", unix.MS_BIND, "")
 }
 
 func bindSame(rootfs, hostPath string, dir bool) error {

@@ -63,6 +63,7 @@ message MemberTemplate {
   ReadinessProbe readiness = 4;
   ResourceLimits limits = 5;
   PeerList peers = 6;
+  repeated VolumeMount volume_mounts = 7;
 }
 
 // PeerList renders ${peers} for one member.

@@ -48,6 +48,15 @@ type StartSpec struct {
 	WorkBind   string
 	SharedBind string
 	ConfigBind string // host path of the config file; empty if none
+
+	// VolumeBinds are OCI-only host→container mounts. EXEC ignores this field.
+	VolumeBinds []VolumeBind
+}
+
+// VolumeBind is one OCI bind of a machine volume directory at containerPath.
+type VolumeBind struct {
+	Host      string
+	Container string
 }
 
 // OCIInitLogName is the host-side file that captures --oci-init stderr.

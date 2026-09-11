@@ -88,6 +88,36 @@ func TestPostgresPreviousArtifactAndRollback(t *testing.T) {
 	}
 }
 
+func TestPostgresCreateDeleteVolumeDesiredNilVsEmpty(t *testing.T) {
+	p := newTestPostgres(t, nil)
+	if _, err := p.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 1}); err != nil {
+		t.Fatal(err)
+	}
+	ds, _ := p.DesiredState("m1")
+	if ds.GetVolumes() != nil {
+		t.Fatalf("fresh machine must send nil volumes, got %+v", ds.GetVolumes())
+	}
+	vg1, _, changed, err := p.CreateVolume("m1", "data")
+	if err != nil || !changed || vg1 != 1 {
+		t.Fatalf("create volGen=%d changed=%v err=%v", vg1, changed, err)
+	}
+	ds, _ = p.DesiredState("m1")
+	if ds.GetVolumes() == nil || len(ds.GetVolumes().GetVolumes()) != 1 {
+		t.Fatalf("desired volumes = %+v", ds.GetVolumes())
+	}
+	if _, _, changed, err = p.CreateVolume("m1", "data"); err != nil || changed {
+		t.Fatalf("identical create should be no-op: changed=%v err=%v", changed, err)
+	}
+	vg2, _, changed, err := p.DeleteVolume("m1", "data")
+	if err != nil || !changed || vg2 != 2 {
+		t.Fatalf("delete volGen=%d changed=%v err=%v", vg2, changed, err)
+	}
+	ds, _ = p.DesiredState("m1")
+	if ds.GetVolumes() == nil || ds.GetVolumes().GetGeneration() != 2 || len(ds.GetVolumes().GetVolumes()) != 0 {
+		t.Fatalf("empty list must still be sent: %+v", ds.GetVolumes())
+	}
+}
+
 func TestPostgresStatusHeartbeatReachable(t *testing.T) {
 	p := newTestPostgres(t, nil)
 	p.UpsertMachine(&pb.Register{MachineId: "m1"})

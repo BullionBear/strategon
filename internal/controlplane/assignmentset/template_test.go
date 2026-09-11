@@ -87,6 +87,24 @@ func TestExpandLeavesAgentPlaceholders(t *testing.T) {
 	}
 }
 
+func TestExpandNestedVolumePlaceholder(t *testing.T) {
+	set := natsLike("m1")
+	set.Spec.Template.VolumeMounts = []*pb.VolumeMount{
+		{Name: "${member.name}-data", ContainerPath: "/var/lib/mftik"},
+	}
+	set.Spec.Template.Env["MFTIK_DATA"] = "${VOLUME:${member.name}-data}"
+	got, err := Expand(set, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.VolumeMounts) != 1 || got.VolumeMounts[0].GetName() != "nats-m1-data" {
+		t.Fatalf("mounts = %+v", got.VolumeMounts)
+	}
+	if got.Env["MFTIK_DATA"] != "${VOLUME:nats-m1-data}" {
+		t.Fatalf("env = %q", got.Env["MFTIK_DATA"])
+	}
+}
+
 // A one-member set has no peers, so ${peers} renders empty and is passed
 // through as an empty argument. Verified against nats-server 2.10.29: with a
 // cluster configured, `--routes ""` starts cleanly, keeps cluster mode, and

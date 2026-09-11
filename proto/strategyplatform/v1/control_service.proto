@@ -67,6 +67,8 @@ message StrategyView {
   google.protobuf.Timestamp deployed_at = 21;
   // Desired run state from StrategyAssignmentSpec.stopped.
   bool stopped = 22;
+  // Desired volume mounts from StrategyAssignmentSpec (name → container_path).
+  repeated VolumeMount volume_mounts = 23;
 }
 
 message ListMachinesRequest {
@@ -134,6 +136,7 @@ message ApplyAssignmentRequest {
   // name already stored on the assignment). Set this to deploy a slot whose
   // name differs from the binary, e.g. strategy=nats-m4 artifact=nats.
   string artifact = 13;
+  repeated VolumeMount volume_mounts = 14;
 }
 
 message ApplyAssignmentResponse {
@@ -204,7 +207,9 @@ message AuditEntry {
 message BrowseDirRequest {
   string machine_id = 1;
   string strategy = 2;
-  string path = 3; // relative to strategy WorkDir; "" or "." = root
+  string path = 3; // relative to strategy WorkDir or volume root; "" or "." = root
+  // When set, browse <base>/volumes/<volume> and strategy is ignored.
+  string volume = 4;
 }
 
 message BrowseDirResponse {
@@ -216,6 +221,8 @@ message DownloadFilesRequest {
   string machine_id = 1;
   string strategy = 2;
   repeated string paths = 3;
+  // When set, fetch from <base>/volumes/<volume> and strategy is ignored.
+  string volume = 4;
 }
 
 message DownloadChunk {
@@ -347,6 +354,41 @@ message ListSharedFilesResponse {
   repeated SharedFileView files = 1;
 }
 
+message CreateVolumeRequest {
+  string machine_id = 1;
+  string name = 2;
+}
+
+message CreateVolumeResponse {
+  int64 generation = 1; // MachineVolumeSpec.generation
+}
+
+message DeleteVolumeRequest {
+  string machine_id = 1;
+  string name = 2;
+}
+
+message DeleteVolumeResponse {
+  int64 generation = 1;
+}
+
+message ListVolumesRequest {
+  string machine_id = 1;
+}
+
+message ListVolumesResponse {
+  repeated VolumeView volumes = 1;
+}
+
+message VolumeView {
+  string name = 1;
+  bool ready = 2;
+  int64 size_bytes = 3;
+  string last_error = 4;
+  repeated string mounted_by = 5;
+  repeated string pinned_by = 6; // desired assignments that list this mount
+}
+
 message SharedFileView {
   string name = 1;
   string desired_version = 2;
@@ -377,6 +419,10 @@ service ControlPlaneService {
   // Machine-level shared files (full overwrite; independent of assignments).
   rpc SetSharedFiles(SetSharedFilesRequest) returns (SetSharedFilesResponse);
   rpc ListSharedFiles(ListSharedFilesRequest) returns (ListSharedFilesResponse);
+
+  rpc CreateVolume(CreateVolumeRequest) returns (CreateVolumeResponse);
+  rpc DeleteVolume(DeleteVolumeRequest) returns (DeleteVolumeResponse);
+  rpc ListVolumes(ListVolumesRequest) returns (ListVolumesResponse);
 
   // UI real-time panel: machine status and deploy progress push.
   rpc WatchMachine(GetMachineRequest) returns (stream MachineStatusEvent);

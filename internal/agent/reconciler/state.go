@@ -33,6 +33,7 @@ type strategyState struct {
 	// warnedWaitingShared is the shared_generation for which WaitingForShared
 	// was already emitted (edge-trigger across ticks).
 	warnedWaitingShared int64
+	warnedWaitingVolume int64
 	failedAtGen    int64  // generation that produced FAILED; stay failed until desired moves
 
 	observedGen int64

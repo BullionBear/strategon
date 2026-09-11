@@ -67,6 +67,8 @@ func run(args []string) error {
 		return cmdGet(args[1:])
 	case "wait":
 		return cmdWait(args[1:])
+	case "volume":
+		return cmdVolume(args[1:])
 	default:
 		return usageError{msg: fmt.Sprintf("unknown command %q\n\n%s", args[0], usageText)}
 	}
@@ -79,10 +81,14 @@ Commands:
   get assignmentset NAME        Show one AssignmentSet
   get assignmentsets            List AssignmentSets
   wait assignmentset NAME       Block until a condition holds
+  volume create MACHINE NAME    Create a machine-level volume
+  volume ls MACHINE             List volumes on a machine
+  volume rm MACHINE NAME        Delete a volume (fails if mounted)
 
 Apply dispatches on kind:
   AssignmentSet       → ApplyAssignmentSet (does not Deploy members)
   StrategyAssignment  → ApplyAssignment
+  MachineVolumes      → CreateVolume per name (ensure-only; never deletes)
 
 Unknown kinds exit non-zero.
 

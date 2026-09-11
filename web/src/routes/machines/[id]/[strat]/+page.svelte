@@ -235,6 +235,19 @@
 			{#if actionError}
 				<p class="err mono">{actionError}</p>
 			{/if}
+			{#if view.volumeMounts?.length}
+				<div class="sched">
+					<span class="lbl">Volumes</span>
+					<ul>
+						{#each view.volumeMounts as m}
+							<li class="mono tiny">
+								<a href="/machines/{id}/volumes/{encodeURIComponent(m.name)}">{m.name}</a>
+								<span class="muted">→ {m.containerPath}</span>
+							</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
 			{#if view.schedules?.length}
 				<div class="sched">
 					<span class="lbl">Schedules</span>

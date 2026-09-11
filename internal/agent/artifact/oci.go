@@ -129,3 +129,20 @@ func (m *Manager) EnsureWorkDir(strategy string) (string, error) {
 	}
 	return dir, nil
 }
+
+// VolumesRoot is <base>/volumes.
+func (m *Manager) VolumesRoot() string { return filepath.Join(m.Base, "volumes") }
+
+// VolumeDir is <base>/volumes/<name>.
+func (m *Manager) VolumeDir(name string) string {
+	return filepath.Join(m.VolumesRoot(), name)
+}
+
+// EnsureVolumeDir creates a machine-level volume directory.
+func (m *Manager) EnsureVolumeDir(name string) (string, error) {
+	dir := m.VolumeDir(name)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("mkdir volume %s: %w", name, err)
+	}
+	return dir, nil
+}

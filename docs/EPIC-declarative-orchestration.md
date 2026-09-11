@@ -901,7 +901,11 @@ cache: three members on one host fetch and unpack the artifact three times.
 Renaming a member is recreate — new empty WorkDir; undeploy does not delete
 the old directory. File browse / logs / status address
 `<base>/<member.name>`, which is the point of the split. Audit `Strategy`
-changes from `nats` to `nats-m1`.
+changes from `nats` to `nats-m1`. Durable process data is different: it
+lives on machine volumes. A rename keeps those bytes only if the new
+member remounts the same volume names. `${member.name}-data` isolates
+writers on one host; it does not follow a rename (new name → new volume;
+the old volume remains until `DeleteVolume`).
 
 **ApplyAssignment takes an optional `artifact` name** so a human can create
 `nats-m4` from catalog `nats` without going through the controller.

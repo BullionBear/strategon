@@ -40,9 +40,12 @@ web/.env.*
 # Cached release assets fetched by deploy/install-agent.sh
 /.cache/
 
-# Local seed dumps. Checked-in examples live under examples/nats and examples/assignment.
+# Local seed dumps. Checked-in examples live under examples/nats,
+# examples/assignment, and examples/volumes.
 /examples/*
 !/examples/nats/
 !/examples/nats/**
 !/examples/assignment/
 !/examples/assignment/**
+!/examples/volumes/
+!/examples/volumes/**

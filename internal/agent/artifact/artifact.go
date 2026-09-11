@@ -10,6 +10,7 @@
 //	<base>/<strategy>/current -> releases/<version>    # atomic switch point
 //	<base>/shared/<name> -> store/<digest>/<name>      # machine-level shared files
 //	<base>/shared/store/<digest>/<name>                # content-addressed store
+//	<base>/volumes/<name>                              # machine-level named volumes
 //
 // Rollback is O(1): re-point the `current` symlink at an already-present
 // release, no re-download. Fetching is pluggable; the v1 Fetcher is a

@@ -24,6 +24,7 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/sharedfile"
+	"github.com/bullionbear/strategon/internal/volume"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -31,6 +32,10 @@ import (
 // MinFileBrowseAgentVersion is the capability version that advertises
 // ListDir/FetchFiles support.
 const MinFileBrowseAgentVersion int32 = 2
+
+// MinVolumeBrowseAgentVersion is the capability version that advertises
+// BrowseDir/DownloadFiles against a machine volume root.
+const MinVolumeBrowseAgentVersion int32 = 3
 
 // AgentNotifier pushes a fresh DesiredState to a connected agent after a write.
 type AgentNotifier interface {
@@ -303,6 +308,7 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 		Lease:        msg.GetLease(),
 		Readiness:    msg.GetReadiness(),
 		DeployPolicy: msg.GetDeployPolicy(),
+		VolumeMounts: msg.GetVolumeMounts(),
 	}
 	if spec.GetDeployPolicy() == nil {
 		spec.DeployPolicy = defaultOrCloneSpec(nil, msg.GetStrategy()).GetDeployPolicy()
@@ -315,6 +321,9 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 	}
 	if err := applyDriverFromArtifact(spec, art, rec); err != nil {
 		return nil, err
+	}
+	if err := validateAssignmentMounts(msg.GetMachineId(), rec, spec.GetVolumeMounts()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if cv := msg.GetConfigVersion(); cv != "" {
 		cfg, err := s.resolveArtifact(art.GetName()+"-config", msg.GetStrategy()+"-config", cv)
@@ -984,7 +993,7 @@ func defaultOrCloneSpec(existing *pb.StrategyAssignmentSpec, strategy string) *p
 
 func (s *Server) BrowseDir(ctx context.Context, req *connect.Request[pb.BrowseDirRequest]) (*connect.Response[pb.BrowseDirResponse], error) {
 	msg := req.Msg
-	if err := s.gateFileBrowse(msg.GetMachineId(), msg.GetStrategy()); err != nil {
+	if err := s.gateFileBrowse(msg.GetMachineId(), msg.GetStrategy(), msg.GetVolume()); err != nil {
 		return nil, err
 	}
 	ctrl, err := s.agentControl()
@@ -1004,6 +1013,7 @@ func (s *Server) BrowseDir(ctx context.Context, req *connect.Request[pb.BrowseDi
 			RequestId: reqID,
 			Strategy:  msg.GetStrategy(),
 			Path:      msg.GetPath(),
+			Volume:    msg.GetVolume(),
 		}},
 	}); err != nil {
 		return nil, err
@@ -1029,7 +1039,7 @@ func (s *Server) BrowseDir(ctx context.Context, req *connect.Request[pb.BrowseDi
 
 func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.DownloadFilesRequest], stream *connect.ServerStream[pb.DownloadChunk]) error {
 	msg := req.Msg
-	if err := s.gateFileBrowse(msg.GetMachineId(), msg.GetStrategy()); err != nil {
+	if err := s.gateFileBrowse(msg.GetMachineId(), msg.GetStrategy(), msg.GetVolume()); err != nil {
 		return err
 	}
 	paths := msg.GetPaths()
@@ -1057,6 +1067,7 @@ func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.Down
 			RequestId: reqID,
 			Strategy:  msg.GetStrategy(),
 			Paths:     paths,
+			Volume:    msg.GetVolume(),
 		}},
 	}); err != nil {
 		return err
@@ -1106,8 +1117,8 @@ func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.Down
 					Action:    "DownloadFiles",
 					MachineId: msg.GetMachineId(),
 					Strategy:  msg.GetStrategy(),
-					Detail: fmt.Sprintf("paths=%s\nfilename=%s\nkind=%s\nbytes=%d",
-						strings.Join(paths, ","), filename, kind.String(), bytesSent),
+					Detail: fmt.Sprintf("paths=%s\nfilename=%s\nkind=%s\nbytes=%d\nvolume=%s",
+						strings.Join(paths, ","), filename, kind.String(), bytesSent, msg.GetVolume()),
 				})
 				return nil
 			}
@@ -1115,8 +1126,15 @@ func (s *Server) DownloadFiles(ctx context.Context, req *connect.Request[pb.Down
 	}
 }
 
-func (s *Server) gateFileBrowse(machineID, strategy string) error {
-	if machineID == "" || strategy == "" {
+func (s *Server) gateFileBrowse(machineID, strategy, vol string) error {
+	if machineID == "" {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id is required"))
+	}
+	if vol != "" {
+		if err := volume.ValidateName(vol); err != nil {
+			return connect.NewError(connect.CodeInvalidArgument, err)
+		}
+	} else if strategy == "" {
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
 	}
 	rec, ok := s.store.GetMachine(machineID)
@@ -1126,10 +1144,16 @@ func (s *Server) gateFileBrowse(machineID, strategy string) error {
 	if !rec.Reachable {
 		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("machine %q is not reachable", machineID))
 	}
-	if rec.AgentVersion < MinFileBrowseAgentVersion {
+	need := MinFileBrowseAgentVersion
+	what := "file browse"
+	if vol != "" {
+		need = MinVolumeBrowseAgentVersion
+		what = "volume browse"
+	}
+	if rec.AgentVersion < need {
 		return connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("machine %q agent_version %d does not support file browse (need >= %d)",
-				machineID, rec.AgentVersion, MinFileBrowseAgentVersion))
+			fmt.Errorf("machine %q agent_version %d does not support %s (need >= %d)",
+				machineID, rec.AgentVersion, what, need))
 	}
 	return nil
 }

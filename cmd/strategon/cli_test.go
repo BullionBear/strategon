@@ -118,6 +118,69 @@ func TestApplyExampleHitsApplyAssignmentSetNotDeploy(t *testing.T) {
 	}
 }
 
+func TestApplyMachineVolumesEnsureOnly(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	ctx := context.Background()
+	yaml := `
+kind: MachineVolumes
+metadata:
+  name: m1
+spec:
+  volumes:
+    - name: mftik-data
+    - name: nats-a-data
+`
+	results, err := applyReader(ctx, client, strings.NewReader(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if results[0].Kind != "MachineVolumes" || results[0].RPC != "CreateVolume" {
+		t.Fatalf("results = %+v", results)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Volumes["mftik-data"] == nil || rec.Volumes["nats-a-data"] == nil {
+		t.Fatalf("volumes = %+v", rec.Volumes)
+	}
+	again, err := applyReader(ctx, client, strings.NewReader(yaml))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again[0].Generation != results[0].Generation {
+		t.Fatalf("ensure-only re-apply bumped generation")
+	}
+	if _, err := client.CreateVolume(ctx, connect.NewRequest(&pb.CreateVolumeRequest{
+		MachineId: "m1", Name: "extra",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyReader(ctx, client, strings.NewReader(yaml)); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Volumes["extra"] == nil {
+		t.Fatal("ensure-only apply must not delete extra volumes")
+	}
+}
+
+func TestVolumeCLICreateListDelete(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	ctx := context.Background()
+	if _, err := client.CreateVolume(ctx, connect.NewRequest(&pb.CreateVolumeRequest{
+		MachineId: "m1", Name: "data",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := listVolumes(ctx, client, "m1", &buf); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "data") {
+		t.Fatalf("list = %q", buf.String())
+	}
+}
+
 func TestApplyUnknownKind(t *testing.T) {
 	client, _, _ := startCLIAPI(t)
 	_, err := applyReader(context.Background(), client, strings.NewReader("kind: Widget\nmetadata:\n  name: x\n"))

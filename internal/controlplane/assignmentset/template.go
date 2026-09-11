@@ -2,22 +2,19 @@
 // per-machine values the controller writes onto a StrategyAssignmentSpec.
 //
 // The control plane substitutes only its own namespaced placeholders and
-// leaves the agent's (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) verbatim, so the
+// leaves the agent's (${CONFIG}, ${BINARY}, ${RELEASE_DIR}, ${VOLUME:*})
+// verbatim, so the
 // two expansion stages cannot collide. Anything else is rejected at apply time
 // instead of surfacing later as an agent start failure.
 package assignmentset
 
 import (
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
-
-// placeholderRE matches ${...}; the body is validated separately.
-var placeholderRE = regexp.MustCompile(`\$\{([^}]*)\}`)
 
 // agentPlaceholders are expanded by the agent, not here. They pass through.
 var agentPlaceholders = map[string]bool{
@@ -28,9 +25,10 @@ var agentPlaceholders = map[string]bool{
 
 // Expanded is one member's rendered template.
 type Expanded struct {
-	Args     []string
-	Env      map[string]string
-	Endpoint string
+	Args         []string
+	Env          map[string]string
+	Endpoint     string
+	VolumeMounts []*pb.VolumeMount
 }
 
 // Expand renders the template for members[idx].
@@ -67,7 +65,37 @@ func Expand(set *pb.AssignmentSet, idx int) (*Expanded, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Expanded{Args: args, Env: env, Endpoint: endpoint}, nil
+	mounts, err := expandMounts(tmpl.GetVolumeMounts(), vals)
+	if err != nil {
+		return nil, err
+	}
+	return &Expanded{Args: args, Env: env, Endpoint: endpoint, VolumeMounts: mounts}, nil
+}
+
+func expandMounts(raw []*pb.VolumeMount, vals map[string]string) ([]*pb.VolumeMount, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	out := make([]*pb.VolumeMount, 0, len(raw))
+	for i, m := range raw {
+		name, err := expand(m.GetName(), vals, fmt.Sprintf("volumeMounts[%d].name", i))
+		if err != nil {
+			return nil, err
+		}
+		cpath, err := expand(m.GetContainerPath(), vals, fmt.Sprintf("volumeMounts[%d].containerPath", i))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &pb.VolumeMount{Name: name, ContainerPath: cpath})
+	}
+	return out, nil
+}
+
+func isAgentPlaceholder(name string) bool {
+	if agentPlaceholders[name] {
+		return true
+	}
+	return strings.HasPrefix(name, "VOLUME:")
 }
 
 // Validate renders every member so a bad placeholder is a FailedPrecondition at
@@ -156,31 +184,52 @@ func expandArgs(raw []string, vals map[string]string) ([]string, error) {
 	return out, nil
 }
 
-// expand substitutes control-plane placeholders and passes agent ones through.
+// expand substitutes control-plane placeholders innermost-first and passes
+// agent ones through. Left-to-right ${([^}]*)} on
+// ${VOLUME:${member.name}-data} would steal the first } and yield an
+// unknown body; innermost-first expands ${member.name} first.
 func expand(s string, vals map[string]string, where string) (string, error) {
 	if s == "" {
 		return "", nil
 	}
-	var firstErr error
-	out := placeholderRE.ReplaceAllStringFunc(s, func(match string) string {
-		if firstErr != nil {
-			return match
-		}
-		name := match[2 : len(match)-1]
-		if agentPlaceholders[name] {
-			return match // the agent expands this later
-		}
-		v, ok := vals[name]
+	var frozen []string
+	for {
+		start, end, body, ok := findInnermostPlaceholder(s)
 		if !ok {
-			firstErr = fmt.Errorf("%s: unknown placeholder ${%s}", where, name)
-			return match
+			break
 		}
-		return v
-	})
-	if firstErr != nil {
-		return "", firstErr
+		if isAgentPlaceholder(body) {
+			key := fmt.Sprintf("\x00AG%d\x00", len(frozen))
+			frozen = append(frozen, s[start:end])
+			s = s[:start] + key + s[end:]
+			continue
+		}
+		v, ok := vals[body]
+		if !ok {
+			return "", fmt.Errorf("%s: unknown placeholder ${%s}", where, body)
+		}
+		s = s[:start] + v + s[end:]
 	}
-	return out, nil
+	for i, tok := range frozen {
+		s = strings.Replace(s, fmt.Sprintf("\x00AG%d\x00", i), tok, 1)
+	}
+	return s, nil
+}
+
+func findInnermostPlaceholder(s string) (start, end int, body string, ok bool) {
+	lastOpen := -1
+	for i := 0; i < len(s); {
+		if i+1 < len(s) && s[i] == '$' && s[i+1] == '{' {
+			lastOpen = i
+			i += 2
+			continue
+		}
+		if s[i] == '}' && lastOpen >= 0 {
+			return lastOpen, i + 1, s[lastOpen+2 : i], true
+		}
+		i++
+	}
+	return 0, 0, "", false
 }
 
 // ValidateMemberName rejects names that cannot be a WorkDir segment
