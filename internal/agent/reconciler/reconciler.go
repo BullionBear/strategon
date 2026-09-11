@@ -286,6 +286,7 @@ func (r *Reconciler) reconcile() {
 
 func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyState) {
 	st.stopGraceSeconds = spec.GetDeployPolicy().GetStopGraceSeconds()
+	st.volumeMounts = volumeMountNames(spec)
 	if st.backoff.Blocked(r.now()) {
 		return // backoff not elapsed; tick will wake us
 	}
@@ -405,11 +406,10 @@ func (r *Reconciler) retireStrategy(st *strategyState) {
 // / post-deploy crash during the window). When false (steady-state crash
 // restart) the process is live again so phase returns to HEALTHY.
 func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyState, healthCheck bool) {
-	if conflict := r.volumeWriterConflict(st.strategy, spec.GetVolumeMounts()); conflict != "" {
-		msg := fmt.Sprintf("volume %q already mounted by another running assignment", conflict)
-		if st.lastError != msg {
-			st.lastError = msg
-			r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", msg)
+	if err := r.volumeWriterConflictErr(st.strategy, spec.GetVolumeMounts()); err != nil {
+		if st.lastError != err.Error() {
+			st.lastError = err.Error()
+			r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", err.Error())
 		}
 		return
 	}

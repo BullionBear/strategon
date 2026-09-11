@@ -322,7 +322,11 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 	if err := applyDriverFromArtifact(spec, art, rec); err != nil {
 		return nil, err
 	}
-	if err := validateAssignmentMounts(msg.GetMachineId(), rec, spec.GetVolumeMounts()); err != nil {
+	if err := validateAssignmentMounts(msg.GetMachineId(), msg.GetStrategy(), rec, spec); err != nil {
+		var wc *volume.WriterConflictError
+		if errors.As(err, &wc) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if cv := msg.GetConfigVersion(); cv != "" {

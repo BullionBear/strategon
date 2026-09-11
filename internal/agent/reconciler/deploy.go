@@ -17,6 +17,13 @@ import (
 // beginDeploy starts the deploy state machine for a new target version. The IO
 // steps run in a worker goroutine; the main loop only records phase.
 func (r *Reconciler) beginDeploy(spec *pb.StrategyAssignmentSpec, st *strategyState) {
+	if err := r.volumeWriterConflictErr(st.strategy, spec.GetVolumeMounts()); err != nil {
+		st.lastError = err.Error()
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
+		st.failedAtGen = r.generation
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "DeployFailed", err.Error())
+		return
+	}
 	ctx, cancel := context.WithCancel(r.ctx)
 	st.inflight = &deployOp{target: spec.GetArtifact(), config: spec.GetConfig(), cancel: cancel}
 	st.phase = pb.DeployPhase_DEPLOY_PHASE_PENDING
@@ -87,6 +94,10 @@ func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentS
 
 	// STARTING: fork/exec the new version. Driver comes from the launch
 	// artifact (just switched in), not desired spec.Driver.
+	if err := r.volumeWriterConflictErr(strat, spec.GetVolumeMounts()); err != nil {
+		send(pb.DeployPhase_DEPLOY_PHASE_FAILED, err, nil)
+		return
+	}
 	sp, err := r.buildStartSpec(spec, art)
 	if err != nil {
 		send(pb.DeployPhase_DEPLOY_PHASE_FAILED, err, nil)
@@ -191,6 +202,13 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 	st.runningArtifact = st.prevArtifact
 	st.runningConfig = st.prevConfig
 
+	if err := r.volumeWriterConflictErr(st.strategy, spec.GetVolumeMounts()); err != nil {
+		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
+		st.lastError = err.Error()
+		st.failedAtGen = r.generation
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
+		return
+	}
 	sp, err := r.buildStartSpec(spec, st.prevArtifact)
 	if err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED

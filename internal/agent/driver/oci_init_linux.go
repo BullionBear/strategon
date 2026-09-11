@@ -183,9 +183,8 @@ func bindVolume(rootfs, hostPath, containerPath string) error {
 	if _, err := os.Stat(abs); err != nil {
 		return err
 	}
-	rel := strings.TrimPrefix(filepath.Clean(containerPath), string(os.PathSeparator))
-	target := filepath.Join(rootfs, rel)
-	if err := os.MkdirAll(target, 0o755); err != nil {
+	target, err := mkdirAllUnderRootfs(rootfs, containerPath)
+	if err != nil {
 		return err
 	}
 	return unix.Mount(abs, target, "", unix.MS_BIND, "")

@@ -57,6 +57,9 @@ func ValidateContainerPath(p string) error {
 	if cleaned == "/dev" || strings.HasPrefix(cleaned, "/dev/") {
 		return fmt.Errorf("container_path %q collides with /dev", p)
 	}
+	if cleaned == "/tmp" || strings.HasPrefix(cleaned, "/tmp/") {
+		return fmt.Errorf("container_path %q is hidden by the post-pivot /tmp tmpfs", p)
+	}
 	if cleaned == "/etc/resolv.conf" {
 		return fmt.Errorf("container_path cannot be /etc/resolv.conf")
 	}
@@ -114,6 +117,43 @@ func EnsureInventory(machineID string, have map[string]*pb.VolumeSpec, mounts []
 		}
 	}
 	return nil
+}
+
+// LiveWriterConflict rejects mounts that another non-stopped assignment on
+// the same machine already holds. Stopped assignments still pin DeleteVolume
+// but are not writers.
+func LiveWriterConflict(self string, mounts []*pb.VolumeMount, assignments map[string]*pb.StrategyAssignmentSpec) error {
+	want := map[string]struct{}{}
+	for _, m := range mounts {
+		if m == nil || m.GetName() == "" {
+			continue
+		}
+		want[m.GetName()] = struct{}{}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	for name, spec := range assignments {
+		if name == self || spec == nil || spec.GetStopped() {
+			continue
+		}
+		for _, m := range spec.GetVolumeMounts() {
+			if _, ok := want[m.GetName()]; ok {
+				return &WriterConflictError{Volume: m.GetName(), Assignment: name}
+			}
+		}
+	}
+	return nil
+}
+
+// WriterConflictError is returned when two non-stopped assignments would
+// mount the same volume on one machine.
+type WriterConflictError struct {
+	Volume, Assignment string
+}
+
+func (e *WriterConflictError) Error() string {
+	return fmt.Sprintf("volume %q is already mounted by running assignment %q", e.Volume, e.Assignment)
 }
 
 // ShadowsBindSame reports whether containerPath would hide a bindSame target

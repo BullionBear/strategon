@@ -157,10 +157,13 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 		if !ok {
 			rec = &store.MachineRecord{MachineID: srv.GetMachine(), Assignments: map[string]*pb.StrategyAssignmentSpec{}, Status: map[string]*pb.StrategyAssignmentStatus{}}
 		}
+		slotName := srv.GetName()
 		if err := volume.EnsureInventory(srv.GetMachine(), rec.Volumes, computed.GetVolumeMounts()); err != nil {
 			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 		}
-		slotName := srv.GetName()
+		if err := volume.LiveWriterConflict(slotName, computed.GetVolumeMounts(), rec.Assignments); err != nil {
+			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
+		}
 		live := rec.Assignments[slotName]
 		sv := view.BuildStrategyView(rec, slotName, c.Store, nil, nil)
 		m := member{srv: srv, computed: computed, view: sv, live: live, rec: rec}

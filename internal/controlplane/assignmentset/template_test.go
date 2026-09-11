@@ -3,6 +3,7 @@ package assignmentset
 import (
 	"strings"
 	"testing"
+	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
@@ -102,6 +103,63 @@ func TestExpandNestedVolumePlaceholder(t *testing.T) {
 	}
 	if got.Env["MFTIK_DATA"] != "${VOLUME:nats-m1-data}" {
 		t.Fatalf("env = %q", got.Env["MFTIK_DATA"])
+	}
+}
+
+func TestExpandSelfReferentialVarDoesNotHang(t *testing.T) {
+	set := natsLike("m1")
+	set.Spec.Members[0].Vars["x"] = "${member.vars.x}"
+	set.Spec.Template.Args = []string{"${member.vars.x}"}
+	done := make(chan error, 1)
+	var got *Expanded
+	go func() {
+		var err error
+		got, err = Expand(set, 0)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Args[0] != "${member.vars.x}" {
+			t.Fatalf("args = %q", got.Args)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expand hung on self-referential member var")
+	}
+}
+
+func TestExpandMutualVarsDoNotHang(t *testing.T) {
+	set := natsLike("m1")
+	set.Spec.Members[0].Vars["x"] = "a${member.vars.y}"
+	set.Spec.Members[0].Vars["y"] = "${member.vars.x}"
+	set.Spec.Template.Args = []string{"${member.vars.x}"}
+	done := make(chan error, 1)
+	go func() {
+		_, err := Expand(set, 0)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expand hung on mutually referential member vars")
+	}
+}
+
+func TestExpandLeavesLiteralPlaceholderInVarValue(t *testing.T) {
+	set := natsLike("m1")
+	set.Spec.Members[0].Vars["home"] = "${HOME}"
+	set.Spec.Template.Args = []string{"${member.vars.home}"}
+	got, err := Expand(set, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Args[0] != "${HOME}" {
+		t.Fatalf("args = %q, want ${HOME} passed through", got.Args)
 	}
 }
 

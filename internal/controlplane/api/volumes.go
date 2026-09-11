@@ -170,10 +170,18 @@ func (s *Server) volumeOccupied(machineID, name string) (string, bool) {
 	return "", false
 }
 
-func validateAssignmentMounts(machineID string, rec *store.MachineRecord, mounts []*pb.VolumeMount) error {
+func validateAssignmentMounts(machineID, strategy string, rec *store.MachineRecord, spec *pb.StrategyAssignmentSpec) error {
 	var have map[string]*pb.VolumeSpec
+	var assignments map[string]*pb.StrategyAssignmentSpec
 	if rec != nil {
 		have = rec.Volumes
+		assignments = rec.Assignments
 	}
-	return volume.EnsureInventory(machineID, have, mounts)
+	if err := volume.EnsureInventory(machineID, have, spec.GetVolumeMounts()); err != nil {
+		return err
+	}
+	if spec.GetStopped() {
+		return nil
+	}
+	return volume.LiveWriterConflict(strategy, spec.GetVolumeMounts(), assignments)
 }

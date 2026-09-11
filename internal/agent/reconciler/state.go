@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
+	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/agent/driver"
 	"github.com/bullionbear/strategon/internal/agent/supervisor"
-	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
 
 // strategyState is the per-strategy actual state. It is read/written ONLY by
@@ -26,28 +26,33 @@ type strategyState struct {
 
 	conditions map[string]*pb.Condition // Live / Ready / BusinessHealthy
 
-	restartCount int32
-	backoff      supervisor.BackoffState
-	lastBadVersion string // version marked bad by auto-rollback; skipped on reconcile
+	restartCount     int32
+	backoff          supervisor.BackoffState
+	lastBadVersion   string // version marked bad by auto-rollback; skipped on reconcile
 	warnedBadVersion string // version already reported via SkipBadVersion; edge-trigger the warning
 	// warnedWaitingShared is the shared_generation for which WaitingForShared
 	// was already emitted (edge-trigger across ticks).
 	warnedWaitingShared int64
 	warnedWaitingVolume int64
-	failedAtGen    int64  // generation that produced FAILED; stay failed until desired moves
+	failedAtGen         int64 // generation that produced FAILED; stay failed until desired moves
 
 	observedGen int64
 
-	stopping     bool      // draining/retiring in progress: process exits are expected
-	probeInflight bool     // a health probe goroutine is running
+	stopping       bool      // draining/retiring in progress: process exits are expected
+	probeInflight  bool      // a health probe goroutine is running
 	healthDeadline time.Time // HEALTH_CHECKING observation window end
-	startedAt    time.Time
-	lastError    string
+	startedAt      time.Time
+	lastError      string
 
 	// stopGraceSeconds caches DeployPolicy.stop_grace_seconds from the last
 	// desired assignment so retirement (when desired is already gone) still
 	// honors the configured SIGTERM→SIGKILL grace.
 	stopGraceSeconds int32
+
+	// volumeMounts is the last seen mount names for this strategy. Kept after
+	// desired drops so volume GC and writer-conflict checks still treat a
+	// draining process as occupying its binds.
+	volumeMounts []string
 
 	// cron tracks next fire times for DesiredState schedules.
 	cron map[string]*cronEntry

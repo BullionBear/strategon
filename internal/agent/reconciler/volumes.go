@@ -1,6 +1,7 @@
 package reconciler
 
 import (
+	"fmt"
 	"os"
 	"sort"
 
@@ -43,6 +44,7 @@ func (r *Reconciler) reconcileVolumes() {
 		}
 		delete(r.volumeErrors, name)
 	}
+	live := r.runningVolumeMounts()
 	entries, err := os.ReadDir(r.deps.Artifacts.VolumesRoot())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -55,6 +57,9 @@ func (r *Reconciler) reconcileVolumes() {
 			continue
 		}
 		if _, want := r.desiredVolumes[e.Name()]; want {
+			continue
+		}
+		if len(live[e.Name()]) > 0 {
 			continue
 		}
 		_ = os.RemoveAll(r.deps.Artifacts.VolumeDir(e.Name()))
@@ -102,17 +107,43 @@ func (r *Reconciler) volumeWriterConflict(self string, mounts []*pb.VolumeMount)
 		if name == self || st.proc == nil {
 			continue
 		}
-		spec := r.desired[name]
-		if spec == nil {
-			continue
-		}
-		for _, m := range spec.GetVolumeMounts() {
-			if _, ok := want[m.GetName()]; ok {
-				return m.GetName()
+		for _, n := range r.mountNames(name, st) {
+			if _, ok := want[n]; ok {
+				return n
 			}
 		}
 	}
 	return ""
+}
+
+func (r *Reconciler) volumeWriterConflictErr(self string, mounts []*pb.VolumeMount) error {
+	if name := r.volumeWriterConflict(self, mounts); name != "" {
+		return fmt.Errorf("volume %q already mounted by another running assignment", name)
+	}
+	return nil
+}
+
+func volumeMountNames(spec *pb.StrategyAssignmentSpec) []string {
+	if spec == nil {
+		return nil
+	}
+	out := make([]string, 0, len(spec.GetVolumeMounts()))
+	for _, m := range spec.GetVolumeMounts() {
+		if n := m.GetName(); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+func (r *Reconciler) mountNames(name string, st *strategyState) []string {
+	if spec := r.desired[name]; spec != nil {
+		return volumeMountNames(spec)
+	}
+	if st == nil {
+		return nil
+	}
+	return append([]string(nil), st.volumeMounts...)
 }
 
 func (r *Reconciler) buildVolumeStatus() *pb.MachineVolumeStatus {
@@ -151,12 +182,8 @@ func (r *Reconciler) runningVolumeMounts() map[string][]string {
 		if st.proc == nil {
 			continue
 		}
-		spec := r.desired[name]
-		if spec == nil {
-			continue
-		}
-		for _, m := range spec.GetVolumeMounts() {
-			out[m.GetName()] = append(out[m.GetName()], name)
+		for _, n := range r.mountNames(name, st) {
+			out[n] = append(out[n], name)
 		}
 	}
 	for _, names := range out {

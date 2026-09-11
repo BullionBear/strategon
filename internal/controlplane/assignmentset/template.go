@@ -3,9 +3,8 @@
 //
 // The control plane substitutes only its own namespaced placeholders and
 // leaves the agent's (${CONFIG}, ${BINARY}, ${RELEASE_DIR}, ${VOLUME:*})
-// verbatim, so the
-// two expansion stages cannot collide. Anything else is rejected at apply time
-// instead of surfacing later as an agent start failure.
+// verbatim, so the two expansion stages cannot collide. Anything else is
+// rejected at apply time instead of surfacing later as an agent start failure.
 package assignmentset
 
 import (
@@ -188,6 +187,11 @@ func expandArgs(raw []string, vals map[string]string) ([]string, error) {
 // agent ones through. Left-to-right ${([^}]*)} on
 // ${VOLUME:${member.name}-data} would steal the first } and yield an
 // unknown body; innermost-first expands ${member.name} first.
+//
+// Each replacement is frozen so a substituted value is never scanned again.
+// That keeps self-referential member vars from looping and leaves literal
+// ${HOME}-style text in a var value untouched. Frozen tokens are restored
+// last-in first so a nested ${VOLUME:${member.name}-data} still resolves.
 func expand(s string, vals map[string]string, where string) (string, error) {
 	if s == "" {
 		return "", nil
@@ -198,22 +202,28 @@ func expand(s string, vals map[string]string, where string) (string, error) {
 		if !ok {
 			break
 		}
+		var repl string
 		if isAgentPlaceholder(body) {
-			key := fmt.Sprintf("\x00AG%d\x00", len(frozen))
-			frozen = append(frozen, s[start:end])
-			s = s[:start] + key + s[end:]
-			continue
+			repl = s[start:end]
+		} else {
+			v, ok := vals[body]
+			if !ok {
+				return "", fmt.Errorf("%s: unknown placeholder ${%s}", where, body)
+			}
+			repl = v
 		}
-		v, ok := vals[body]
-		if !ok {
-			return "", fmt.Errorf("%s: unknown placeholder ${%s}", where, body)
-		}
-		s = s[:start] + v + s[end:]
+		key := freezeKey(len(frozen))
+		frozen = append(frozen, repl)
+		s = s[:start] + key + s[end:]
 	}
-	for i, tok := range frozen {
-		s = strings.Replace(s, fmt.Sprintf("\x00AG%d\x00", i), tok, 1)
+	for i := len(frozen) - 1; i >= 0; i-- {
+		s = strings.Replace(s, freezeKey(i), frozen[i], 1)
 	}
 	return s, nil
+}
+
+func freezeKey(i int) string {
+	return fmt.Sprintf("\x00X%d\x00", i)
 }
 
 func findInnermostPlaceholder(s string) (start, end int, body string, ok bool) {

@@ -124,3 +124,46 @@ func TestApplyAssignmentRejectsMissingVolume(t *testing.T) {
 		t.Fatalf("missing volume: %v", err)
 	}
 }
+
+func TestApplyAssignmentRejectsSecondLiveWriter(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	if _, err := client.CreateVolume(ctx, connect.NewRequest(&pb.CreateVolumeRequest{
+		MachineId: "m1", Name: "data",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId:       "m1",
+		Strategy:        "a",
+		Artifact:        "hello",
+		ArtifactVersion: "v1",
+		VolumeMounts:    []*pb.VolumeMount{{Name: "data", ContainerPath: "/var/lib/mftik"}},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId:       "m1",
+		Strategy:        "b",
+		Artifact:        "hello",
+		ArtifactVersion: "v1",
+		VolumeMounts:    []*pb.VolumeMount{{Name: "data", ContainerPath: "/var/lib/mftik"}},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("second live writer: %v", err)
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId:       "m1",
+		Strategy:        "b",
+		Artifact:        "hello",
+		ArtifactVersion: "v1",
+		Stopped:         true,
+		VolumeMounts:    []*pb.VolumeMount{{Name: "data", ContainerPath: "/var/lib/mftik"}},
+	})); err != nil {
+		t.Fatalf("stopped second assignment is not a writer: %v", err)
+	}
+}

@@ -150,3 +150,28 @@ func TestReservationBlocksUnlessAllowed(t *testing.T) {
 		t.Fatalf("AllowReserved should write: changed=%v err=%v", changed, err)
 	}
 }
+
+func TestApplyRejectsSecondLiveVolumeWriter(t *testing.T) {
+	svc, _, _ := setup(t)
+	a := &pb.StrategyAssignmentSpec{
+		Strategy:     "a",
+		Artifact:     &pb.ArtifactRef{Version: "v1", Digest: "sha256:aaa"},
+		VolumeMounts: []*pb.VolumeMount{{Name: "data", ContainerPath: "/var/lib/mftik"}},
+	}
+	if _, _, err := svc.Apply(context.Background(), Request{MachineID: "m1", Strategy: "a", Spec: a, Action: "Deploy"}); err != nil {
+		t.Fatal(err)
+	}
+	b := &pb.StrategyAssignmentSpec{
+		Strategy:     "b",
+		Artifact:     &pb.ArtifactRef{Version: "v1", Digest: "sha256:aaa"},
+		VolumeMounts: []*pb.VolumeMount{{Name: "data", ContainerPath: "/var/lib/mftik"}},
+	}
+	_, _, err := svc.Apply(context.Background(), Request{MachineID: "m1", Strategy: "b", Spec: b, Action: "Deploy"})
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("second writer: %v", err)
+	}
+	b.Stopped = true
+	if _, _, err := svc.Apply(context.Background(), Request{MachineID: "m1", Strategy: "b", Spec: b, Action: "Deploy"}); err != nil {
+		t.Fatalf("stopped writer should apply: %v", err)
+	}
+}
