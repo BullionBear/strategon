@@ -409,7 +409,7 @@ export type SetDeploymentRequest = Message<"strategyplatform.v1.SetDeploymentReq
   args: string[];
 
   /**
-   * environment (full replace); ${VOLUME:*} only — ${CONFIG}/${BINARY}/${RELEASE_DIR} rejected
+   * environment (full replace); agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
    *
    * @generated from field: map<string, string> env = 6;
    */
@@ -498,7 +498,7 @@ export type ApplyAssignmentRequest = Message<"strategyplatform.v1.ApplyAssignmen
   args: string[];
 
   /**
-   * ${VOLUME:*} only — ${CONFIG}/${BINARY}/${RELEASE_DIR} rejected
+   * agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
    *
    * @generated from field: map<string, string> env = 9;
    */

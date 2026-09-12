@@ -240,6 +240,26 @@ func TestExpandSeparator(t *testing.T) {
 	}
 }
 
+func TestArgsOnlyPlaceholdersAreExactlyAgentPlaceholders(t *testing.T) {
+	// VOLUME is agent-side via prefix, not this map. Everything in
+	// agentPlaceholders is args-only and must be rejected in env — a name
+	// added only here would otherwise pass through as literal text.
+	if len(agentPlaceholders) == 0 {
+		t.Fatal("agentPlaceholders empty")
+	}
+	set := natsLike("m1")
+	for name := range agentPlaceholders {
+		set.Spec.Template.Env["X"] = "${" + name + "}"
+		if err := Validate(set); err == nil {
+			t.Fatalf("${%s} is an agent placeholder but not rejected in env", name)
+		}
+	}
+	set.Spec.Template.Env["X"] = "${VOLUME:nats-a-data}"
+	if err := Validate(set); err != nil {
+		t.Fatalf("VOLUME in env should pass: %v", err)
+	}
+}
+
 func TestValidateRejectsArgsOnlyPlaceholderInEnv(t *testing.T) {
 	for _, name := range []string{"CONFIG", "BINARY", "RELEASE_DIR"} {
 		t.Run(name, func(t *testing.T) {

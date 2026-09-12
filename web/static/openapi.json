@@ -1677,7 +1677,7 @@
               "type": "string",
               "title": "value"
             },
-            "description": "${VOLUME:*} only — ${CONFIG}/${BINARY}/${RELEASE_DIR} rejected"
+            "description": "agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
           },
           "limits": {
             "title": "limits",
@@ -3266,7 +3266,7 @@
               "type": "string",
               "title": "value"
             },
-            "description": "environment (full replace); ${VOLUME:*} only — ${CONFIG}/${BINARY}/${RELEASE_DIR} rejected"
+            "description": "environment (full replace); agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
           }
         },
         "title": "SetDeploymentRequest",

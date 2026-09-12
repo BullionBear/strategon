@@ -19,16 +19,14 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
 
-// agentPlaceholders pass through here. The agent expands ${VOLUME:*} in
-// args and env, and ${CONFIG}/${BINARY}/${RELEASE_DIR} in args only.
+// agentPlaceholders pass through here. The agent expands these in args
+// only; RejectArgsOnlyPlaceholdersInEnv rejects them in env. ${VOLUME:*}
+// is a separate prefix and is legal in both args and env.
 var agentPlaceholders = map[string]bool{
 	"CONFIG":      true,
 	"BINARY":      true,
 	"RELEASE_DIR": true,
 }
-
-// argsOnlyPlaceholders are resolved by the agent in args, never in env.
-var argsOnlyPlaceholders = []string{"CONFIG", "BINARY", "RELEASE_DIR"}
 
 // Expanded is one member's rendered template.
 type Expanded struct {
@@ -121,7 +119,7 @@ func RejectArgsOnlyPlaceholdersInEnv(env map[string]string) error {
 }
 
 func argsOnlyPlaceholderIn(s string) string {
-	for _, name := range argsOnlyPlaceholders {
+	for name := range agentPlaceholders {
 		if strings.Contains(s, "${"+name+"}") {
 			return name
 		}

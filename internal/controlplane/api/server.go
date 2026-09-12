@@ -258,6 +258,8 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 			for k, v := range env {
 				spec.Env[k] = v
 			}
+			// Apply-time only. Deploy (setRuntime=false) clones existing env,
+			// so a stored ${CONFIG} survives a version bump.
 			if err := assignmentset.RejectArgsOnlyPlaceholdersInEnv(spec.Env); err != nil {
 				return nil, nil, "", connect.NewError(connect.CodeInvalidArgument, err)
 			}
