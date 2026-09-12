@@ -306,6 +306,40 @@ func TestVersionBumpRollsOneAtATime(t *testing.T) {
 	}
 }
 
+func TestComputeAssignmentCaptureStdioEqual(t *testing.T) {
+	_, st, _ := setupCluster(t, 1)
+	cl := loadCluster(t, st)
+	art, cfg, err := resolveClusterArtifacts(st, cl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, err := computeAssignment(cl, 0, art, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := computeAssignment(cl, 0, art, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !proto.Equal(a, b) {
+		t.Fatal("unchanged template must proto.Equal")
+	}
+	if a.GetCaptureStdio() {
+		t.Fatal("default capture off")
+	}
+	cl.Spec.Template.CaptureStdio = true
+	c, err := computeAssignment(cl, 0, art, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proto.Equal(a, c) {
+		t.Fatal("capture flip must change spec")
+	}
+	if !c.GetCaptureStdio() {
+		t.Fatal("want capture on")
+	}
+}
+
 func TestRestartOnlyWritesRemaining(t *testing.T) {
 	_, st, asg := setupCluster(t, 3)
 	ctx := context.Background()

@@ -1351,6 +1351,64 @@
         }
       }
     },
+    "/strategyplatform.v1.ControlPlaneService/SetStdioCapture": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "SetStdioCapture",
+        "operationId": "strategyplatform.v1.ControlPlaneService.SetStdioCapture",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.SetStdioCaptureRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.SetStdioCaptureResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/Start": {
       "post": {
         "tags": [
@@ -1702,6 +1760,11 @@
               "$ref": "#/components/schemas/strategyplatform.v1.VolumeMount"
             },
             "title": "volume_mounts"
+          },
+          "captureStdio": {
+            "type": "boolean",
+            "title": "capture_stdio",
+            "description": "Apply is authoritative: omit / false turns capture off."
           }
         },
         "title": "ApplyAssignmentRequest",
@@ -2952,6 +3015,11 @@
               "$ref": "#/components/schemas/strategyplatform.v1.VolumeMount"
             },
             "title": "volume_mounts"
+          },
+          "captureStdio": {
+            "type": "boolean",
+            "title": "capture_stdio",
+            "description": "Durable stdio capture for every member. Human SetStdioCapture is\n rejected on set-owned slots; this field is the only write path."
           }
         },
         "title": "MemberTemplate",
@@ -3418,6 +3486,41 @@
         "title": "SetSharedFilesResponse",
         "additionalProperties": false
       },
+      "strategyplatform.v1.SetStdioCaptureRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "captureStdio": {
+            "type": "boolean",
+            "title": "capture_stdio"
+          }
+        },
+        "title": "SetStdioCaptureRequest",
+        "additionalProperties": false,
+        "description": "SetStdioCapture flips StrategyAssignmentSpec.capture_stdio in place.\n Rejected for set-owned / reserved slots — those go through MemberTemplate."
+      },
+      "strategyplatform.v1.SetStdioCaptureResponse": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "generation",
+            "format": "int64"
+          }
+        },
+        "title": "SetStdioCaptureResponse",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.SharedFileRef": {
         "type": "object",
         "properties": {
@@ -3663,6 +3766,11 @@
             },
             "title": "volume_mounts",
             "description": "Desired volume mounts from StrategyAssignmentSpec (name → container_path)."
+          },
+          "captureStdio": {
+            "type": "boolean",
+            "title": "capture_stdio",
+            "description": "Desired payload stdio capture from StrategyAssignmentSpec.capture_stdio."
           }
         },
         "title": "StrategyView",

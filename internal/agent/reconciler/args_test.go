@@ -386,6 +386,27 @@ func TestBuildStartSpecOCIVolumeBinds(t *testing.T) {
 	}
 }
 
+func TestBuildStartSpecCaptureStdioUsesStrategyDir(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	seedRelease(t, mgr, "s", "v1")
+	if err := mgr.SwitchTo("s", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	spec := assignment("s", "v1", "sha256:aaa", nil)
+	spec.CaptureStdio = true
+	sp, err := r.buildStartSpec(spec, spec.GetArtifact())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.Abs(driver.PayloadLogDir(mgr.StrategyDir("s")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sp.CaptureStdio || sp.PayloadLogDir != want || sp.PayloadVersion != "v1" {
+		t.Fatalf("capture = %+v want dir %s", sp, want)
+	}
+}
+
 func TestMergeEnvNeverNil(t *testing.T) {
 	got := mergeEnv(nil, nil)
 	if got == nil {

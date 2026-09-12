@@ -85,6 +85,99 @@ func TestReconcileIdempotentSteadyState(t *testing.T) {
 	}
 }
 
+func TestCaptureStdioFlipDrainsOnly(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, _, _, _ := newTestReconciler(t, t0)
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5, StopGraceSeconds: 1})
+	spec.CaptureStdio = true
+	r.generation = 8
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.captureStdio = false
+	proc := mustStart(t, fd)
+	st.proc = proc
+	r.actual["s"] = st
+
+	starts := fd.starts()
+	r.reconcile()
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_DRAINING || !st.stopping {
+		t.Fatalf("phase=%v stopping=%v, want DRAINING", st.phase, st.stopping)
+	}
+	if fd.starts() != starts {
+		t.Fatalf("flip must not Start; starts %d -> %d", starts, fd.starts())
+	}
+	r.reconcile()
+	if fd.starts() != starts {
+		t.Fatal("unguarded flip re-fired Start during drain")
+	}
+
+	fd.kill(proc.PID)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && st.proc != nil {
+		select {
+		case ex := <-r.exitCh:
+			r.handleExit(ex)
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	if st.proc != nil {
+		r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	}
+	r.reconcile()
+	if fd.starts() < starts+1 {
+		t.Fatalf("after drain, reconcile should Start; starts=%d", fd.starts())
+	}
+	if !st.captureStdio {
+		t.Fatal("installProcess should record captureStdio")
+	}
+}
+
+func TestStopAndCrashDoNotDeleteStdio(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, mgr, _, _ := newTestReconciler(t, t0)
+	dir := driver.PayloadLogDir(mgr.StrategyDir("s"))
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(dir, driver.PayloadLogName)
+	if err := os.WriteFile(logPath, []byte("keep\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5, StopGraceSeconds: 1})
+	spec.CaptureStdio = true
+	spec.Stopped = true
+	r.generation = 1
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.captureStdio = true
+	proc := mustStart(t, fd)
+	st.proc = proc
+	r.actual["s"] = st
+
+	r.reconcile()
+	fd.kill(proc.PID)
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	if _, err := os.Stat(logPath); err != nil {
+		t.Fatalf("stop must keep .stdio: %v", err)
+	}
+
+	spec.Stopped = false
+	proc2 := mustStart(t, fd)
+	st.proc = proc2
+	st.stopping = false
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc2, t0.Add(2*time.Second))})
+	body, err := os.ReadFile(logPath)
+	if err != nil || string(body) != "keep\n" {
+		t.Fatalf("crash must keep .stdio: %q %v", body, err)
+	}
+}
+
 type countFetcher struct{ n int }
 
 func (c *countFetcher) Fetch(context.Context, *pb.ArtifactRef, string) error {

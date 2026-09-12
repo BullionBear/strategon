@@ -14,6 +14,8 @@ const (
 	flagOCIConfig = "--oci-config"
 	flagOCICWD    = "--oci-cwd"
 	flagOCIVolume = "--oci-volume"
+	flagOCILogDir = "--oci-logdir"
+	flagOCILogVer = "--oci-logver"
 )
 
 // InitArgs is the non-secret flag set passed to --oci-init. Env stays on
@@ -25,6 +27,8 @@ type InitArgs struct {
 	Config  string
 	CWD     string
 	Volumes []VolumeBind
+	LogDir  string
+	LogVer  string
 	Argv    []string
 }
 
@@ -43,6 +47,12 @@ func BuildInitArgs(spec StartSpec) []string {
 	}
 	for _, b := range spec.VolumeBinds {
 		args = append(args, flagOCIVolume+"="+b.Host+":"+b.Container)
+	}
+	if spec.CaptureStdio && spec.PayloadLogDir != "" {
+		args = append(args, flagOCILogDir+"="+spec.PayloadLogDir)
+		if spec.PayloadVersion != "" {
+			args = append(args, flagOCILogVer+"="+spec.PayloadVersion)
+		}
 	}
 	if len(spec.Argv) > 0 {
 		args = append(args, "--")
@@ -81,6 +91,10 @@ func parseInitFlag(args []string) (InitArgs, error) {
 				return InitArgs{}, fmt.Errorf("oci-init: invalid %s=%s", flagOCIVolume, val)
 			}
 			out.Volumes = append(out.Volumes, VolumeBind{Host: host, Container: container})
+		case flagOCILogDir:
+			out.LogDir = val
+		case flagOCILogVer:
+			out.LogVer = val
 		default:
 			return InitArgs{}, fmt.Errorf("oci-init: unknown flag %q", key)
 		}

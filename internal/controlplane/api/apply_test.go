@@ -480,3 +480,86 @@ func TestApplyAssignmentSetRejectsOCIOnExecOnlyMachine(t *testing.T) {
 		t.Fatal("rejected OCI apply wrote a row")
 	}
 }
+
+func TestCaptureStdioApplyGateAndAuthoritative(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 3})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1", CaptureStdio: true,
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("want agent_version>=4, got %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 4})
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1", CaptureStdio: true,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if !rec.Assignments["hello"].GetCaptureStdio() {
+		t.Fatal("expected capture on")
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["hello"].GetCaptureStdio() {
+		t.Fatal("apply without captureStdio must turn it off")
+	}
+
+	if _, err := client.SetStdioCapture(ctx, connect.NewRequest(&pb.SetStdioCaptureRequest{
+		MachineId: "m1", Strategy: "hello", CaptureStdio: true,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	got, err := client.GetMachine(ctx, connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Msg.GetStrategies()[0].GetCaptureStdio() {
+		t.Fatal("StrategyView should echo capture_stdio")
+	}
+}
+
+func TestSetStdioCaptureRejectsReservedSlot(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 4})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	}))
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "trading"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Members: []*pb.SetMember{
+					{Machine: "m1", Name: "n1", Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"}},
+				},
+			},
+		},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.SetAssignment("m1", "n1", &pb.StrategyAssignmentSpec{
+		Strategy: "n1",
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := client.SetStdioCapture(ctx, connect.NewRequest(&pb.SetStdioCaptureRequest{
+		MachineId: "m1", Strategy: "n1", CaptureStdio: true,
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("reserved SetStdioCapture: %v", err)
+	}
+}

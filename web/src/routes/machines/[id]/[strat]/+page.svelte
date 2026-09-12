@@ -113,6 +113,23 @@
 		}
 	}
 
+	async function setCapture(on: boolean) {
+		busy = true;
+		actionError = '';
+		try {
+			const res = await client.setStdioCapture({
+				machineId: id,
+				strategy: strat,
+				captureStdio: on
+			});
+			pendingGen = res.generation;
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : String(e);
+		} finally {
+			busy = false;
+		}
+	}
+
 	async function undeploy() {
 		if (
 			!confirm(
@@ -229,6 +246,17 @@
 					<button class="btn secondary" disabled={busy} onclick={start}>Start</button>
 				{:else}
 					<button class="btn secondary" disabled={busy} onclick={stop}>Stop</button>
+				{/if}
+				{#if view.captureStdio}
+					<button class="btn secondary" disabled={busy} onclick={() => setCapture(false)}
+						>Stop stdio capture</button
+					>
+				{:else}
+					<button
+						class="btn secondary"
+						disabled={busy || (machine?.agentVersion ?? 0) < 4}
+						onclick={() => setCapture(true)}>Capture stdio</button
+					>
 				{/if}
 				<button class="btn danger" disabled={busy} onclick={undeploy}>Undeploy</button>
 			</div>

@@ -18,7 +18,7 @@ func MaybeRunOCIHelper() bool {
 	case flagOCIProbe:
 		os.Exit(0)
 		return true
-	case flagOCIInit:
+	case flagOCIInit, flagStdioTee:
 		os.Exit(2)
 		return true
 	}

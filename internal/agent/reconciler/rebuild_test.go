@@ -69,6 +69,56 @@ func TestRebuildActualStateAdoptsWithoutRestart(t *testing.T) {
 	}
 }
 
+func TestRebuildPreservesCaptureStdio(t *testing.T) {
+	base := t.TempDir()
+	fd := newFakeDriver()
+	t.Cleanup(fd.closeAll)
+	mgr := artifact.NewManager(base, artifact.LocalFetcher{})
+	out := make(chan *pb.AgentMessage, 64)
+	fk := clock.NewFake(time.Unix(1000, 0))
+
+	r1 := New(Deps{
+		Driver: fd, Artifacts: mgr, Health: health.AlwaysReady{}, Clock: fk,
+		Out: out, BaseDir: base, AgentVersion: 4,
+	})
+	r1.ctx = context.Background()
+	proc, err := fd.Start(driver.StartSpec{Strategy: "s", BinaryPath: "/bin/true"}, fk.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.observedGen = 3
+	st.proc = proc
+	st.captureStdio = true
+	r1.actual["s"] = st
+	r1.persistSupervision()
+
+	startsBefore := fd.starts()
+	r2 := New(Deps{
+		Driver: fd, Artifacts: mgr, Health: health.AlwaysReady{}, Clock: fk,
+		Out: out, BaseDir: base, AgentVersion: 4,
+	})
+	r2.ctx = context.Background()
+	r2.rebuildActualState()
+	got := r2.actual["s"]
+	if got == nil || !got.captureStdio {
+		t.Fatalf("captureStdio not restored: %+v", got)
+	}
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 1})
+	spec.CaptureStdio = true
+	r2.generation = 3
+	r2.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	r2.reconcile()
+	if fd.starts() != startsBefore {
+		t.Fatalf("rebuild must not drain captured strategies; starts %d -> %d", startsBefore, fd.starts())
+	}
+	if got.phase == pb.DeployPhase_DEPLOY_PHASE_DRAINING {
+		t.Fatal("must not spawnDrain after rebuild")
+	}
+}
+
 func TestRebuildSkipsDeadOrMismatchedPID(t *testing.T) {
 	base := t.TempDir()
 	fd := newFakeDriver()

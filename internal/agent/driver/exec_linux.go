@@ -34,7 +34,15 @@ func NewExecDriver(cgroupRoot string) *ExecDriver {
 
 // Start launches the process detached in its own session.
 func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
-	cmd := exec.Command(spec.BinaryPath, spec.Args...)
+	var cmd *exec.Cmd
+	if spec.CaptureStdio {
+		if spec.PayloadLogDir == "" {
+			return nil, fmt.Errorf("start %s: capture_stdio without log dir", spec.BinaryPath)
+		}
+		cmd = exec.Command("/proc/self/exe", buildStdioTeeArgs(spec)...)
+	} else {
+		cmd = exec.Command(spec.BinaryPath, spec.Args...)
+	}
 	cmd.Env = spec.Env
 	cmd.Dir = spec.WorkDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{

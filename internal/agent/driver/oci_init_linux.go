@@ -17,42 +17,51 @@ func runOCIInit(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	if err := applyRootfs(ia); err != nil {
+	code, err := applyRootfs(ia)
+	if err != nil {
 		fmt.Fprintln(os.Stderr, "oci-init:", err)
+		if code != 0 {
+			return code
+		}
 		return 1
 	}
-	return 1
+	return code
 }
 
-func applyRootfs(ia InitArgs) error {
+func applyRootfs(ia InitArgs) (int, error) {
 	if ia.Rootfs == "" {
-		return fmt.Errorf("missing --oci-rootfs")
+		return 1, fmt.Errorf("missing --oci-rootfs")
 	}
 	rootfs, err := filepath.Abs(ia.Rootfs)
 	if err != nil {
-		return err
+		return 1, err
 	}
 
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
-		return fmt.Errorf("make-rprivate: %w", err)
+		return 1, fmt.Errorf("make-rprivate: %w", err)
 	}
 	if err := unix.Mount(rootfs, rootfs, "", unix.MS_BIND, ""); err != nil {
-		return fmt.Errorf("bind rootfs: %w", err)
+		return 1, fmt.Errorf("bind rootfs: %w", err)
 	}
 	oldroot := filepath.Join(rootfs, ".oldroot")
 	if err := os.MkdirAll(oldroot, 0o700); err != nil {
-		return fmt.Errorf("mkdir .oldroot: %w", err)
+		return 1, fmt.Errorf("mkdir .oldroot: %w", err)
 	}
 
 	if err := bindSame(rootfs, ia.Work, true); err != nil {
-		return fmt.Errorf("bind work: %w", err)
+		return 1, fmt.Errorf("bind work: %w", err)
 	}
 	if err := bindSame(rootfs, ia.Shared, true); err != nil {
-		return fmt.Errorf("bind shared: %w", err)
+		return 1, fmt.Errorf("bind shared: %w", err)
 	}
 	if ia.Config != "" {
 		if err := bindConfig(rootfs, ia.Config); err != nil {
-			return fmt.Errorf("bind config: %w", err)
+			return 1, fmt.Errorf("bind config: %w", err)
+		}
+	}
+	if ia.LogDir != "" {
+		if err := bindSame(rootfs, ia.LogDir, true); err != nil {
+			return 1, fmt.Errorf("bind stdio log: %w", err)
 		}
 	}
 	for _, p := range []string{"/etc/resolv.conf", "/dev/null", "/dev/zero", "/dev/urandom"} {
@@ -61,12 +70,12 @@ func applyRootfs(ia InitArgs) error {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return fmt.Errorf("bind %s: %w", p, err)
+			return 1, fmt.Errorf("bind %s: %w", p, err)
 		}
 	}
 	for _, b := range ia.Volumes {
 		if err := bindVolume(rootfs, b.Host, b.Container); err != nil {
-			return fmt.Errorf("bind volume %s: %w", b.Container, err)
+			return 1, fmt.Errorf("bind volume %s: %w", b.Container, err)
 		}
 	}
 
@@ -79,21 +88,21 @@ func applyRootfs(ia InitArgs) error {
 	// with — a laxer new mount fails the same check.
 	procTarget := filepath.Join(rootfs, "proc")
 	if err := os.MkdirAll(procTarget, 0o755); err != nil {
-		return err
+		return 1, err
 	}
 	if err := unix.Mount("proc", procTarget, "proc",
 		unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
-		return fmt.Errorf("mount proc: %w", err)
+		return 1, fmt.Errorf("mount proc: %w", err)
 	}
 
 	if err := unix.PivotRoot(rootfs, oldroot); err != nil {
-		return fmt.Errorf("pivot_root: %w", err)
+		return 1, fmt.Errorf("pivot_root: %w", err)
 	}
 	if err := os.Chdir("/"); err != nil {
-		return err
+		return 1, err
 	}
 	if err := unix.Unmount("/.oldroot", unix.MNT_DETACH); err != nil {
-		return fmt.Errorf("unmount oldroot: %w", err)
+		return 1, fmt.Errorf("unmount oldroot: %w", err)
 	}
 	_ = os.Remove("/.oldroot")
 
@@ -103,33 +112,56 @@ func applyRootfs(ia InitArgs) error {
 	}
 	if cwd != "" {
 		if err := os.MkdirAll(cwd, 0o755); err != nil {
-			return fmt.Errorf("mkdir cwd: %w", err)
+			return 1, fmt.Errorf("mkdir cwd: %w", err)
 		}
 		if err := os.Chdir(cwd); err != nil {
-			return fmt.Errorf("chdir %s: %w", cwd, err)
+			return 1, fmt.Errorf("chdir %s: %w", cwd, err)
 		}
 	}
 
+	// Open the host .stdio bind before /tmp is covered by tmpfs. Tests (and
+	// a --base under /tmp) place work + .stdio there; a path lookup after
+	// the mount would create a tmpfs shadow or fail chdir in os/exec.
+	var rot *SizeRotator
+	if ia.LogDir != "" {
+		var err error
+		rot, err = OpenSizeRotator(ia.LogDir, PayloadLogName, PayloadLogMaxBytes, PayloadLogArchives)
+		if err != nil {
+			return 1, fmt.Errorf("stdio log: %w", err)
+		}
+		defer rot.Close()
+	}
+
 	if err := os.MkdirAll("/tmp", 0o1777); err != nil {
-		return fmt.Errorf("mkdir /tmp: %w", err)
+		return 1, fmt.Errorf("mkdir /tmp: %w", err)
 	}
 	if err := unix.Mount("tmpfs", "/tmp", "tmpfs", unix.MS_NOSUID|unix.MS_NODEV, "mode=1777"); err != nil {
-		return fmt.Errorf("mount tmpfs /tmp: %w", err)
+		return 1, fmt.Errorf("mount tmpfs /tmp: %w", err)
 	}
 	// Remount after tmpfs so /tmp stays writable. Include nosuid/nodev so a
 	// remount does not drop those locked flags (EPERM in a rootless userns,
 	// same class as mount proc). Do not set MS_NOEXEC: the payload lives on
 	// this rootfs and must be executable.
 	if err := unix.Mount("", "/", "", unix.MS_REMOUNT|unix.MS_BIND|unix.MS_RDONLY|unix.MS_NOSUID|unix.MS_NODEV, ""); err != nil {
-		return fmt.Errorf("remount rootfs ro: %w", err)
+		return 1, fmt.Errorf("remount rootfs ro: %w", err)
 	}
 
 	if len(ia.Argv) == 0 {
-		return fmt.Errorf("empty argv")
+		return 1, fmt.Errorf("empty argv")
 	}
 	bin, err := lookPathAfterPivot(ia.Argv[0], os.Getenv("PATH"))
 	if err != nil {
-		return err
+		return 1, err
+	}
+	if rot != nil {
+		// Inherit the cwd inode pinned above. Do not pass Dir: os/exec
+		// would look the path up again after /tmp is gone.
+		return runStdioTee(stdioTeeOpts{
+			Rot:     rot,
+			Version: ia.LogVer,
+			Argv:    append([]string{bin}, ia.Argv[1:]...),
+			Env:     os.Environ(),
+		})
 	}
 	// Preserve the oci-init.log FD across discardStdio so a failed exec
 	// (ENOENT missing interpreter, ENOEXEC wrong arch) can still be written
@@ -142,7 +174,7 @@ func applyRootfs(ia InitArgs) error {
 	_ = discardStdio()
 	err = unix.Exec(bin, ia.Argv, os.Environ())
 	writeExecFailure(logFD, dupErr, bin, err)
-	return err
+	return 1, err
 }
 
 // writeExecFailure records an exec error on the CLOEXEC dup of the init log.

@@ -69,6 +69,8 @@ message StrategyView {
   bool stopped = 22;
   // Desired volume mounts from StrategyAssignmentSpec (name → container_path).
   repeated VolumeMount volume_mounts = 23;
+  // Desired payload stdio capture from StrategyAssignmentSpec.capture_stdio.
+  bool capture_stdio = 24;
 }
 
 message ListMachinesRequest {
@@ -137,6 +139,8 @@ message ApplyAssignmentRequest {
   // name differs from the binary, e.g. strategy=nats-m4 artifact=nats.
   string artifact = 13;
   repeated VolumeMount volume_mounts = 14;
+  // Apply is authoritative: omit / false turns capture off.
+  bool capture_stdio = 15;
 }
 
 message ApplyAssignmentResponse {
@@ -179,6 +183,18 @@ message StartRequest {
 }
 
 message StartResponse {
+  int64 generation = 1;
+}
+
+// SetStdioCapture flips StrategyAssignmentSpec.capture_stdio in place.
+// Rejected for set-owned / reserved slots — those go through MemberTemplate.
+message SetStdioCaptureRequest {
+  string machine_id = 1;
+  string strategy = 2;
+  bool capture_stdio = 3;
+}
+
+message SetStdioCaptureResponse {
   int64 generation = 1;
 }
 
@@ -413,6 +429,7 @@ service ControlPlaneService {
   rpc DeleteAssignmentSet(DeleteAssignmentSetRequest) returns (DeleteAssignmentSetResponse);
   rpc Stop(StopRequest) returns (StopResponse);
   rpc Start(StartRequest) returns (StartResponse);
+  rpc SetStdioCapture(SetStdioCaptureRequest) returns (SetStdioCaptureResponse);
   rpc Undeploy(UndeployRequest) returns (UndeployResponse);
   rpc SetSchedule(SetScheduleRequest) returns (SetScheduleResponse);
 

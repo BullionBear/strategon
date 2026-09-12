@@ -128,8 +128,14 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 		if err := assignmentset.ValidateMemberName(srv.GetName()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: %w", i, err))
 		}
-		if _, ok := s.store.GetMachine(srv.GetMachine()); !ok {
+		rec, ok := s.store.GetMachine(srv.GetMachine())
+		if !ok {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: machine %q not registered", i, srv.GetMachine()))
+		}
+		if spec.GetTemplate().GetCaptureStdio() {
+			if err := requireAgentCapability(srv.GetMachine(), rec, MinStdioCaptureAgentVersion, "stdio capture"); err != nil {
+				return nil, err
+			}
 		}
 		if _, dup := seenName[srv.GetName()]; dup {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate member name %q", srv.GetName()))

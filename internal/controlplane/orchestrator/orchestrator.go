@@ -559,11 +559,12 @@ func computeAssignment(cl *pb.AssignmentSet, idx int, art, cfg *pb.ArtifactRef) 
 		return nil, fmt.Errorf("member index %d out of range", idx)
 	}
 	spec := &pb.StrategyAssignmentSpec{
-		Strategy: members[idx].GetName(),
-		Artifact: proto.Clone(art).(*pb.ArtifactRef),
-		Stopped:  false,
-		Args:     rendered.Args,
-		Env:      rendered.Env,
+		Strategy:     members[idx].GetName(),
+		Artifact:     proto.Clone(art).(*pb.ArtifactRef),
+		Stopped:      false,
+		Args:         rendered.Args,
+		Env:          rendered.Env,
+		CaptureStdio: tmpl.GetCaptureStdio(),
 	}
 	if p := tmpl.GetDeployPolicy(); p != nil {
 		spec.DeployPolicy = proto.Clone(p).(*pb.DeployPolicy)

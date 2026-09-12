@@ -54,6 +54,10 @@ type strategyState struct {
 	// draining process as occupying its binds.
 	volumeMounts []string
 
+	// captureStdio is what the running process was started with. Persisted
+	// in the supervision file so a self-update does not drain on rebuild.
+	captureStdio bool
+
 	// cron tracks next fire times for DesiredState schedules.
 	cron map[string]*cronEntry
 }

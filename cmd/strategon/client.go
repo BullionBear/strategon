@@ -36,11 +36,28 @@ func normalizeAddr(addr string) string {
 }
 
 func newClient(cfg cliConfig) strategyplatformv1connect.ControlPlaneServiceClient {
+	hc := http.DefaultClient
 	opts := []connect.ClientOption{}
 	if tok := strings.TrimSpace(cfg.Token); tok != "" {
+		hc = &http.Client{Transport: bearerRoundTripper{base: http.DefaultTransport, token: tok}}
 		opts = append(opts, connect.WithInterceptors(bearerInterceptor(tok)))
 	}
-	return strategyplatformv1connect.NewControlPlaneServiceClient(http.DefaultClient, normalizeAddr(cfg.Addr), opts...)
+	return strategyplatformv1connect.NewControlPlaneServiceClient(hc, normalizeAddr(cfg.Addr), opts...)
+}
+
+type bearerRoundTripper struct {
+	base  http.RoundTripper
+	token string
+}
+
+func (t bearerRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	r := req.Clone(req.Context())
+	r.Header.Set("Authorization", "Bearer "+t.token)
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(r)
 }
 
 func bearerInterceptor(token string) connect.UnaryInterceptorFunc {
