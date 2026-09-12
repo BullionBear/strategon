@@ -184,9 +184,9 @@ type ControlPlaneServiceClient interface {
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
 	GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error)
-	// Browse a strategy WorkDir on a connected agent (one directory level).
+	// Browse an assignment slot on a connected agent (one directory level).
 	BrowseDir(context.Context, *connect.Request[v1.BrowseDirRequest]) (*connect.Response[v1.BrowseDirResponse], error)
-	// Download one or more WorkDir paths. A single regular file streams as-is;
+	// Download one or more assignment-slot paths. A single regular file streams as-is;
 	// multiple paths (or a directory) stream as a tar.gz built on the agent.
 	DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest]) (*connect.ServerStreamForClient[v1.DownloadChunk], error)
 }
@@ -577,9 +577,9 @@ type ControlPlaneServiceHandler interface {
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
 	GetMachineMetrics(context.Context, *connect.Request[v1.GetMachineMetricsRequest]) (*connect.Response[v1.GetMachineMetricsResponse], error)
-	// Browse a strategy WorkDir on a connected agent (one directory level).
+	// Browse an assignment slot on a connected agent (one directory level).
 	BrowseDir(context.Context, *connect.Request[v1.BrowseDirRequest]) (*connect.Response[v1.BrowseDirResponse], error)
-	// Download one or more WorkDir paths. A single regular file streams as-is;
+	// Download one or more assignment-slot paths. A single regular file streams as-is;
 	// multiple paths (or a directory) stream as a tar.gz built on the agent.
 	DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest], *connect.ServerStream[v1.DownloadChunk]) error
 }

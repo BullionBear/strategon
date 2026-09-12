@@ -1,5 +1,5 @@
 // TestWorkDirBrowseAndDownloadEndToEnd spins up control plane + in-process
-// agent, browses a temp strategy WorkDir, and downloads single + multi files
+// agent, browses a temp assignment slot, and downloads single + multi files
 // through the human API. Also asserts heartbeats keep updating during a
 // moderately large transfer.
 package integration

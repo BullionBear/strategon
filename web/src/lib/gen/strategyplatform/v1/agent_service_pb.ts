@@ -303,8 +303,8 @@ export const StatusReportSchema: GenMessage<StatusReport> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_agent_service, 8);
 
 /**
- * List a directory under a strategy's WorkDir. path is relative to the
- * strategy root; "" or "." means the root itself.
+ * List a directory under an assignment slot. path is relative to the
+ * slot root; "" or "." means the root itself.
  *
  * @generated from message strategyplatform.v1.ListDir
  */
@@ -340,7 +340,7 @@ export const ListDirSchema: GenMessage<ListDir> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_agent_service, 9);
 
 /**
- * Fetch one or more files under a strategy's WorkDir. One path streams the
+ * Fetch one or more files under an assignment slot. One path streams the
  * file as-is; multiple paths stream a tar.gz the agent builds on the fly.
  *
  * @generated from message strategyplatform.v1.FetchFiles

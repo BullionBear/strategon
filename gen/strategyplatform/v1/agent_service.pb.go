@@ -726,8 +726,8 @@ func (x *StatusReport) GetVolumes() *MachineVolumeStatus {
 	return nil
 }
 
-// List a directory under a strategy's WorkDir. path is relative to the
-// strategy root; "" or "." means the root itself.
+// List a directory under an assignment slot. path is relative to the
+// slot root; "" or "." means the root itself.
 type ListDir struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -800,7 +800,7 @@ func (x *ListDir) GetVolume() string {
 	return ""
 }
 
-// Fetch one or more files under a strategy's WorkDir. One path streams the
+// Fetch one or more files under an assignment slot. One path streams the
 // file as-is; multiple paths stream a tar.gz the agent builds on the fly.
 type FetchFiles struct {
 	state         protoimpl.MessageState

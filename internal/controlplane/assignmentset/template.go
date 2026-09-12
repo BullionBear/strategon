@@ -2,13 +2,15 @@
 // per-machine values the controller writes onto a StrategyAssignmentSpec.
 //
 // The control plane substitutes only its own namespaced placeholders and
-// leaves the agent's (${CONFIG}, ${BINARY}, ${RELEASE_DIR}, ${VOLUME:*})
-// verbatim, so the two expansion stages cannot collide. Anything else is
-// rejected at apply time instead of surfacing later as an agent start failure.
+// leaves the agent's (${CONFIG}, ${BINARY}, ${RELEASE_DIR}, ${WORK_DIR},
+// ${SHARED_DIR}, ${VOLUME:*}) verbatim, so the two expansion stages cannot
+// collide. Anything else is rejected at apply time instead of surfacing later
+// as an agent start failure.
 //
 // ${CONFIG}/${BINARY}/${RELEASE_DIR} are args-only on the agent. After
 // substitution they are rejected in env so they cannot reach a process as
-// literal text. ${VOLUME:*} is legal in both args and env.
+// literal text. ${WORK_DIR}, ${SHARED_DIR} and ${VOLUME:*} are legal in
+// both args and env.
 package assignmentset
 
 import (
@@ -19,10 +21,18 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
 
-// agentPlaceholders pass through here. The agent expands these in args
-// only; RejectArgsOnlyPlaceholdersInEnv rejects them in env. ${VOLUME:*}
-// is a separate prefix and is legal in both args and env.
+// agentPlaceholders pass through here. argsOnlyPlaceholders are rejected
+// in env; the rest (WORK_DIR, SHARED_DIR) and the VOLUME:* prefix are
+// legal in both args and env.
 var agentPlaceholders = map[string]bool{
+	"CONFIG":      true,
+	"BINARY":      true,
+	"RELEASE_DIR": true,
+	"WORK_DIR":    true,
+	"SHARED_DIR":  true,
+}
+
+var argsOnlyPlaceholders = map[string]bool{
 	"CONFIG":      true,
 	"BINARY":      true,
 	"RELEASE_DIR": true,
@@ -119,7 +129,7 @@ func RejectArgsOnlyPlaceholdersInEnv(env map[string]string) error {
 }
 
 func argsOnlyPlaceholderIn(s string) string {
-	for name := range agentPlaceholders {
+	for name := range argsOnlyPlaceholders {
 		if strings.Contains(s, "${"+name+"}") {
 			return name
 		}
@@ -272,8 +282,8 @@ func findInnermostPlaceholder(s string) (start, end int, body string, ok bool) {
 	return 0, 0, "", false
 }
 
-// ValidateMemberName rejects names that cannot be a WorkDir segment
-// (<base>/<name>). Same rules as the agent's strategy-name check.
+// ValidateMemberName rejects names that cannot be an assignment-slot
+// segment (<base>/<name>). Same rules as the agent's strategy-name check.
 // Callers must persist the trimmed name; this function does not rewrite.
 func ValidateMemberName(name string) error {
 	name = strings.TrimSpace(name)

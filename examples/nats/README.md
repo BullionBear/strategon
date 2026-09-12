@@ -108,7 +108,8 @@ Human `Deploy` / `ApplyAssignment` / `Rollback` of a **member name**
 `status.assignment_key` flips to `member`. After that, `nats` is an
 ordinary strategy name again.
 
-`member.name` is the WorkDir (`<base>/<name>`). The agent does not share a
+`member.name` is the assignment slot (`<base>/<name>`; process cwd is
+`<base>/<name>/work`). The agent does not share a
 blob cache across names: three members on one host unpack the artifact
 three times. Renaming a member is recreate (new empty dir; undeploy does
 not delete the old one). To apply a human slot whose name is not the

@@ -6,7 +6,7 @@
 //	<base>/<strategy>/releases/<version>/oci.json      # OCI marker (digest + config)
 //	<base>/<strategy>/releases/<version>/config[.ext]  # optional config (ext from URI)
 //	<base>/<strategy>/releases/<version>/shared -> ../../../shared
-//	<base>/<strategy>/work                             # OCI cwd (not under releases/)
+//	<base>/<strategy>/work                             # process cwd (EXEC and OCI; not under releases/)
 //	<base>/<strategy>/current -> releases/<version>    # atomic switch point
 //	<base>/shared/<name> -> store/<digest>/<name>      # machine-level shared files
 //	<base>/shared/store/<digest>/<name>                # content-addressed store

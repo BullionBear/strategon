@@ -36,6 +36,10 @@ func TestExpandPlaceholders(t *testing.T) {
 	if _, err := expandPlaceholders("${TYPO}", vals); err == nil {
 		t.Fatal("expected unknown placeholder error")
 	}
+	got = expandKnownPlaceholders("${WORK_DIR}/data ${CONFIG}", map[string]string{"WORK_DIR": "/w"})
+	if got != "/w/data ${CONFIG}" {
+		t.Fatalf("expandKnownPlaceholders = %q", got)
+	}
 }
 
 func TestRenderArgsViaCurrentSymlink(t *testing.T) {
@@ -123,6 +127,16 @@ func TestBuildStartSpecUsesLaunchTypeNotSpecDriver(t *testing.T) {
 	if sp.Driver != driver.KindExec {
 		t.Fatalf("driver = %v, want EXEC from launch type", sp.Driver)
 	}
+	wantWork, err := filepath.Abs(mgr.WorkDir("s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp.WorkDir != wantWork {
+		t.Fatalf("EXEC cwd = %q, want WorkDir %q", sp.WorkDir, wantWork)
+	}
+	if _, err := os.Stat(sp.WorkDir); err != nil {
+		t.Fatalf("WorkDir not created: %v", err)
+	}
 }
 
 // A nil Env means "inherit the parent's environment" to exec.Cmd, which would
@@ -189,6 +203,107 @@ func TestExpandVolumePlaceholderEXECAndOCI(t *testing.T) {
 	}
 	if got["MFTIK_DATA"] != "/var/lib/mftik" {
 		t.Fatalf("oci env = %#v", got)
+	}
+}
+
+func TestExpandWorkDirAndSharedDirBothDrivers(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	seedRelease(t, mgr, "s", "v1")
+	if err := mgr.SwitchTo("s", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	wantWork, err := filepath.Abs(mgr.WorkDir("s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantShared, err := filepath.Abs(mgr.SharedRoot())
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := &pb.StrategyAssignmentSpec{
+		Strategy: "s",
+		Args:     []string{"--work", "${WORK_DIR}", "--shared", "${SHARED_DIR}"},
+		Env: map[string]string{
+			"DATA":   "${WORK_DIR}/data",
+			"SHARED": "${SHARED_DIR}/instruments.json",
+			"KEEP":   "${CONFIG}",
+		},
+	}
+	for _, launch := range []*pb.ArtifactRef{
+		{Type: pb.ArtifactType_ARTIFACT_TYPE_BINARY, Version: "v1"},
+		{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Version: "v2"},
+	} {
+		args, err := r.renderArgs(spec, launch)
+		if err != nil {
+			t.Fatalf("%s args: %v", launch.GetType(), err)
+		}
+		if len(args) != 4 || args[1] != wantWork || args[3] != wantShared {
+			t.Fatalf("%s args = %#v, want work %s shared %s", launch.GetType(), args, wantWork, wantShared)
+		}
+		env, err := r.renderEnv(spec, launch, envPairs(spec.GetEnv()))
+		if err != nil {
+			t.Fatalf("%s env: %v", launch.GetType(), err)
+		}
+		got := map[string]string{}
+		for _, e := range env {
+			k, v, _ := strings.Cut(e, "=")
+			got[k] = v
+		}
+		if got["DATA"] != wantWork+"/data" {
+			t.Fatalf("%s DATA = %q, want %s/data", launch.GetType(), got["DATA"], wantWork)
+		}
+		if got["SHARED"] != wantShared+"/instruments.json" {
+			t.Fatalf("%s SHARED = %q", launch.GetType(), got["SHARED"])
+		}
+		if got["KEEP"] != "${CONFIG}" {
+			t.Fatalf("${CONFIG} in env must stay verbatim: %#v", got)
+		}
+	}
+}
+
+func TestBuildStartSpecWorkDirBothDrivers(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	seedRelease(t, mgr, "s", "v2")
+	rootfs := mgr.RootfsPath("s", "v2")
+	if err := os.MkdirAll(rootfs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := []byte(`{"schema_version":1,"entrypoint":["/bin/true"]}`)
+	if err := os.WriteFile(mgr.OCIMetaPath("s", "v2"), meta, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.SwitchTo("s", "v2"); err != nil {
+		t.Fatal(err)
+	}
+	wantWork, err := filepath.Abs(mgr.WorkDir("s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ociLaunch := &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Version: "v2"}
+	spec := &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: ociLaunch}
+	sp, err := r.buildStartSpec(spec, ociLaunch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp.WorkDir != wantWork {
+		t.Fatalf("OCI cwd = %q, want %q", sp.WorkDir, wantWork)
+	}
+
+	binLaunch := artRef("v1", "sha256:v1")
+	seedRelease(t, mgr, "s", "v1")
+	if err := mgr.SwitchTo("s", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	sp, err = r.buildStartSpec(spec, binLaunch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp.Driver != driver.KindExec {
+		t.Fatalf("driver = %v", sp.Driver)
+	}
+	if sp.WorkDir != wantWork {
+		t.Fatalf("EXEC cwd = %q, want same WorkDir %q", sp.WorkDir, wantWork)
 	}
 }
 

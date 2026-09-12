@@ -156,6 +156,29 @@ func TestApplyAssignmentSetRejectsArgsOnlyPlaceholderInEnv(t *testing.T) {
 	}
 }
 
+func TestApplyAssignmentAcceptsWorkDirInEnv(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId:       "m1",
+		Strategy:        "hello",
+		ArtifactVersion: "v1",
+		Env:             map[string]string{"DATA": "${WORK_DIR}/data", "REF": "${SHARED_DIR}/x"},
+	}))
+	if err != nil {
+		t.Fatalf("WORK_DIR/SHARED_DIR in env: %v", err)
+	}
+	rec, _ := st.GetMachine("m1")
+	got := rec.Assignments["hello"].GetEnv()
+	if got["DATA"] != "${WORK_DIR}/data" || got["REF"] != "${SHARED_DIR}/x" {
+		t.Fatalf("env = %#v", got)
+	}
+}
+
 func TestApplyAssignmentErrorClasses(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()

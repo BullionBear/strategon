@@ -28,8 +28,8 @@ type Client struct {
 	Out         <-chan *pb.AgentMessage // northbound messages from the reconciler
 	Submit      func(*pb.DesiredState)  // deliver DesiredState to the reconciler
 	ObservedGen func() int64            // for heartbeat stamping
-	// Artifacts provides StrategyDir for WorkDir browse/fetch. Optional; if
-	// nil, ListDir/FetchFiles are Nack'd.
+	// Artifacts provides the assignment-slot root for browse/fetch. Optional;
+	// if nil, ListDir/FetchFiles are Nack'd.
 	Artifacts *artifact.Manager
 	// Resources / Processes supply the latest instantaneous telemetry snapshot
 	// for Heartbeat (sampled off the reconciler critical path).

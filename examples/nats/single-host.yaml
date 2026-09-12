@@ -33,7 +33,7 @@ spec:
 
   # Three NATS nodes on one agent. Ports must not collide. This is a lab
   # topology: one host dying takes the whole cluster with it.
-  # member.name is the assignment slot and WorkDir; renaming is recreate.
+  # member.name is the assignment slot (process cwd is work/); renaming is recreate.
   members:
     - machine: m1
       name: nats-a

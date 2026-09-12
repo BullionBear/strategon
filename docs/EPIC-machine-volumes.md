@@ -38,7 +38,8 @@ previous BINARY.
    validated so one manifest applies to both. EXEC start ignores
    `containerPath` (no bind). OCI start bind-mounts
    `<base>/volumes/<name>` at `containerPath`. Path injection is
-   `${VOLUME:<name>}` in args and (only that family) env. Resolution
+   `${VOLUME:<name>}` in args and env (alongside `${WORK_DIR}` /
+   `${SHARED_DIR}`). Resolution
    follows the **launch artifact**, not `spec.driver`, so auto-rollback
    from OCI to BINARY keeps a defined path.
 7. **One live writer per volume.** A second running assignment mounting
@@ -102,9 +103,10 @@ Agent `placeholderRE` stays `[A-Za-z_][A-Za-z0-9_]*` for
 
 The capture is then passed through `volume.ValidateName`.
 
-- **args:** all known placeholders, including `VOLUME`.
-- **env:** only `${VOLUME:*}`. `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}`
-  are rejected at apply (orchestration contract: they do not expand in env).
+- **args:** all known placeholders, including `VOLUME`, `WORK_DIR`, `SHARED_DIR`.
+- **env:** `${VOLUME:*}`, `${WORK_DIR}`, `${SHARED_DIR}`. `${CONFIG}` /
+  `${BINARY}` / `${RELEASE_DIR}` are rejected at apply (orchestration
+  contract: they do not expand in env).
 - OCI → that mount's `containerPath`.
 - EXEC → `filepath.Abs(VolumeDir(name))`.
 - `name` must appear in this assignment's `volumeMounts`.
