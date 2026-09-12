@@ -59,12 +59,13 @@ type MachineRecord struct {
 	PreviousArtifacts map[string]*pb.ArtifactRef
 	ObservedGen       int64
 	// Machine-scoped shared files (independent of assignment generations).
-	SharedGeneration int64
-	SharedFiles      map[string]*pb.SharedFileSpec // name -> spec with ArtifactRef
-	SharedStatus     *pb.MachineSharedStatus       // latest agent-reported status
+	SharedGeneration  int64
+	SharedFiles       map[string]*pb.SharedFileSpec // name -> spec with ArtifactRef
+	SharedStatus      *pb.MachineSharedStatus       // latest agent-reported status
 	VolumesGeneration int64
 	Volumes           map[string]*pb.VolumeSpec // name -> spec
 	VolumesStatus     *pb.MachineVolumeStatus
+	SlotsStatus       *pb.MachineSlotStatus // latest agent-reported on-disk slots
 }
 
 // Store is the control-plane persistence boundary.
@@ -108,6 +109,8 @@ type Store interface {
 	// undeploy/drain does not leave a DRAINING tombstone in the UI).
 	// report.Shared is persisted as the machine's shared_status when present.
 	// report.Volumes is persisted as volumes_status when present.
+	// report.Slots is persisted as slots_status when present (nil = do not
+	// overwrite; empty wrapper = walked, nothing on disk).
 	ApplyStatus(machineID string, report *pb.StatusReport) error
 
 	// ApplyHeartbeat records a heartbeat (resources, observed generation, agent versions).

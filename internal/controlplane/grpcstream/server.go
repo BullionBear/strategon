@@ -225,6 +225,11 @@ func (s *Server) handleAgentMessage(machineID string, msg *pb.AgentMessage) {
 			chunk := p.FileChunk
 			go s.broker.DeliverChunk(chunk)
 		}
+	case *pb.AgentMessage_ReapStrategiesResult:
+		if s.broker != nil {
+			result := p.ReapStrategiesResult
+			go s.broker.DeliverReapResult(result)
+		}
 	default:
 		s.logger.Warn("unhandled agent message", "machine_id", machineID)
 	}

@@ -42,7 +42,7 @@ func main() {
 	machineID := flag.String("machine-id", "", "machine id (defaults to client cert CN when mTLS is enabled)")
 	base := flag.String("base", "/opt/strategies", "strategy release base directory")
 	cgroupRoot := flag.String("cgroup-root", "", "delegated cgroup v2 root (empty disables confinement)")
-	agentVersion := flag.Int("agent-version", 4, "agent capability version (monotonic)")
+	agentVersion := flag.Int("agent-version", 5, "agent capability version (monotonic)")
 	sharedRetention := flag.Int("shared-retention", 3, "shared-file store entries to retain per name (including live)")
 	releaseRetention := flag.Int("release-retention", 3, "release versions to retain per strategy (including current)")
 	metricsListen := flag.String("metrics-listen", "", "optional Prometheus text /metrics listen address (e.g. 127.0.0.1:9101); empty disables")
@@ -138,6 +138,7 @@ func main() {
 		Client:      agentClient,
 		Out:         out,
 		Submit:      rec.SubmitDesired,
+		Reap:        rec.SubmitReap,
 		ObservedGen: rec.ObservedGeneration,
 		Artifacts:   artifacts,
 		Resources:   collector.HeartbeatResources,

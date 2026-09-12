@@ -15,6 +15,7 @@
 	import Sparkline from '$lib/Sparkline.svelte';
 	import SharedFilesPanel from '$lib/SharedFilesPanel.svelte';
 	import VolumesPanel from '$lib/VolumesPanel.svelte';
+	import SlotsPanel from '$lib/SlotsPanel.svelte';
 
 	let machine = $state<Machine | null>(null);
 	let live = $state(false);
@@ -204,6 +205,11 @@
 
 		<SharedFilesPanel machineId={id} />
 		<VolumesPanel machineId={id} />
+		<SlotsPanel
+			machineId={id}
+			reachable={machine.reachable}
+			agentVersion={machine.agentVersion}
+		/>
 
 		<h2 style="margin-top:1.75rem">Strategies</h2>
 		<p class="muted">Desired vs actual. Diverging rows are highlighted.</p>

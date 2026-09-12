@@ -363,6 +363,32 @@ func TestCreateDeleteVolumeDesiredNilVsEmpty(t *testing.T) {
 	}
 }
 
+func TestApplyStatusSlotsNilDoesNotWipe(t *testing.T) {
+	s := NewMemory(nil)
+	s.UpsertMachine(&pb.Register{MachineId: "m1"})
+	if err := s.ApplyStatus("m1", &pb.StatusReport{
+		Slots: &pb.MachineSlotStatus{
+			Slots: []*pb.StrategySlotStatus{{Strategy: "probe-fail", SizeBytes: 435}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ApplyStatus("m1", &pb.StatusReport{ObservedGeneration: 1}); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := s.GetMachine("m1")
+	if rec.SlotsStatus == nil || len(rec.SlotsStatus.GetSlots()) != 1 || rec.SlotsStatus.GetSlots()[0].GetStrategy() != "probe-fail" {
+		t.Fatalf("nil slots must not wipe: %+v", rec.SlotsStatus)
+	}
+	if err := s.ApplyStatus("m1", &pb.StatusReport{Slots: &pb.MachineSlotStatus{}}); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = s.GetMachine("m1")
+	if rec.SlotsStatus == nil || len(rec.SlotsStatus.GetSlots()) != 0 {
+		t.Fatalf("empty wrapper must clear: %+v", rec.SlotsStatus)
+	}
+}
+
 func TestApplyStatusPrunesRetiredStrategies(t *testing.T) {
 	s := NewMemory(nil)
 	s.UpsertMachine(&pb.Register{MachineId: "m1"})

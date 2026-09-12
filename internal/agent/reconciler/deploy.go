@@ -371,6 +371,7 @@ func (r *Reconciler) buildStatusReport() *pb.StatusReport {
 		Assignments:        assignments,
 		Shared:             r.buildSharedStatus(),
 		Volumes:            r.buildVolumeStatus(),
+		Slots:              r.buildSlotStatus(),
 	}
 }
 
@@ -406,6 +407,12 @@ func statusKey(sr *pb.StatusReport) string {
 		for _, v := range vol.GetVolumes() {
 			fmt.Fprintf(&b, "%s:ready=%v,err=%s,mounted=%s;",
 				v.GetName(), v.GetReady(), v.GetLastError(), strings.Join(v.GetMountedBy(), ","))
+		}
+	}
+	if sl := sr.GetSlots(); sl != nil {
+		b.WriteString("slots;")
+		for _, s := range sl.GetSlots() {
+			fmt.Fprintf(&b, "%s:sz=%d,ver=%s;", s.GetStrategy(), s.GetSizeBytes(), s.GetCurrentVersion())
 		}
 	}
 	return b.String()

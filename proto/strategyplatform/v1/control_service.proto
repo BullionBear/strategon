@@ -211,7 +211,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "CreateArtifactUpload" | "SetSharedFiles" | "ResolveArtifactSource"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "CreateArtifactUpload" | "SetSharedFiles" | "ResolveArtifactSource" | "ReapStrategies"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -414,6 +414,34 @@ message SharedFileView {
   string last_error = 6;
 }
 
+// StrategySlotView is the on-disk slot inventory joined with whether the
+// control plane still has an assignment (including Stopped).
+message StrategySlotView {
+  string strategy = 1;
+  int64 size_bytes = 2;
+  string current_version = 3;
+  bool assigned = 4;
+  google.protobuf.Timestamp size_computed_at = 5;
+}
+
+message ListStrategySlotsRequest {
+  string machine_id = 1;
+}
+
+message ListStrategySlotsResponse {
+  repeated StrategySlotView slots = 1;
+  int64 total_bytes = 2;
+}
+
+message ReapStrategiesRequest {
+  string machine_id = 1;
+  repeated string strategies = 2;
+}
+
+message ReapStrategiesResponse {
+  repeated ReapStrategyResult results = 1;
+}
+
 service ControlPlaneService {
   rpc ListMachines(ListMachinesRequest) returns (ListMachinesResponse);
   rpc GetMachine(GetMachineRequest) returns (Machine);
@@ -462,4 +490,10 @@ service ControlPlaneService {
   // Download one or more assignment-slot paths. A single regular file streams as-is;
   // multiple paths (or a directory) stream as a tar.gz built on the agent.
   rpc DownloadFiles(DownloadFilesRequest) returns (stream DownloadChunk);
+
+  // On-disk strategy slots under the agent's --base (includes orphans).
+  rpc ListStrategySlots(ListStrategySlotsRequest) returns (ListStrategySlotsResponse);
+
+  // Delete named strategy slots that are not assigned and not running.
+  rpc ReapStrategies(ReapStrategiesRequest) returns (ReapStrategiesResponse);
 }

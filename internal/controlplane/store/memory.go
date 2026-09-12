@@ -200,6 +200,9 @@ func (m *Memory) ApplyStatus(machineID string, report *pb.StatusReport) error {
 	if report.GetVolumes() != nil {
 		rec.VolumesStatus = proto.Clone(report.GetVolumes()).(*pb.MachineVolumeStatus)
 	}
+	if report.GetSlots() != nil {
+		rec.SlotsStatus = proto.Clone(report.GetSlots()).(*pb.MachineSlotStatus)
+	}
 	m.mu.Unlock()
 	m.notify(machineID)
 	return nil
@@ -748,6 +751,9 @@ func snapshotMachine(rec *MachineRecord) *MachineRecord {
 	}
 	if rec.VolumesStatus != nil {
 		cp.VolumesStatus = proto.Clone(rec.VolumesStatus).(*pb.MachineVolumeStatus)
+	}
+	if rec.SlotsStatus != nil {
+		cp.SlotsStatus = proto.Clone(rec.SlotsStatus).(*pb.MachineSlotStatus)
 	}
 	for k, v := range rec.Assignments {
 		cp.Assignments[k] = proto.Clone(v).(*pb.StrategyAssignmentSpec)

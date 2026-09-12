@@ -42,6 +42,10 @@ const MinVolumeBrowseAgentVersion int32 = 3
 // payload stdio capture (tee + .stdio/).
 const MinStdioCaptureAgentVersion int32 = 4
 
+// MinReapStrategiesAgentVersion is the capability version that implements
+// on-disk slot inventory in StatusReport and ReapStrategies.
+const MinReapStrategiesAgentVersion int32 = 5
+
 // AgentNotifier pushes a fresh DesiredState to a connected agent after a write.
 type AgentNotifier interface {
 	Notify(machineID string)
