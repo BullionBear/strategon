@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/jackc/pgx/v5/pgconn"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -164,6 +167,67 @@ func TestPostgresStatusHeartbeatReachable(t *testing.T) {
 	}
 	if _, _, err := p.SetAssignment("nope", "s", &pb.StrategyAssignmentSpec{}); err == nil {
 		t.Fatal("SetAssignment on unknown machine should error")
+	}
+}
+
+func TestPostgresUndeployAndStatusNoDeadlock(t *testing.T) {
+	p := newTestPostgres(t, nil)
+	if _, err := p.UpsertMachine(&pb.Register{MachineId: "m1"}); err != nil {
+		t.Fatal(err)
+	}
+	strategies := []string{"s1", "s2", "s3", "s4", "s5"}
+	statuses := make([]*pb.StrategyAssignmentStatus, 0, len(strategies))
+	for _, s := range strategies {
+		if _, _, err := p.SetAssignment("m1", s, &pb.StrategyAssignmentSpec{
+			Strategy: s,
+			Artifact: &pb.ArtifactRef{Version: "v1", Digest: "sha256:aaa"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+		statuses = append(statuses, &pb.StrategyAssignmentStatus{
+			Strategy: s,
+			Phase:    pb.DeployPhase_DEPLOY_PHASE_HEALTHY,
+		})
+	}
+	if err := p.ApplyStatus("m1", &pb.StatusReport{ObservedGeneration: 1, Assignments: statuses}); err != nil {
+		t.Fatal(err)
+	}
+
+	errs := make(chan error, len(strategies)+8)
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for n := 0; n < 20; n++ {
+				if err := p.ApplyStatus("m1", &pb.StatusReport{
+					ObservedGeneration: int64(n + 1),
+					Assignments:        statuses,
+				}); err != nil {
+					errs <- err
+					return
+				}
+			}
+		}()
+	}
+	for _, s := range strategies {
+		s := s
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, _, err := p.SetAssignment("m1", s, nil); err != nil {
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "40P01" {
+			t.Fatalf("deadlock: %v", err)
+		}
+		t.Fatalf("store write: %v", err)
 	}
 }
 
