@@ -73,6 +73,18 @@ func cmdSlotsReap(args []string) error {
 		}
 		fmt.Printf("%s error=%s\n", r.GetStrategy(), r.GetError())
 	}
+	return reapExitError(resp.Msg.GetResults())
+}
+
+func reapExitError(results []*pb.ReapStrategyResult) error {
+	if len(results) == 0 {
+		return fmt.Errorf("one or more slots were not removed")
+	}
+	for _, r := range results {
+		if !r.GetRemoved() {
+			return fmt.Errorf("one or more slots were not removed")
+		}
+	}
 	return nil
 }
 

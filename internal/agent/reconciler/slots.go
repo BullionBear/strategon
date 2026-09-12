@@ -72,14 +72,16 @@ func (r *Reconciler) SubmitReap(ctx context.Context, req *pb.ReapStrategies) *pb
 }
 
 func (r *Reconciler) buildSlotStatus() *pb.MachineSlotStatus {
-	out := &pb.MachineSlotStatus{}
 	if r.deps.Artifacts == nil {
-		return out
+		return nil
 	}
 	names, err := r.deps.Artifacts.ListStrategyDirs()
 	if err != nil {
-		return out
+		// Omit the wrapper so ApplyStatus does not overwrite stored inventory
+		// with an empty walk after a transient ReadDir failure.
+		return nil
 	}
+	out := &pb.MachineSlotStatus{}
 	for _, name := range names {
 		st := &pb.StrategySlotStatus{
 			Strategy:       name,

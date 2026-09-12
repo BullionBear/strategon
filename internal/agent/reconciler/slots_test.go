@@ -50,6 +50,20 @@ func TestBuildSlotStatusListsUndeployedLeftover(t *testing.T) {
 	}
 }
 
+func TestBuildSlotStatusOmitsOnListFailure(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	seedRelease(t, mgr, "probe-fail", "v1")
+	notDir := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(notDir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mgr.Base = notDir
+	sr := r.buildStatusReport()
+	if sr.GetSlots() != nil {
+		t.Fatalf("list failure must omit slots, got %+v", sr.GetSlots())
+	}
+}
+
 func TestStatusKeyChangesAfterSlotWalk(t *testing.T) {
 	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
 	seedRelease(t, mgr, "s", "v1")
