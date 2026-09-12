@@ -127,12 +127,25 @@ func TestPostgresStatusHeartbeatReachable(t *testing.T) {
 	if err := p.ApplyStatus("m1", &pb.StatusReport{
 		ObservedGeneration: 3,
 		Assignments:        []*pb.StrategyAssignmentStatus{{Strategy: "s", Phase: pb.DeployPhase_DEPLOY_PHASE_HEALTHY}},
+		Slots: &pb.MachineSlotStatus{
+			Slots: []*pb.StrategySlotStatus{{Strategy: "probe-fail", SizeBytes: 12}},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	rec, _ := p.GetMachine("m1")
 	if rec.ObservedGen != 3 || rec.Status["s"].GetPhase() != pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
 		t.Fatalf("status not recorded: %+v", rec)
+	}
+	if rec.SlotsStatus == nil || rec.SlotsStatus.GetSlots()[0].GetStrategy() != "probe-fail" {
+		t.Fatalf("slots status not recorded: %+v", rec.SlotsStatus)
+	}
+	if err := p.ApplyStatus("m1", &pb.StatusReport{ObservedGeneration: 3}); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = p.GetMachine("m1")
+	if rec.SlotsStatus == nil || rec.SlotsStatus.GetSlots()[0].GetStrategy() != "probe-fail" {
+		t.Fatalf("nil slots must not wipe: %+v", rec.SlotsStatus)
 	}
 	// observed_gen is monotonic (a lower report must not lower it).
 	p.ApplyStatus("m1", &pb.StatusReport{ObservedGeneration: 1})

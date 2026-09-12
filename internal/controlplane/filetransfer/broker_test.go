@@ -76,8 +76,31 @@ func TestBrokerUnknownIgnored(t *testing.T) {
 	b := New()
 	b.DeliverListing(nil)
 	b.DeliverChunk(nil)
+	b.DeliverReapResult(nil)
 	b.DeliverListing(&pb.DirListing{RequestId: "nope"})
 	b.DeliverChunk(&pb.FileChunk{RequestId: "nope"})
+	b.DeliverReapResult(&pb.ReapStrategiesResult{RequestId: "nope"})
+}
+
+func TestBrokerReapCorrelate(t *testing.T) {
+	b := New()
+	id, ch, cancel := b.NewReap("m1")
+	defer cancel()
+
+	b.DeliverReapResult(&pb.ReapStrategiesResult{RequestId: "unknown"})
+	b.DeliverReapResult(&pb.ReapStrategiesResult{
+		RequestId: id,
+		Results:   []*pb.ReapStrategyResult{{Strategy: "s", Removed: true, FreedBytes: 12}},
+	})
+
+	select {
+	case res := <-ch:
+		if len(res.GetResults()) != 1 || !res.GetResults()[0].GetRemoved() {
+			t.Fatalf("unexpected reap: %+v", res)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timeout")
+	}
 }
 
 func TestNewRequestIDUnique(t *testing.T) {

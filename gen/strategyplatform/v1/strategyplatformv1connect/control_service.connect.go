@@ -120,6 +120,12 @@ const (
 	// ControlPlaneServiceDownloadFilesProcedure is the fully-qualified name of the
 	// ControlPlaneService's DownloadFiles RPC.
 	ControlPlaneServiceDownloadFilesProcedure = "/strategyplatform.v1.ControlPlaneService/DownloadFiles"
+	// ControlPlaneServiceListStrategySlotsProcedure is the fully-qualified name of the
+	// ControlPlaneService's ListStrategySlots RPC.
+	ControlPlaneServiceListStrategySlotsProcedure = "/strategyplatform.v1.ControlPlaneService/ListStrategySlots"
+	// ControlPlaneServiceReapStrategiesProcedure is the fully-qualified name of the
+	// ControlPlaneService's ReapStrategies RPC.
+	ControlPlaneServiceReapStrategiesProcedure = "/strategyplatform.v1.ControlPlaneService/ReapStrategies"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -154,6 +160,8 @@ var (
 	controlPlaneServiceGetMachineMetricsMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachineMetrics")
 	controlPlaneServiceBrowseDirMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("BrowseDir")
 	controlPlaneServiceDownloadFilesMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("DownloadFiles")
+	controlPlaneServiceListStrategySlotsMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("ListStrategySlots")
+	controlPlaneServiceReapStrategiesMethodDescriptor         = controlPlaneServiceServiceDescriptor.Methods().ByName("ReapStrategies")
 )
 
 // ControlPlaneServiceClient is a client for the strategyplatform.v1.ControlPlaneService service.
@@ -194,6 +202,10 @@ type ControlPlaneServiceClient interface {
 	// Download one or more assignment-slot paths. A single regular file streams as-is;
 	// multiple paths (or a directory) stream as a tar.gz built on the agent.
 	DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest]) (*connect.ServerStreamForClient[v1.DownloadChunk], error)
+	// On-disk strategy slots under the agent's --base (includes orphans).
+	ListStrategySlots(context.Context, *connect.Request[v1.ListStrategySlotsRequest]) (*connect.Response[v1.ListStrategySlotsResponse], error)
+	// Delete named strategy slots that are not assigned and not running.
+	ReapStrategies(context.Context, *connect.Request[v1.ReapStrategiesRequest]) (*connect.Response[v1.ReapStrategiesResponse], error)
 }
 
 // NewControlPlaneServiceClient constructs a client for the strategyplatform.v1.ControlPlaneService
@@ -380,6 +392,18 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceDownloadFilesMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		listStrategySlots: connect.NewClient[v1.ListStrategySlotsRequest, v1.ListStrategySlotsResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceListStrategySlotsProcedure,
+			connect.WithSchema(controlPlaneServiceListStrategySlotsMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		reapStrategies: connect.NewClient[v1.ReapStrategiesRequest, v1.ReapStrategiesResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceReapStrategiesProcedure,
+			connect.WithSchema(controlPlaneServiceReapStrategiesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -414,6 +438,8 @@ type controlPlaneServiceClient struct {
 	getMachineMetrics      *connect.Client[v1.GetMachineMetricsRequest, v1.GetMachineMetricsResponse]
 	browseDir              *connect.Client[v1.BrowseDirRequest, v1.BrowseDirResponse]
 	downloadFiles          *connect.Client[v1.DownloadFilesRequest, v1.DownloadChunk]
+	listStrategySlots      *connect.Client[v1.ListStrategySlotsRequest, v1.ListStrategySlotsResponse]
+	reapStrategies         *connect.Client[v1.ReapStrategiesRequest, v1.ReapStrategiesResponse]
 }
 
 // ListMachines calls strategyplatform.v1.ControlPlaneService.ListMachines.
@@ -561,6 +587,16 @@ func (c *controlPlaneServiceClient) DownloadFiles(ctx context.Context, req *conn
 	return c.downloadFiles.CallServerStream(ctx, req)
 }
 
+// ListStrategySlots calls strategyplatform.v1.ControlPlaneService.ListStrategySlots.
+func (c *controlPlaneServiceClient) ListStrategySlots(ctx context.Context, req *connect.Request[v1.ListStrategySlotsRequest]) (*connect.Response[v1.ListStrategySlotsResponse], error) {
+	return c.listStrategySlots.CallUnary(ctx, req)
+}
+
+// ReapStrategies calls strategyplatform.v1.ControlPlaneService.ReapStrategies.
+func (c *controlPlaneServiceClient) ReapStrategies(ctx context.Context, req *connect.Request[v1.ReapStrategiesRequest]) (*connect.Response[v1.ReapStrategiesResponse], error) {
+	return c.reapStrategies.CallUnary(ctx, req)
+}
+
 // ControlPlaneServiceHandler is an implementation of the strategyplatform.v1.ControlPlaneService
 // service.
 type ControlPlaneServiceHandler interface {
@@ -600,6 +636,10 @@ type ControlPlaneServiceHandler interface {
 	// Download one or more assignment-slot paths. A single regular file streams as-is;
 	// multiple paths (or a directory) stream as a tar.gz built on the agent.
 	DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest], *connect.ServerStream[v1.DownloadChunk]) error
+	// On-disk strategy slots under the agent's --base (includes orphans).
+	ListStrategySlots(context.Context, *connect.Request[v1.ListStrategySlotsRequest]) (*connect.Response[v1.ListStrategySlotsResponse], error)
+	// Delete named strategy slots that are not assigned and not running.
+	ReapStrategies(context.Context, *connect.Request[v1.ReapStrategiesRequest]) (*connect.Response[v1.ReapStrategiesResponse], error)
 }
 
 // NewControlPlaneServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -782,6 +822,18 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceDownloadFilesMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceListStrategySlotsHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceListStrategySlotsProcedure,
+		svc.ListStrategySlots,
+		connect.WithSchema(controlPlaneServiceListStrategySlotsMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceReapStrategiesHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceReapStrategiesProcedure,
+		svc.ReapStrategies,
+		connect.WithSchema(controlPlaneServiceReapStrategiesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/strategyplatform.v1.ControlPlaneService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ControlPlaneServiceListMachinesProcedure:
@@ -842,6 +894,10 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceBrowseDirHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceDownloadFilesProcedure:
 			controlPlaneServiceDownloadFilesHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceListStrategySlotsProcedure:
+			controlPlaneServiceListStrategySlotsHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceReapStrategiesProcedure:
+			controlPlaneServiceReapStrategiesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -965,4 +1021,12 @@ func (UnimplementedControlPlaneServiceHandler) BrowseDir(context.Context, *conne
 
 func (UnimplementedControlPlaneServiceHandler) DownloadFiles(context.Context, *connect.Request[v1.DownloadFilesRequest], *connect.ServerStream[v1.DownloadChunk]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.DownloadFiles is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ListStrategySlots(context.Context, *connect.Request[v1.ListStrategySlotsRequest]) (*connect.Response[v1.ListStrategySlotsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListStrategySlots is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ReapStrategies(context.Context, *connect.Request[v1.ReapStrategiesRequest]) (*connect.Response[v1.ReapStrategiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ReapStrategies is not implemented"))
 }

@@ -18,6 +18,9 @@ const (
 	BrowseTimeout = 30 * time.Second
 	// DownloadTimeout is how long DownloadFiles may run.
 	DownloadTimeout = 5 * time.Minute
+	// ReapTimeout is how long ReapStrategies waits for the agent to finish
+	// deleting named slots (trees can be multi-GB).
+	ReapTimeout = 5 * time.Minute
 )
 
 var reqIDFallback atomic.Uint64
@@ -27,6 +30,7 @@ type Pending struct {
 	MachineID string
 	ListingCh chan *pb.DirListing
 	ChunkCh   chan *pb.FileChunk
+	ReapCh    chan *pb.ReapStrategiesResult
 	done      chan struct{} // closed on cancel; unblocks Deliver* waiters
 	cancel    func()
 }
@@ -85,6 +89,27 @@ func (b *Broker) NewDownload(machineID string) (requestID string, chunkCh <-chan
 	return id, ch, cancel
 }
 
+// NewReap registers a reap waiter. cancel removes the entry and drains.
+func (b *Broker) NewReap(machineID string) (requestID string, reapCh <-chan *pb.ReapStrategiesResult, cancel func()) {
+	id := newRequestID()
+	ch := make(chan *pb.ReapStrategiesResult, 1)
+	done := make(chan struct{})
+	p := &Pending{MachineID: machineID, ReapCh: ch, done: done}
+	var once sync.Once
+	cancel = func() {
+		once.Do(func() {
+			b.remove(id)
+			close(done)
+			drainReap(ch)
+		})
+	}
+	p.cancel = cancel
+	b.mu.Lock()
+	b.reqs[id] = p
+	b.mu.Unlock()
+	return id, ch, cancel
+}
+
 // DeliverListing completes a browse waiter. Unknown request_ids are ignored.
 // May block until the waiter receives or the request is cancelled — callers
 // that must not stall (e.g. the agent stream receive loop) should invoke this
@@ -125,6 +150,24 @@ func (b *Broker) DeliverChunk(chunk *pb.FileChunk) {
 	}
 }
 
+// DeliverReapResult completes a reap waiter. Unknown request_ids are ignored.
+// Callers on the agent receive path must invoke this asynchronously.
+func (b *Broker) DeliverReapResult(result *pb.ReapStrategiesResult) {
+	if result == nil {
+		return
+	}
+	b.mu.Lock()
+	p := b.reqs[result.GetRequestId()]
+	b.mu.Unlock()
+	if p == nil || p.ReapCh == nil {
+		return
+	}
+	select {
+	case p.ReapCh <- result:
+	case <-p.done:
+	}
+}
+
 func (b *Broker) remove(id string) {
 	b.mu.Lock()
 	delete(b.reqs, id)
@@ -132,6 +175,16 @@ func (b *Broker) remove(id string) {
 }
 
 func drainListing(ch chan *pb.DirListing) {
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
+func drainReap(ch chan *pb.ReapStrategiesResult) {
 	for {
 		select {
 		case <-ch:

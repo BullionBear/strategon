@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/status.proto.
  */
 export const file_strategyplatform_v1_status: GenFile = /*@__PURE__*/
-  fileDesc("CiBzdHJhdGVneXBsYXRmb3JtL3YxL3N0YXR1cy5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSLWAwoYU3RyYXRlZ3lBc3NpZ25tZW50U3RhdHVzEhAKCHN0cmF0ZWd5GAEgASgJEi8KBXBoYXNlGAIgASgOMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQaGFzZRIbChNvYnNlcnZlZF9nZW5lcmF0aW9uGAMgASgDEjoKEHJ1bm5pbmdfYXJ0aWZhY3QYBCABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjgKDnJ1bm5pbmdfY29uZmlnGAUgASgLMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5BcnRpZmFjdFJlZhIyCgpjb25kaXRpb25zGAYgAygLMh4uc3RyYXRlZ3lwbGF0Zm9ybS52MS5Db25kaXRpb24SCwoDcGlkGAcgASgFEhUKDXJlc3RhcnRfY291bnQYCCABKAUSLgoKc3RhcnRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgKIAEoCRISCgpsZWFzZV9oZWxkGAsgASgIEjQKEGxlYXNlX2V4cGlyZXNfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkwKEFNoYXJlZEZpbGVTdGF0dXMSDAoEbmFtZRgBIAEoCRIWCg5ydW5uaW5nX2RpZ2VzdBgCIAEoCRISCgpsYXN0X2Vycm9yGAMgASgJImgKE01hY2hpbmVTaGFyZWRTdGF0dXMSGwoTb2JzZXJ2ZWRfZ2VuZXJhdGlvbhgBIAEoAxI0CgVmaWxlcxgCIAMoCzIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuU2hhcmVkRmlsZVN0YXR1cyJnCgxWb2x1bWVTdGF0dXMSDAoEbmFtZRgBIAEoCRINCgVyZWFkeRgCIAEoCBISCgpzaXplX2J5dGVzGAMgASgDEhIKCmxhc3RfZXJyb3IYBCABKAkSEgoKbW91bnRlZF9ieRgFIAMoCSJmChNNYWNoaW5lVm9sdW1lU3RhdHVzEhsKE29ic2VydmVkX2dlbmVyYXRpb24YASABKAMSMgoHdm9sdW1lcxgCIAMoCzIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuVm9sdW1lU3RhdHVzKv0CCgtEZXBsb3lQaGFzZRIcChhERVBMT1lfUEhBU0VfVU5TUEVDSUZJRUQQABIYChRERVBMT1lfUEhBU0VfUEVORElORxABEhwKGERFUExPWV9QSEFTRV9ET1dOTE9BRElORxACEhoKFkRFUExPWV9QSEFTRV9WRVJJRllJTkcQAxIZChVERVBMT1lfUEhBU0VfRFJBSU5JTkcQBBIaChZERVBMT1lfUEhBU0VfU1dJVENISU5HEAUSGQoVREVQTE9ZX1BIQVNFX1NUQVJUSU5HEAYSIAocREVQTE9ZX1BIQVNFX0hFQUxUSF9DSEVDS0lORxAHEhgKFERFUExPWV9QSEFTRV9IRUFMVEhZEAgSHAoYREVQTE9ZX1BIQVNFX1JPTExFRF9CQUNLEAkSFwoTREVQTE9ZX1BIQVNFX0ZBSUxFRBAKEh0KGURFUExPWV9QSEFTRV9ST0xMSU5HX0JBQ0sQCxIYChRERVBMT1lfUEhBU0VfU1RPUFBFRBAMQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
+  fileDesc("CiBzdHJhdGVneXBsYXRmb3JtL3YxL3N0YXR1cy5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSLWAwoYU3RyYXRlZ3lBc3NpZ25tZW50U3RhdHVzEhAKCHN0cmF0ZWd5GAEgASgJEi8KBXBoYXNlGAIgASgOMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5EZXBsb3lQaGFzZRIbChNvYnNlcnZlZF9nZW5lcmF0aW9uGAMgASgDEjoKEHJ1bm5pbmdfYXJ0aWZhY3QYBCABKAsyIC5zdHJhdGVneXBsYXRmb3JtLnYxLkFydGlmYWN0UmVmEjgKDnJ1bm5pbmdfY29uZmlnGAUgASgLMiAuc3RyYXRlZ3lwbGF0Zm9ybS52MS5BcnRpZmFjdFJlZhIyCgpjb25kaXRpb25zGAYgAygLMh4uc3RyYXRlZ3lwbGF0Zm9ybS52MS5Db25kaXRpb24SCwoDcGlkGAcgASgFEhUKDXJlc3RhcnRfY291bnQYCCABKAUSLgoKc3RhcnRlZF9hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEgoKbGFzdF9lcnJvchgKIAEoCRISCgpsZWFzZV9oZWxkGAsgASgIEjQKEGxlYXNlX2V4cGlyZXNfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkwKEFNoYXJlZEZpbGVTdGF0dXMSDAoEbmFtZRgBIAEoCRIWCg5ydW5uaW5nX2RpZ2VzdBgCIAEoCRISCgpsYXN0X2Vycm9yGAMgASgJImgKE01hY2hpbmVTaGFyZWRTdGF0dXMSGwoTb2JzZXJ2ZWRfZ2VuZXJhdGlvbhgBIAEoAxI0CgVmaWxlcxgCIAMoCzIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuU2hhcmVkRmlsZVN0YXR1cyJnCgxWb2x1bWVTdGF0dXMSDAoEbmFtZRgBIAEoCRINCgVyZWFkeRgCIAEoCBISCgpzaXplX2J5dGVzGAMgASgDEhIKCmxhc3RfZXJyb3IYBCABKAkSEgoKbW91bnRlZF9ieRgFIAMoCSJmChNNYWNoaW5lVm9sdW1lU3RhdHVzEhsKE29ic2VydmVkX2dlbmVyYXRpb24YASABKAMSMgoHdm9sdW1lcxgCIAMoCzIhLnN0cmF0ZWd5cGxhdGZvcm0udjEuVm9sdW1lU3RhdHVzIokBChJTdHJhdGVneVNsb3RTdGF0dXMSEAoIc3RyYXRlZ3kYASABKAkSEgoKc2l6ZV9ieXRlcxgCIAEoAxIXCg9jdXJyZW50X3ZlcnNpb24YAyABKAkSNAoQc2l6ZV9jb21wdXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiSwoRTWFjaGluZVNsb3RTdGF0dXMSNgoFc2xvdHMYASADKAsyJy5zdHJhdGVneXBsYXRmb3JtLnYxLlN0cmF0ZWd5U2xvdFN0YXR1cyr9AgoLRGVwbG95UGhhc2USHAoYREVQTE9ZX1BIQVNFX1VOU1BFQ0lGSUVEEAASGAoUREVQTE9ZX1BIQVNFX1BFTkRJTkcQARIcChhERVBMT1lfUEhBU0VfRE9XTkxPQURJTkcQAhIaChZERVBMT1lfUEhBU0VfVkVSSUZZSU5HEAMSGQoVREVQTE9ZX1BIQVNFX0RSQUlOSU5HEAQSGgoWREVQTE9ZX1BIQVNFX1NXSVRDSElORxAFEhkKFURFUExPWV9QSEFTRV9TVEFSVElORxAGEiAKHERFUExPWV9QSEFTRV9IRUFMVEhfQ0hFQ0tJTkcQBxIYChRERVBMT1lfUEhBU0VfSEVBTFRIWRAIEhwKGERFUExPWV9QSEFTRV9ST0xMRURfQkFDSxAJEhcKE0RFUExPWV9QSEFTRV9GQUlMRUQQChIdChlERVBMT1lfUEhBU0VfUk9MTElOR19CQUNLEAsSGAoUREVQTE9ZX1BIQVNFX1NUT1BQRUQQDEJNWktnaXRodWIuY29tL2J1bGxpb25iZWFyL3N0cmF0ZWdvbi9nZW4vc3RyYXRlZ3lwbGF0Zm9ybS92MTtzdHJhdGVneXBsYXRmb3JtdjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_strategyplatform_v1_common]);
 
 /**
  * StrategyAssignmentStatus is written only by the agent. The control plane
@@ -224,6 +224,65 @@ export type MachineVolumeStatus = Message<"strategyplatform.v1.MachineVolumeStat
  */
 export const MachineVolumeStatusSchema: GenMessage<MachineVolumeStatus> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_status, 4);
+
+/**
+ * StrategySlotStatus is one first-level directory under the agent's --base
+ * (a strategy slot: releases/, work/, current, .stdio/). Written only by
+ * the agent. size_bytes is last computed; 0 if never walked.
+ *
+ * @generated from message strategyplatform.v1.StrategySlotStatus
+ */
+export type StrategySlotStatus = Message<"strategyplatform.v1.StrategySlotStatus"> & {
+  /**
+   * @generated from field: string strategy = 1;
+   */
+  strategy: string;
+
+  /**
+   * @generated from field: int64 size_bytes = 2;
+   */
+  sizeBytes: bigint;
+
+  /**
+   * current symlink; empty if none
+   *
+   * @generated from field: string current_version = 3;
+   */
+  currentVersion: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp size_computed_at = 4;
+   */
+  sizeComputedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message strategyplatform.v1.StrategySlotStatus.
+ * Use `create(StrategySlotStatusSchema)` to create a new message.
+ */
+export const StrategySlotStatusSchema: GenMessage<StrategySlotStatus> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_status, 5);
+
+/**
+ * MachineSlotStatus wraps the on-disk slot inventory. The wrapper (not the
+ * repeated field) is how ApplyStatus distinguishes "old agent, do not
+ * overwrite" (nil) from "walked, nothing there" (empty slots).
+ *
+ * @generated from message strategyplatform.v1.MachineSlotStatus
+ */
+export type MachineSlotStatus = Message<"strategyplatform.v1.MachineSlotStatus"> & {
+  /**
+   * @generated from field: repeated strategyplatform.v1.StrategySlotStatus slots = 1;
+   */
+  slots: StrategySlotStatus[];
+};
+
+/**
+ * Describes the message strategyplatform.v1.MachineSlotStatus.
+ * Use `create(MachineSlotStatusSchema)` to create a new message.
+ */
+export const MachineSlotStatusSchema: GenMessage<MachineSlotStatus> = /*@__PURE__*/
+  messageDesc(file_strategyplatform_v1_status, 6);
 
 /**
  * @generated from enum strategyplatform.v1.DeployPhase

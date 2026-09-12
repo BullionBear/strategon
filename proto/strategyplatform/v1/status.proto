@@ -69,3 +69,20 @@ message MachineVolumeStatus {
   int64 observed_generation = 1; // MachineVolumeSpec.generation this reflects
   repeated VolumeStatus volumes = 2;
 }
+
+// StrategySlotStatus is one first-level directory under the agent's --base
+// (a strategy slot: releases/, work/, current, .stdio/). Written only by
+// the agent. size_bytes is last computed; 0 if never walked.
+message StrategySlotStatus {
+  string strategy = 1;
+  int64 size_bytes = 2;
+  string current_version = 3; // current symlink; empty if none
+  google.protobuf.Timestamp size_computed_at = 4;
+}
+
+// MachineSlotStatus wraps the on-disk slot inventory. The wrapper (not the
+// repeated field) is how ApplyStatus distinguishes "old agent, do not
+// overwrite" (nil) from "walked, nothing there" (empty slots).
+message MachineSlotStatus {
+  repeated StrategySlotStatus slots = 1;
+}

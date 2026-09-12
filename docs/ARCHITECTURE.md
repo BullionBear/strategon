@@ -133,14 +133,34 @@ browser over the existing agent-initiated `Connect` bidi stream.
 - Caps: single file ≤ 256 MiB; tarball ≤ 500 files and ≤ 512 MiB uncompressed;
   browse timeout 30s; download timeout 5m; chunk size 64 KiB.
 - Capability gate: slot browse `agent_version >= 2`; volume browse
-  `agent_version >= 3`; payload stdio capture `agent_version >= 4`.
+  `agent_version >= 3`; payload stdio capture `agent_version >= 4`;
+  slot inventory + `ReapStrategies` `agent_version >= 5`.
   Older agents Nack unknown payloads.
 - CLI: `strategon files ls|get` and `strategon logs MACHINE STRATEGY`
   wrap BrowseDir / DownloadFiles. `.stdio/payload.log` is under the
-  slot jail (no new RPC).
+  slot jail (no new RPC). `strategon slots ls|reap` lists on-disk
+  slots and deletes named orphans.
 - Audit: a successful download (EOF) appends `action=DownloadFiles` with
   `detail` including paths, filename, transfer kind, and byte count. Failed
-  agent validation does not write an audit entry.
+  agent validation does not write an audit entry. A completed reap
+  appends `action=ReapStrategies`.
+
+### Strategy slot inventory and reap
+
+Undeploy removes the assignment and drains the process; it does **not**
+delete `<base>/<strategy>/` (releases, work, current, `.stdio`). That is
+intentional: Stop/Undeploy keep disk for browse and same-name redeploy.
+
+- Inventory is actual-only. The agent lists first-level dirs under
+  `--base`, skipping reserved `shared`, `volumes`, and `agent`, and
+  reports them on `StatusReport.slots` (not Heartbeat). Size is walked
+  asynchronously. A nil wrapper means an old agent — the control plane
+  does not overwrite stored inventory.
+- `ListStrategySlots` joins agent inventory with whether the control
+  plane still has an assignment (including Stopped).
+- `ReapStrategies` deletes named slots that are not in desired and have
+  no live process / inflight deploy. Assigned+Stopped must Undeploy
+  first. There is no `Undeploy(purge=…)` flag.
 
 ## Core concepts
 

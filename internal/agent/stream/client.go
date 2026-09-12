@@ -31,6 +31,9 @@ type Client struct {
 	// Artifacts provides the assignment-slot root for browse/fetch. Optional;
 	// if nil, ListDir/FetchFiles are Nack'd.
 	Artifacts *artifact.Manager
+	// Reap deletes named strategy slots via the reconciler. Optional; if nil,
+	// ReapStrategies replies with an error result.
+	Reap func(context.Context, *pb.ReapStrategies) *pb.ReapStrategiesResult
 	// Resources / Processes supply the latest instantaneous telemetry snapshot
 	// for Heartbeat (sampled off the reconciler critical path).
 	Resources  func() *pb.MachineResources
@@ -185,6 +188,8 @@ func (c *Client) handleControl(ctx context.Context, msg *pb.ControlMessage, send
 		c.handleListDir(ctx, p.ListDir, send)
 	case *pb.ControlMessage_FetchFiles:
 		c.handleFetchFiles(ctx, p.FetchFiles, send)
+	case *pb.ControlMessage_ReapStrategies:
+		c.handleReap(ctx, p.ReapStrategies, send)
 	default:
 		_ = send(ctx, &pb.AgentMessage{
 			Payload: &pb.AgentMessage_Nack{Nack: &pb.Nack{
@@ -280,6 +285,26 @@ func (c *Client) handleFetchFiles(ctx context.Context, req *pb.FetchFiles, send 
 		if err := filebrowse.Fetch(ctx, root, label, req.GetRequestId(), req.GetPaths(), send); err != nil {
 			c.logger().Warn("fetch files failed", "request_id", req.GetRequestId(), "err", err)
 		}
+	}()
+}
+
+func (c *Client) handleReap(ctx context.Context, req *pb.ReapStrategies, send filebrowse.SendFunc) {
+	go func() {
+		var result *pb.ReapStrategiesResult
+		if c.Reap == nil {
+			result = &pb.ReapStrategiesResult{RequestId: req.GetRequestId(), Error: "reap not configured"}
+		} else {
+			result = c.Reap(ctx, req)
+			if result == nil {
+				result = &pb.ReapStrategiesResult{RequestId: req.GetRequestId(), Error: "empty result"}
+			}
+			if result.GetRequestId() == "" {
+				result.RequestId = req.GetRequestId()
+			}
+		}
+		_ = send(ctx, &pb.AgentMessage{
+			Payload: &pb.AgentMessage_ReapStrategiesResult{ReapStrategiesResult: result},
+		})
 	}()
 }
 

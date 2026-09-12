@@ -150,14 +150,14 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 		SharedFiles:       map[string]*pb.SharedFileSpec{},
 		Volumes:           map[string]*pb.VolumeSpec{},
 	}
-	var register, resources, processes, sharedStatus, volumesStatus []byte
+	var register, resources, processes, sharedStatus, volumesStatus, slotsStatus []byte
 	err := q.QueryRow(ctx, `SELECT register, reachable, agent_version, agent_build_version,
 		last_resources, last_processes, last_heartbeat, generation, observed_gen,
-		shared_generation, shared_status, volumes_generation, volumes_status
+		shared_generation, shared_status, volumes_generation, volumes_status, slots_status
 		FROM machines WHERE machine_id=$1`, id).
 		Scan(&register, &rec.Reachable, &rec.AgentVersion, &rec.AgentBuildVersion, &resources, &processes,
 			&rec.LastHeartbeat, &rec.Generation, &rec.ObservedGen,
-			&rec.SharedGeneration, &sharedStatus, &rec.VolumesGeneration, &volumesStatus)
+			&rec.SharedGeneration, &sharedStatus, &rec.VolumesGeneration, &volumesStatus, &slotsStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}
@@ -192,6 +192,12 @@ func loadMachine(ctx context.Context, q querier, id string) (*MachineRecord, boo
 	if volumesStatus != nil {
 		rec.VolumesStatus = &pb.MachineVolumeStatus{}
 		if err := proto.Unmarshal(volumesStatus, rec.VolumesStatus); err != nil {
+			return nil, false, err
+		}
+	}
+	if slotsStatus != nil {
+		rec.SlotsStatus = &pb.MachineSlotStatus{}
+		if err := proto.Unmarshal(slotsStatus, rec.SlotsStatus); err != nil {
 			return nil, false, err
 		}
 	}
@@ -644,6 +650,17 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 			}
 			if _, err := tx.Exec(ctx,
 				`UPDATE machines SET volumes_status = $2 WHERE machine_id=$1`,
+				machineID, b); err != nil {
+				return err
+			}
+		}
+		if report.GetSlots() != nil {
+			b, err := proto.Marshal(report.GetSlots())
+			if err != nil {
+				return err
+			}
+			if _, err := tx.Exec(ctx,
+				`UPDATE machines SET slots_status = $2 WHERE machine_id=$1`,
 				machineID, b); err != nil {
 				return err
 			}

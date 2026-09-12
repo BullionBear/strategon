@@ -78,6 +78,8 @@ message StatusReport {
   repeated StrategyAssignmentStatus assignments = 2;
   MachineSharedStatus shared = 3;
   MachineVolumeStatus volumes = 4;
+  // nil = old agent, do not overwrite stored inventory; empty slots = walked.
+  MachineSlotStatus slots = 5;
 }
 
 // List a directory under an assignment slot. path is relative to the
@@ -136,6 +138,26 @@ message FileChunk {
   TransferKind transfer_kind = 8; // only on seq 0
 }
 
+// ReapStrategies deletes named strategy slots on the agent. The control plane
+// correlates the reply by request_id. Per-name errors do not fail the request.
+message ReapStrategies {
+  string request_id = 1;
+  repeated string strategies = 2;
+}
+
+message ReapStrategyResult {
+  string strategy = 1;
+  bool removed = 2;
+  int64 freed_bytes = 3;
+  string error = 4;
+}
+
+message ReapStrategiesResult {
+  string request_id = 1;
+  repeated ReapStrategyResult results = 2;
+  string error = 3; // request-level failure
+}
+
 // AgentMessage is the northbound envelope. Field 1 is always message_id; oneof
 // payloads start at field 2 and only ever grow.
 message AgentMessage {
@@ -150,6 +172,7 @@ message AgentMessage {
     LeaseRenew lease_renew = 8;
     DirListing dir_listing = 9;
     FileChunk file_chunk = 10;
+    ReapStrategiesResult reap_strategies_result = 11;
   }
 }
 
@@ -165,6 +188,7 @@ message ControlMessage {
     Ack ack = 6;
     ListDir list_dir = 7;
     FetchFiles fetch_files = 8;
+    ReapStrategies reap_strategies = 9;
   }
 }
 

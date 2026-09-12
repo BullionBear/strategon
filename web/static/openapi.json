@@ -1002,6 +1002,65 @@
         }
       }
     },
+    "/strategyplatform.v1.ControlPlaneService/ListStrategySlots": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ListStrategySlots",
+        "description": "On-disk strategy slots under the agent's --base (includes orphans).",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ListStrategySlots",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ListStrategySlotsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ListStrategySlotsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/ListVolumes": {
       "post": {
         "tags": [
@@ -1053,6 +1112,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/strategyplatform.v1.ListVolumesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/strategyplatform.v1.ControlPlaneService/ReapStrategies": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "ReapStrategies",
+        "description": "Delete named strategy slots that are not assigned and not running.",
+        "operationId": "strategyplatform.v1.ControlPlaneService.ReapStrategies",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.ReapStrategiesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.ReapStrategiesResponse"
                 }
               }
             }
@@ -2003,7 +2121,7 @@
           "action": {
             "type": "string",
             "title": "action",
-            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"CreateArtifactUpload\" | \"SetSharedFiles\" | \"ResolveArtifactSource\""
+            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"CreateArtifactUpload\" | \"SetSharedFiles\" | \"ResolveArtifactSource\" | \"ReapStrategies\""
           },
           "machineId": {
             "type": "string",
@@ -2731,6 +2849,39 @@
         "title": "ListSharedFilesResponse",
         "additionalProperties": false
       },
+      "strategyplatform.v1.ListStrategySlotsRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          }
+        },
+        "title": "ListStrategySlotsRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ListStrategySlotsResponse": {
+        "type": "object",
+        "properties": {
+          "slots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.StrategySlotView"
+            },
+            "title": "slots"
+          },
+          "totalBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "total_bytes",
+            "format": "int64"
+          }
+        },
+        "title": "ListStrategySlotsResponse",
+        "additionalProperties": false
+      },
       "strategyplatform.v1.ListVolumesRequest": {
         "type": "object",
         "properties": {
@@ -3171,6 +3322,65 @@
         "title": "ReadinessProbe",
         "additionalProperties": false,
         "description": "ReadinessProbe is an HTTP URL or unix socket path the agent probes for Ready."
+      },
+      "strategyplatform.v1.ReapStrategiesRequest": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string",
+            "title": "machine_id"
+          },
+          "strategies": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "strategies"
+          }
+        },
+        "title": "ReapStrategiesRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ReapStrategiesResponse": {
+        "type": "object",
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/strategyplatform.v1.ReapStrategyResult"
+            },
+            "title": "results"
+          }
+        },
+        "title": "ReapStrategiesResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.ReapStrategyResult": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "removed": {
+            "type": "boolean",
+            "title": "removed"
+          },
+          "freedBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "freed_bytes",
+            "format": "int64"
+          },
+          "error": {
+            "type": "string",
+            "title": "error"
+          }
+        },
+        "title": "ReapStrategyResult",
+        "additionalProperties": false
       },
       "strategyplatform.v1.RegisterArtifactRequest": {
         "type": "object",
@@ -3636,6 +3846,38 @@
         },
         "title": "StopResponse",
         "additionalProperties": false
+      },
+      "strategyplatform.v1.StrategySlotView": {
+        "type": "object",
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "title": "strategy"
+          },
+          "sizeBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "size_bytes",
+            "format": "int64"
+          },
+          "currentVersion": {
+            "type": "string",
+            "title": "current_version"
+          },
+          "assigned": {
+            "type": "boolean",
+            "title": "assigned"
+          },
+          "sizeComputedAt": {
+            "title": "size_computed_at",
+            "$ref": "#/components/schemas/google.protobuf.Timestamp"
+          }
+        },
+        "title": "StrategySlotView",
+        "additionalProperties": false,
+        "description": "StrategySlotView is the on-disk slot inventory joined with whether the\n control plane still has an assignment (including Stopped)."
       },
       "strategyplatform.v1.StrategyView": {
         "type": "object",

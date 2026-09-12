@@ -102,15 +102,24 @@ type Reconciler struct {
 	volumesGeneration     int64
 	volumeErrors          map[string]string
 
-	desiredCh chan *pb.DesiredState
-	exitCh    chan processExit
-	workerCh  chan workerEvent
-	sharedCh  chan sharedWorkerEvent
-	healthCh  chan healthResult
+	desiredCh  chan *pb.DesiredState
+	exitCh     chan processExit
+	workerCh   chan workerEvent
+	sharedCh   chan sharedWorkerEvent
+	healthCh   chan healthResult
+	slotWalkCh chan slotWalkDone
+	reapCh     chan reapOp
+	reapDoneCh chan reapBatchDone
 
 	deps         Deps
 	tickInterval time.Duration
 	ctx          context.Context
+
+	slotSizes        map[string]slotSize
+	slotWalkInflight bool
+	lastSlotWalk     time.Time
+	lastSlotNames    string
+	reaping          map[string]struct{}
 
 	lastReport   string
 	observedGenA atomic.Int64
@@ -155,6 +164,11 @@ func New(deps Deps) *Reconciler {
 		workerCh:       make(chan workerEvent, 32),
 		sharedCh:       make(chan sharedWorkerEvent, 32),
 		healthCh:       make(chan healthResult, 32),
+		slotWalkCh:     make(chan slotWalkDone, 1),
+		reapCh:         make(chan reapOp, 8),
+		reapDoneCh:     make(chan reapBatchDone, 8),
+		slotSizes:      map[string]slotSize{},
+		reaping:        map[string]struct{}{},
 		deps:           deps,
 		tickInterval:   tick,
 	}
@@ -221,11 +235,18 @@ func (r *Reconciler) Run(ctx context.Context) {
 			r.applyHealthResult(hr)
 		case now := <-tick.C():
 			r.tick(now)
+		case done := <-r.slotWalkCh:
+			r.applySlotWalk(done)
+		case op := <-r.reapCh:
+			r.handleReapOp(op)
+		case done := <-r.reapDoneCh:
+			r.applyReapDone(done)
 		case <-ctx.Done():
 			r.shutdown()
 			return
 		}
 		r.reconcile()
+		r.maybeStartSlotWalk()
 		r.reportStatusIfChanged()
 		r.publishProcessTargets()
 		r.persistSupervision()
@@ -289,6 +310,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 	st.volumeMounts = volumeMountNames(spec)
 	if st.backoff.Blocked(r.now()) {
 		return // backoff not elapsed; tick will wake us
+	}
+	if _, ok := r.reaping[st.strategy]; ok {
+		return // slot delete in progress; retry after reapDone
 	}
 	if spec.GetStopped() {
 		r.reconcileStopped(spec, st)

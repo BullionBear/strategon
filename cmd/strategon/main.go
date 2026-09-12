@@ -73,6 +73,8 @@ func run(args []string) error {
 		return cmdFiles(args[1:])
 	case "logs":
 		return cmdLogs(args[1:])
+	case "slots":
+		return cmdSlots(args[1:])
 	default:
 		return usageError{msg: fmt.Sprintf("unknown command %q\n\n%s", args[0], usageText)}
 	}
@@ -92,6 +94,8 @@ Commands:
   files get MACHINE STRATEGY PATH [PATH...]
                                 Download slot files (use -o FILE)
   logs MACHINE STRATEGY         Fetch .stdio/payload.log (add --all for rotates)
+  slots ls MACHINE              List on-disk strategy slots (includes orphans)
+  slots reap MACHINE NAME [...] Delete named slots that are not assigned
 
   Apply is authoritative: omit captureStdio to turn payload stdio capture off.
 

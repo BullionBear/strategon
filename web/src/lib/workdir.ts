@@ -4,6 +4,7 @@ import { TransferKind } from '$lib/gen/strategyplatform/v1/agent_service_pb';
 
 export const MIN_FILE_BROWSE_AGENT_VERSION = 2;
 export const MIN_VOLUME_BROWSE_AGENT_VERSION = 3;
+export const MIN_REAP_STRATEGIES_AGENT_VERSION = 5;
 
 export type DownloadProgress = {
 	bytes: number;
