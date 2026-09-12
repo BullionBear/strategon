@@ -617,7 +617,15 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 	ctx, cancel := opCtx()
 	defer cancel()
 	err := p.inTx(ctx, func(tx pgx.Tx) error {
-		if err := requireMachine(ctx, tx, machineID, "apply status"); err != nil {
+		// Lock the machine row first, matching SetAssignment, so undeploy
+		// and status cannot lock-order deadlock.
+		var one int
+		err := tx.QueryRow(ctx, `SELECT 1 FROM machines WHERE machine_id=$1 FOR UPDATE`,
+			machineID).Scan(&one)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("apply status: unknown machine %s", machineID)
+		}
+		if err != nil {
 			return err
 		}
 		keep := make([]string, 0, len(report.GetAssignments()))
@@ -668,7 +676,7 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 				return err
 			}
 		}
-		_, err := tx.Exec(ctx,
+		_, err = tx.Exec(ctx,
 			`UPDATE machines SET observed_gen = GREATEST(observed_gen, $2) WHERE machine_id=$1`,
 			machineID, report.GetObservedGeneration())
 		return err
