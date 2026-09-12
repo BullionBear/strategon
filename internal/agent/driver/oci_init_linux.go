@@ -119,6 +119,19 @@ func applyRootfs(ia InitArgs) (int, error) {
 		}
 	}
 
+	// Open the host .stdio bind before /tmp is covered by tmpfs. Tests (and
+	// a --base under /tmp) place work + .stdio there; a path lookup after
+	// the mount would create a tmpfs shadow or fail chdir in os/exec.
+	var rot *SizeRotator
+	if ia.LogDir != "" {
+		var err error
+		rot, err = OpenSizeRotator(ia.LogDir, PayloadLogName, PayloadLogMaxBytes, PayloadLogArchives)
+		if err != nil {
+			return 1, fmt.Errorf("stdio log: %w", err)
+		}
+		defer rot.Close()
+	}
+
 	if err := os.MkdirAll("/tmp", 0o1777); err != nil {
 		return 1, fmt.Errorf("mkdir /tmp: %w", err)
 	}
@@ -140,13 +153,14 @@ func applyRootfs(ia InitArgs) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if ia.LogDir != "" {
+	if rot != nil {
+		// Inherit the cwd inode pinned above. Do not pass Dir: os/exec
+		// would look the path up again after /tmp is gone.
 		return runStdioTee(stdioTeeOpts{
-			LogDir:  ia.LogDir,
+			Rot:     rot,
 			Version: ia.LogVer,
 			Argv:    append([]string{bin}, ia.Argv[1:]...),
 			Env:     os.Environ(),
-			Dir:     cwd,
 		})
 	}
 	// Preserve the oci-init.log FD across discardStdio so a failed exec

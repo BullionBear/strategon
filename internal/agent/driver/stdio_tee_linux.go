@@ -19,6 +19,9 @@ type stdioTeeOpts struct {
 	Argv    []string
 	Env     []string
 	Dir     string
+	// Rot, when non-nil, is an already-open rotator (OCI opens it before
+	// the post-pivot /tmp tmpfs hides bindSame paths under /tmp).
+	Rot *SizeRotator
 }
 
 func runStdioTeeFromArgs(args []string) int {
@@ -63,11 +66,15 @@ func runStdioTeeFromArgs(args []string) int {
 }
 
 func runStdioTee(opts stdioTeeOpts) (int, error) {
-	rot, err := OpenSizeRotator(opts.LogDir, PayloadLogName, PayloadLogMaxBytes, PayloadLogArchives)
-	if err != nil {
-		return 1, err
+	rot := opts.Rot
+	if rot == nil {
+		var err error
+		rot, err = OpenSizeRotator(opts.LogDir, PayloadLogName, PayloadLogMaxBytes, PayloadLogArchives)
+		if err != nil {
+			return 1, err
+		}
+		defer rot.Close()
 	}
-	defer rot.Close()
 
 	pr, pw, err := os.Pipe()
 	if err != nil {
@@ -80,7 +87,9 @@ func runStdioTee(opts stdioTeeOpts) (int, error) {
 	if cmd.Env == nil {
 		cmd.Env = []string{}
 	}
-	cmd.Dir = opts.Dir
+	if opts.Dir != "" {
+		cmd.Dir = opts.Dir
+	}
 	cmd.Stdout = pw
 	cmd.Stderr = pw
 
