@@ -103,8 +103,8 @@ Agent `placeholderRE` stays `[A-Za-z_][A-Za-z0-9_]*` for
 The capture is then passed through `volume.ValidateName`.
 
 - **args:** all known placeholders, including `VOLUME`.
-- **env:** only `${VOLUME:*}`; any other `${...}` stays verbatim
-  (orchestration contract: `${CONFIG}` still does not expand in env).
+- **env:** only `${VOLUME:*}`. `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}`
+  are rejected at apply (orchestration contract: they do not expand in env).
 - OCI → that mount's `containerPath`.
 - EXEC → `filepath.Abs(VolumeDir(name))`.
 - `name` must appear in this assignment's `volumeMounts`.

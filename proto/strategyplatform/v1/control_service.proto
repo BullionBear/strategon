@@ -106,7 +106,7 @@ message SetDeploymentRequest {
   string artifact_version = 3; // required; references a registered binary artifact
   string config_version = 4; // optional; empty = keep current config
   repeated string args = 5; // launch args; may include ${CONFIG}/${RELEASE_DIR}/${BINARY}
-  map<string, string> env = 6; // environment variables (full replace)
+  map<string, string> env = 6; // environment (full replace); ${VOLUME:*} only — ${CONFIG}/${BINARY}/${RELEASE_DIR} rejected
 }
 
 message SetDeploymentResponse {
@@ -128,7 +128,7 @@ message ApplyAssignmentRequest {
   DeployPolicy deploy_policy = 6;
   repeated CronSchedule schedules = 7;
   repeated string args = 8;
-  map<string, string> env = 9;
+  map<string, string> env = 9; // ${VOLUME:*} only — ${CONFIG}/${BINARY}/${RELEASE_DIR} rejected
   ResourceLimits limits = 10;
   LeaseSpec lease = 11;
   ReadinessProbe readiness = 12;

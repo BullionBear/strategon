@@ -14,7 +14,7 @@ spec:
   # Everything NATS-specific lives here. spec.strategy is the catalog family.
   # The assignment slot is members[].name. The control plane substitutes its
   # own ${set.*} / ${member.*} / ${peers} placeholders and leaves ${CONFIG}
-  # for the agent to resolve to the materialised config artifact.
+  # in args for the agent. Those tokens in env are rejected at apply.
   template:
     args: ["-c", "${CONFIG}", "--routes", "${peers}"]
 

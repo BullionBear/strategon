@@ -240,6 +240,43 @@ func TestExpandSeparator(t *testing.T) {
 	}
 }
 
+func TestValidateRejectsArgsOnlyPlaceholderInEnv(t *testing.T) {
+	for _, name := range []string{"CONFIG", "BINARY", "RELEASE_DIR"} {
+		t.Run(name, func(t *testing.T) {
+			set := natsLike("m1")
+			set.Spec.Template.Env["X"] = "${" + name + "}"
+			err := Validate(set)
+			if err == nil {
+				t.Fatal("expected rejection")
+			}
+			if !strings.Contains(err.Error(), "expands in args only") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateRejectsArgsOnlyPlaceholderViaMemberVar(t *testing.T) {
+	set := natsLike("m1")
+	set.Spec.Members[0].Vars["cfg"] = "${CONFIG}"
+	set.Spec.Template.Env["X"] = "${member.vars.cfg}"
+	err := Validate(set)
+	if err == nil {
+		t.Fatal("expected rejection after substitution")
+	}
+	if !strings.Contains(err.Error(), "expands in args only") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestValidateAcceptsVolumeInEnv(t *testing.T) {
+	set := natsLike("m1")
+	set.Spec.Template.Env["MFTIK_DATA"] = "${VOLUME:nats-a-data}"
+	if err := Validate(set); err != nil {
+		t.Fatalf("VOLUME in env should pass: %v", err)
+	}
+}
+
 func TestValidateRejectsUnknownPlaceholder(t *testing.T) {
 	cases := map[string]func(*pb.AssignmentSet){
 		"args":      func(s *pb.AssignmentSet) { s.Spec.Template.Args = []string{"${member.nmae}"} },
