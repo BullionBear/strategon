@@ -362,17 +362,12 @@ func (p *Postgres) SetAssignment(machineID, strategy string, spec *pb.StrategyAs
 	var changed bool
 	err := p.inTx(ctx, func(tx pgx.Tx) error {
 		var curGen int64
-		err := tx.QueryRow(ctx, `SELECT generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
-			machineID).Scan(&curGen)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("set assignment: unknown machine %s", machineID)
-		}
-		if err != nil {
+		if err := lockMachine(ctx, tx, machineID, "set assignment", "generation", &curGen); err != nil {
 			return err
 		}
 
 		var oldBytes []byte
-		err = tx.QueryRow(ctx, `SELECT spec FROM assignments WHERE machine_id=$1 AND strategy=$2`,
+		err := tx.QueryRow(ctx, `SELECT spec FROM assignments WHERE machine_id=$1 AND strategy=$2`,
 			machineID, strategy).Scan(&oldBytes)
 		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return err
@@ -457,13 +452,8 @@ func (p *Postgres) SetSharedFiles(machineID string, files []*pb.SharedFileSpec) 
 	// Diff under FOR UPDATE so concurrent callers serialize like Memory's lock.
 	err = p.inTx(ctx, func(tx pgx.Tx) error {
 		var curSharedGen, curDesiredGen int64
-		err := tx.QueryRow(ctx,
-			`SELECT shared_generation, generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
-			machineID).Scan(&curSharedGen, &curDesiredGen)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("set shared files: unknown machine %s", machineID)
-		}
-		if err != nil {
+		if err := lockMachine(ctx, tx, machineID, "set shared files",
+			"shared_generation, generation", &curSharedGen, &curDesiredGen); err != nil {
 			return err
 		}
 		cur := map[string]*pb.SharedFileSpec{}
@@ -527,13 +517,8 @@ func (p *Postgres) CreateVolume(machineID, name string) (volGen, desiredGen int6
 	now := time.Now().Unix()
 	err = p.inTx(ctx, func(tx pgx.Tx) error {
 		var curVol, curDesired int64
-		err := tx.QueryRow(ctx,
-			`SELECT volumes_generation, generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
-			machineID).Scan(&curVol, &curDesired)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("create volume: unknown machine %s", machineID)
-		}
-		if err != nil {
+		if err := lockMachine(ctx, tx, machineID, "create volume",
+			"volumes_generation, generation", &curVol, &curDesired); err != nil {
 			return err
 		}
 		var exists int
@@ -576,13 +561,8 @@ func (p *Postgres) DeleteVolume(machineID, name string) (volGen, desiredGen int6
 	defer cancel()
 	err = p.inTx(ctx, func(tx pgx.Tx) error {
 		var curVol, curDesired int64
-		err := tx.QueryRow(ctx,
-			`SELECT volumes_generation, generation FROM machines WHERE machine_id=$1 FOR UPDATE`,
-			machineID).Scan(&curVol, &curDesired)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("delete volume: unknown machine %s", machineID)
-		}
-		if err != nil {
+		if err := lockMachine(ctx, tx, machineID, "delete volume",
+			"volumes_generation, generation", &curVol, &curDesired); err != nil {
 			return err
 		}
 		tag, err := tx.Exec(ctx, `DELETE FROM machine_volumes WHERE machine_id=$1 AND name=$2`, machineID, name)
@@ -617,15 +597,7 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 	ctx, cancel := opCtx()
 	defer cancel()
 	err := p.inTx(ctx, func(tx pgx.Tx) error {
-		// Lock the machine row first, matching SetAssignment, so undeploy
-		// and status cannot lock-order deadlock.
-		var one int
-		err := tx.QueryRow(ctx, `SELECT 1 FROM machines WHERE machine_id=$1 FOR UPDATE`,
-			machineID).Scan(&one)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return fmt.Errorf("apply status: unknown machine %s", machineID)
-		}
-		if err != nil {
+		if err := lockMachine(ctx, tx, machineID, "apply status", "1", new(int)); err != nil {
 			return err
 		}
 		keep := make([]string, 0, len(report.GetAssignments()))
@@ -676,7 +648,7 @@ func (p *Postgres) ApplyStatus(machineID string, report *pb.StatusReport) error 
 				return err
 			}
 		}
-		_, err = tx.Exec(ctx,
+		_, err := tx.Exec(ctx,
 			`UPDATE machines SET observed_gen = GREATEST(observed_gen, $2) WHERE machine_id=$1`,
 			machineID, report.GetObservedGeneration())
 		return err
@@ -814,6 +786,26 @@ func (p *Postgres) SetReachable(machineID string, reachable bool) error {
 	}
 	p.notify(machineID)
 	return nil
+}
+
+// lockMachine takes the machines-row write lock that every writer must hold
+// before touching a machine's child tables (assignments, statuses,
+// previous_artifacts, machine_shared_files, machine_volumes), scanning cols
+// while the lock is held. Acquiring this row first, uniformly, is what stops
+// concurrent writers from lock-order deadlocking — an undeploy that locks the
+// machine then deletes statuses against a status write that did the reverse.
+// New writers must lock through here rather than hand-rolling a FOR UPDATE.
+//
+// cols is a SQL fragment supplied by the caller, never by request data; pass
+// "1" with a throwaway dest when only the lock is wanted. For a read-only
+// existence check that takes no lock, use requireMachine instead.
+func lockMachine(ctx context.Context, tx pgx.Tx, machineID, op, cols string, dest ...any) error {
+	err := tx.QueryRow(ctx,
+		`SELECT `+cols+` FROM machines WHERE machine_id=$1 FOR UPDATE`, machineID).Scan(dest...)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("%s: unknown machine %s", op, machineID)
+	}
+	return err
 }
 
 func requireMachine(ctx context.Context, q querier, machineID, op string) error {
