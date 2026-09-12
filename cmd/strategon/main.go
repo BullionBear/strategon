@@ -69,6 +69,10 @@ func run(args []string) error {
 		return cmdWait(args[1:])
 	case "volume":
 		return cmdVolume(args[1:])
+	case "files":
+		return cmdFiles(args[1:])
+	case "logs":
+		return cmdLogs(args[1:])
 	default:
 		return usageError{msg: fmt.Sprintf("unknown command %q\n\n%s", args[0], usageText)}
 	}
@@ -84,6 +88,12 @@ Commands:
   volume create MACHINE NAME    Create a machine-level volume
   volume ls MACHINE             List volumes on a machine
   volume rm MACHINE NAME        Delete a volume (fails if mounted)
+  files ls MACHINE STRATEGY [PATH]   Browse a strategy slot
+  files get MACHINE STRATEGY PATH [PATH...]
+                                Download slot files (use -o FILE)
+  logs MACHINE STRATEGY         Fetch .stdio/payload.log (add --all for rotates)
+
+  Apply is authoritative: omit captureStdio to turn payload stdio capture off.
 
 Apply dispatches on kind:
   AssignmentSet       → ApplyAssignmentSet (does not Deploy members)

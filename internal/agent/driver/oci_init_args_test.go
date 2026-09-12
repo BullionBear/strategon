@@ -77,6 +77,36 @@ func TestBuildInitArgsVolumes(t *testing.T) {
 	}
 }
 
+func TestBuildInitArgsLogDir(t *testing.T) {
+	args := BuildInitArgs(StartSpec{
+		Rootfs:         "/r",
+		WorkBind:       "/w",
+		SharedBind:     "/s",
+		WorkDir:        "/w",
+		CaptureStdio:   true,
+		PayloadLogDir:  "/slot/.stdio",
+		PayloadVersion: "v2",
+		Argv:           []string{"true"},
+	})
+	got, err := parseInitFlag(args[1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.LogDir != "/slot/.stdio" || got.LogVer != "v2" {
+		t.Fatalf("%+v", got)
+	}
+	off := BuildInitArgs(StartSpec{
+		Rootfs: "/r", WorkBind: "/w", SharedBind: "/s", WorkDir: "/w", Argv: []string{"true"},
+	})
+	gotOff, err := parseInitFlag(off[1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotOff.LogDir != "" {
+		t.Fatalf("capture off leaked logdir: %+v", gotOff)
+	}
+}
+
 func TestSplitVolumeBindRejectsColonInPaths(t *testing.T) {
 	if _, _, ok := splitVolumeBind("/tmp/foo:bar:/data"); ok {
 		t.Fatal("colon in host should fail")

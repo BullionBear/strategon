@@ -205,6 +205,92 @@ func TestOCIDriverPayloadReachesExec(t *testing.T) {
 	}
 }
 
+func TestOCIDriverCaptureStdio(t *testing.T) {
+	requireUserNS(t)
+	echo, err := exec.LookPath("echo")
+	if err != nil {
+		t.Skip("echo not available")
+	}
+	rootfs := t.TempDir()
+	copyIntoRootfs(t, rootfs, echo)
+	work := filepath.Join(t.TempDir(), "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logDir := filepath.Join(filepath.Dir(work), StdioDirName)
+	if err := os.MkdirAll(logDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	d := NewOCIDriver(NewExecDriver(""))
+	p, err := d.Start(StartSpec{
+		Strategy:       "s",
+		Driver:         KindOCI,
+		Rootfs:         rootfs,
+		Argv:           []string{echo, "oci-hi"},
+		WorkDir:        work,
+		WorkBind:       work,
+		Env:            []string{"PATH=/bin:/usr/bin"},
+		CaptureStdio:   true,
+		PayloadLogDir:  logDir,
+		PayloadVersion: "v1",
+	}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := d.WatchExit(p, time.Now)
+	if info.Code != 0 {
+		body, _ := os.ReadFile(OCIInitLogPath(work))
+		t.Fatalf("exit %d initlog=%s", info.Code, body)
+	}
+	got, err := os.ReadFile(filepath.Join(logDir, PayloadLogName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "oci-hi") {
+		t.Fatalf("log = %q", got)
+	}
+}
+
+func TestOCIDriverCaptureOffDiscards(t *testing.T) {
+	requireUserNS(t)
+	echo, err := exec.LookPath("echo")
+	if err != nil {
+		t.Skip("echo not available")
+	}
+	rootfs := t.TempDir()
+	copyIntoRootfs(t, rootfs, echo)
+	work := filepath.Join(t.TempDir(), "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logDir := filepath.Join(filepath.Dir(work), StdioDirName)
+	if err := os.MkdirAll(logDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	d := NewOCIDriver(NewExecDriver(""))
+	p, err := d.Start(StartSpec{
+		Strategy:      "s",
+		Driver:        KindOCI,
+		Rootfs:        rootfs,
+		Argv:          []string{echo, "oci-discard"},
+		WorkDir:       work,
+		WorkBind:      work,
+		Env:           []string{"PATH=/bin:/usr/bin"},
+		PayloadLogDir: logDir,
+	}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	info := d.WatchExit(p, time.Now)
+	if info.Code != 0 {
+		body, _ := os.ReadFile(OCIInitLogPath(work))
+		t.Fatalf("exit %d initlog=%s", info.Code, body)
+	}
+	if _, err := os.Stat(filepath.Join(logDir, PayloadLogName)); !os.IsNotExist(err) {
+		t.Fatalf("capture off must not write payload.log: %v", err)
+	}
+}
+
 func TestOCIDriverInitStderrGoesToWorkLog(t *testing.T) {
 	requireUserNS(t)
 	work := filepath.Join(t.TempDir(), "work")

@@ -320,6 +320,11 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 	if st.phase == pb.DeployPhase_DEPLOY_PHASE_FAILED && st.failedAtGen == r.generation {
 		return
 	}
+	if versionMatches(spec, st) && st.proc != nil && !st.stopping && st.inflight == nil &&
+		spec.GetCaptureStdio() != st.captureStdio {
+		r.spawnDrain(st, spec, false)
+		return
+	}
 	switch {
 	case versionMatches(spec, st) && st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY && st.proc != nil:
 		// Same bytes, possibly a new version/uri (http→s3 retag). Do not
@@ -451,6 +456,7 @@ func (r *Reconciler) installProcess(spec *pb.StrategyAssignmentSpec, st *strateg
 	st.proc = proc
 	st.startedAt = proc.StartedAt
 	st.stopping = false
+	st.captureStdio = spec.GetCaptureStdio()
 	r.setCondition(st, conditionLive, pb.ConditionStatus_CONDITION_STATUS_TRUE, "Started", "")
 	go func(strategy string, p *driver.Process) {
 		info := r.deps.Driver.WatchExit(p, r.now)
@@ -476,6 +482,9 @@ func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec, launch *pb.
 		CPUMillicores: limits.GetCpuMillicores(),
 		MemoryBytes:   limits.GetMemoryBytes(),
 		MaxOpenFiles:  limits.GetMaxOpenFiles(),
+	}
+	if err := r.applyCaptureStdio(spec, launch, &out); err != nil {
+		return driver.StartSpec{}, err
 	}
 	if launch.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
 		return r.buildOCIStartSpec(spec, launch, out, args)
@@ -547,6 +556,26 @@ func (r *Reconciler) buildOCIStartSpec(spec *pb.StrategyAssignmentSpec, launch *
 	return out, nil
 }
 
+func (r *Reconciler) applyCaptureStdio(spec *pb.StrategyAssignmentSpec, launch *pb.ArtifactRef, out *driver.StartSpec) error {
+	if !spec.GetCaptureStdio() {
+		return nil
+	}
+	dir := driver.PayloadLogDir(r.deps.Artifacts.StrategyDir(spec.GetStrategy()))
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("mkdir stdio: %w", err)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	out.CaptureStdio = true
+	out.PayloadLogDir = abs
+	if launch != nil {
+		out.PayloadVersion = launch.GetVersion()
+	}
+	return nil
+}
+
 func (r *Reconciler) ociVolumeBinds(spec *pb.StrategyAssignmentSpec) ([]driver.VolumeBind, error) {
 	mounts := spec.GetVolumeMounts()
 	if len(mounts) == 0 {
@@ -568,8 +597,9 @@ func (r *Reconciler) ociVolumeBinds(spec *pb.StrategyAssignmentSpec) ([]driver.V
 		if strings.Contains(host, ":") || strings.Contains(cpath, ":") {
 			return nil, fmt.Errorf("volume %q path contains ':'", m.GetName())
 		}
-		if volume.ShadowsBindSame(cpath, work, shared, cfg) {
-			return nil, fmt.Errorf("volume %q container_path %s shadows work/shared/config bind", m.GetName(), cpath)
+		stdio := driver.PayloadLogDir(r.deps.Artifacts.StrategyDir(spec.GetStrategy()))
+		if volume.ShadowsBindSame(cpath, work, shared, cfg, stdio) {
+			return nil, fmt.Errorf("volume %q container_path %s shadows work/shared/config/stdio bind", m.GetName(), cpath)
 		}
 		out = append(out, driver.VolumeBind{Host: host, Container: cpath})
 	}

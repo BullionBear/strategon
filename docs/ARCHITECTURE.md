@@ -133,7 +133,11 @@ browser over the existing agent-initiated `Connect` bidi stream.
 - Caps: single file ≤ 256 MiB; tarball ≤ 500 files and ≤ 512 MiB uncompressed;
   browse timeout 30s; download timeout 5m; chunk size 64 KiB.
 - Capability gate: slot browse `agent_version >= 2`; volume browse
-  `agent_version >= 3`. Older agents Nack unknown payloads.
+  `agent_version >= 3`; payload stdio capture `agent_version >= 4`.
+  Older agents Nack unknown payloads.
+- CLI: `strategon files ls|get` and `strategon logs MACHINE STRATEGY`
+  wrap BrowseDir / DownloadFiles. `.stdio/payload.log` is under the
+  slot jail (no new RPC).
 - Audit: a successful download (EOF) appends `action=DownloadFiles` with
   `detail` including paths, filename, transfer kind, and byte count. Failed
   agent validation does not write an audit entry.
@@ -289,6 +293,7 @@ OCI binds (inside the container):
 | `<base>/shared` | same host path |
 | config file | same host path |
 | `<base>/volumes/<name>` | `volumeMounts[].containerPath` |
+| `<base>/<strategy>/.stdio` | same host path, only when `capture_stdio` |
 
 `${WORK_DIR}`, `${SHARED_DIR}` and `${VOLUME:name}` are legal in args and
 env on both drivers. `${CONFIG}`, `${BINARY}` and `${RELEASE_DIR}` stay
@@ -299,12 +304,29 @@ template fails. Resolution is keyed off the **launch artifact**, not
 `spec.driver`, so auto-rollback from OCI to a previous BINARY still
 expands the same mount list.
 
-OCI runtime (not a path-contract split): payload is PID 1 (SIGTERM may be
-discarded); rootfs is read-only after start (undeclared writes are EROFS);
-`/tmp` is tmpfs; no `/sys/fs/cgroup` in the container; release GC
-(`--release-retention`) makes `RollbackRequest.target_version` a re-fetch
-if that version was deleted. Unprivileged user ns is probed at Register;
-enabling it later requires an agent restart.
+OCI runtime (not a path-contract split): without `capture_stdio` the
+payload is PID 1 (SIGTERM may be discarded); with capture on a Strategon
+tee is PID 1 and the payload is an ordinary child, so SIGTERM has the
+default effect and **will** stop it. Rootfs is read-only after start
+(undeclared writes are EROFS); `/tmp` is tmpfs; no `/sys/fs/cgroup` in
+the container; release GC (`--release-retention`) makes
+`RollbackRequest.target_version` a re-fetch if that version was deleted.
+Unprivileged user ns is probed at Register; enabling it later requires an
+agent restart.
+
+Payload stdout/stderr default to `/dev/null` (EXEC and OCI). Optional
+`StrategyAssignmentSpec.capture_stdio` (default false; Apply is
+authoritative — omit means off) tees both fds through one pipe into
+`<base>/<strategy>/.stdio/payload.log`, size-rotated at 8 MiB × 4
+(current + 3 archives). Files live with the assignment slot, not the
+process; rotate-eviction is the only GC. The tee is the supervised PID
+and survives agent self-update. It is a full agent-binary Go process
+inside the strategy cgroup — flipping capture on adds tens of MB against
+`memory.max`. `0o640` limits other host users, not the payload (same uid;
+`.stdio/` is a sibling of the process cwd `work/`, not inside it). Assignment-set
+members take the flag only from `MemberTemplate`; `SetStdioCapture` is
+rejected on reserved slots. Write errors degrade to discard so a full
+disk cannot stall the payload. Requires `agent_version >= 4`.
 
 ### Deploy phases
 

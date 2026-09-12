@@ -6,3 +6,5 @@ spec:
   machineId: m1
   artifactVersion: v1
   stopped: false
+  # Apply is authoritative: omit captureStdio (or false) turns payload
+  # stdout/stderr capture off. Requires agent_version >= 4.

@@ -69,6 +69,9 @@ const (
 	// ControlPlaneServiceStartProcedure is the fully-qualified name of the ControlPlaneService's Start
 	// RPC.
 	ControlPlaneServiceStartProcedure = "/strategyplatform.v1.ControlPlaneService/Start"
+	// ControlPlaneServiceSetStdioCaptureProcedure is the fully-qualified name of the
+	// ControlPlaneService's SetStdioCapture RPC.
+	ControlPlaneServiceSetStdioCaptureProcedure = "/strategyplatform.v1.ControlPlaneService/SetStdioCapture"
 	// ControlPlaneServiceUndeployProcedure is the fully-qualified name of the ControlPlaneService's
 	// Undeploy RPC.
 	ControlPlaneServiceUndeployProcedure = "/strategyplatform.v1.ControlPlaneService/Undeploy"
@@ -134,6 +137,7 @@ var (
 	controlPlaneServiceDeleteAssignmentSetMethodDescriptor    = controlPlaneServiceServiceDescriptor.Methods().ByName("DeleteAssignmentSet")
 	controlPlaneServiceStopMethodDescriptor                   = controlPlaneServiceServiceDescriptor.Methods().ByName("Stop")
 	controlPlaneServiceStartMethodDescriptor                  = controlPlaneServiceServiceDescriptor.Methods().ByName("Start")
+	controlPlaneServiceSetStdioCaptureMethodDescriptor        = controlPlaneServiceServiceDescriptor.Methods().ByName("SetStdioCapture")
 	controlPlaneServiceUndeployMethodDescriptor               = controlPlaneServiceServiceDescriptor.Methods().ByName("Undeploy")
 	controlPlaneServiceSetScheduleMethodDescriptor            = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSchedule")
 	controlPlaneServiceSetSharedFilesMethodDescriptor         = controlPlaneServiceServiceDescriptor.Methods().ByName("SetSharedFiles")
@@ -166,6 +170,7 @@ type ControlPlaneServiceClient interface {
 	DeleteAssignmentSet(context.Context, *connect.Request[v1.DeleteAssignmentSetRequest]) (*connect.Response[v1.DeleteAssignmentSetResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
+	SetStdioCapture(context.Context, *connect.Request[v1.SetStdioCaptureRequest]) (*connect.Response[v1.SetStdioCaptureResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
 	SetSchedule(context.Context, *connect.Request[v1.SetScheduleRequest]) (*connect.Response[v1.SetScheduleResponse], error)
 	// Machine-level shared files (full overwrite; independent of assignments).
@@ -271,6 +276,12 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+ControlPlaneServiceStartProcedure,
 			connect.WithSchema(controlPlaneServiceStartMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		setStdioCapture: connect.NewClient[v1.SetStdioCaptureRequest, v1.SetStdioCaptureResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceSetStdioCaptureProcedure,
+			connect.WithSchema(controlPlaneServiceSetStdioCaptureMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
 		undeploy: connect.NewClient[v1.UndeployRequest, v1.UndeployResponse](
@@ -386,6 +397,7 @@ type controlPlaneServiceClient struct {
 	deleteAssignmentSet    *connect.Client[v1.DeleteAssignmentSetRequest, v1.DeleteAssignmentSetResponse]
 	stop                   *connect.Client[v1.StopRequest, v1.StopResponse]
 	start                  *connect.Client[v1.StartRequest, v1.StartResponse]
+	setStdioCapture        *connect.Client[v1.SetStdioCaptureRequest, v1.SetStdioCaptureResponse]
 	undeploy               *connect.Client[v1.UndeployRequest, v1.UndeployResponse]
 	setSchedule            *connect.Client[v1.SetScheduleRequest, v1.SetScheduleResponse]
 	setSharedFiles         *connect.Client[v1.SetSharedFilesRequest, v1.SetSharedFilesResponse]
@@ -462,6 +474,11 @@ func (c *controlPlaneServiceClient) Stop(ctx context.Context, req *connect.Reque
 // Start calls strategyplatform.v1.ControlPlaneService.Start.
 func (c *controlPlaneServiceClient) Start(ctx context.Context, req *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error) {
 	return c.start.CallUnary(ctx, req)
+}
+
+// SetStdioCapture calls strategyplatform.v1.ControlPlaneService.SetStdioCapture.
+func (c *controlPlaneServiceClient) SetStdioCapture(ctx context.Context, req *connect.Request[v1.SetStdioCaptureRequest]) (*connect.Response[v1.SetStdioCaptureResponse], error) {
+	return c.setStdioCapture.CallUnary(ctx, req)
 }
 
 // Undeploy calls strategyplatform.v1.ControlPlaneService.Undeploy.
@@ -559,6 +576,7 @@ type ControlPlaneServiceHandler interface {
 	DeleteAssignmentSet(context.Context, *connect.Request[v1.DeleteAssignmentSetRequest]) (*connect.Response[v1.DeleteAssignmentSetResponse], error)
 	Stop(context.Context, *connect.Request[v1.StopRequest]) (*connect.Response[v1.StopResponse], error)
 	Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error)
+	SetStdioCapture(context.Context, *connect.Request[v1.SetStdioCaptureRequest]) (*connect.Response[v1.SetStdioCaptureResponse], error)
 	Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error)
 	SetSchedule(context.Context, *connect.Request[v1.SetScheduleRequest]) (*connect.Response[v1.SetScheduleResponse], error)
 	// Machine-level shared files (full overwrite; independent of assignments).
@@ -660,6 +678,12 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		ControlPlaneServiceStartProcedure,
 		svc.Start,
 		connect.WithSchema(controlPlaneServiceStartMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceSetStdioCaptureHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceSetStdioCaptureProcedure,
+		svc.SetStdioCapture,
+		connect.WithSchema(controlPlaneServiceSetStdioCaptureMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
 	controlPlaneServiceUndeployHandler := connect.NewUnaryHandler(
@@ -784,6 +808,8 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceStopHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceStartProcedure:
 			controlPlaneServiceStartHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceSetStdioCaptureProcedure:
+			controlPlaneServiceSetStdioCaptureHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceUndeployProcedure:
 			controlPlaneServiceUndeployHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceSetScheduleProcedure:
@@ -871,6 +897,10 @@ func (UnimplementedControlPlaneServiceHandler) Stop(context.Context, *connect.Re
 
 func (UnimplementedControlPlaneServiceHandler) Start(context.Context, *connect.Request[v1.StartRequest]) (*connect.Response[v1.StartResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.Start is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) SetStdioCapture(context.Context, *connect.Request[v1.SetStdioCaptureRequest]) (*connect.Response[v1.SetStdioCaptureResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.SetStdioCapture is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) Undeploy(context.Context, *connect.Request[v1.UndeployRequest]) (*connect.Response[v1.UndeployResponse], error) {

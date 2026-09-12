@@ -45,12 +45,14 @@ type setSpecYAML struct {
 }
 
 type memberTmplYAML struct {
-	Args         []string          `yaml:"args"`
-	Env          map[string]string `yaml:"env"`
-	Readiness    readinessYAML     `yaml:"readiness"`
-	DeployPolicy *deployPolicyYAML `yaml:"deployPolicy"`
-	Peers        peersYAML         `yaml:"peers"`
-	VolumeMounts []volumeMountYAML `yaml:"volumeMounts"`
+	Args            []string          `yaml:"args"`
+	Env             map[string]string `yaml:"env"`
+	Readiness       readinessYAML     `yaml:"readiness"`
+	DeployPolicy    *deployPolicyYAML `yaml:"deployPolicy"`
+	Peers           peersYAML         `yaml:"peers"`
+	VolumeMounts    []volumeMountYAML `yaml:"volumeMounts"`
+	CaptureStdio    bool              `yaml:"captureStdio"`
+	CaptureStdioAlt bool              `yaml:"capture_stdio"`
 }
 
 type readinessYAML struct {
@@ -93,7 +95,7 @@ type assignmentSpecYAML struct {
 	ArtifactVersionAlt string            `yaml:"artifact_version"`
 	ConfigVersion      string            `yaml:"configVersion"`
 	ConfigVersionAlt   string            `yaml:"config_version"`
-	Stopped            bool              `yaml:"stopped"`
+	Stopped            bool              `yaml:"stopped"` // omit/false = should be running
 	Args               []string          `yaml:"args"`
 	Env                map[string]string `yaml:"env"`
 	DeployPolicy       *policyYAML       `yaml:"deployPolicy"`
@@ -103,6 +105,10 @@ type assignmentSpecYAML struct {
 	Lease              *leaseYAML        `yaml:"lease"`
 	Readiness          *readinessYAML    `yaml:"readiness"`
 	VolumeMounts       []volumeMountYAML `yaml:"volumeMounts"`
+	// Apply is authoritative: omit / false turns payload stdio capture off
+	// (same as stopped — not carried forward like empty configVersion).
+	CaptureStdio    bool `yaml:"captureStdio"`
+	CaptureStdioAlt bool `yaml:"capture_stdio"`
 }
 
 type volumeMountYAML struct {
@@ -238,6 +244,7 @@ func applyAssignmentSet(ctx context.Context, client strategyplatformv1connect.Co
 		Args:         spec.Template.Args,
 		Env:          spec.Template.Env,
 		VolumeMounts: protoMounts(spec.Template.VolumeMounts),
+		CaptureStdio: spec.Template.CaptureStdio || spec.Template.CaptureStdioAlt,
 	}
 	if spec.Template.Readiness.Endpoint != "" {
 		tmpl.Readiness = &pb.ReadinessProbe{Endpoint: spec.Template.Readiness.Endpoint}
@@ -321,6 +328,7 @@ func applyAssignment(ctx context.Context, client strategyplatformv1connect.Contr
 		Lease:           spec.lease(),
 		Readiness:       spec.readiness(),
 		VolumeMounts:    protoMounts(spec.VolumeMounts),
+		CaptureStdio:    spec.CaptureStdio || spec.CaptureStdioAlt,
 	}
 	resp, err := client.ApplyAssignment(ctx, connect.NewRequest(req))
 	if err != nil {

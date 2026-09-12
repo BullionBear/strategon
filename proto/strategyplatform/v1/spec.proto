@@ -33,6 +33,10 @@ message StrategyAssignmentSpec {
   // validates for both drivers. EXEC ignores container_path at start;
   // OCI bind-mounts <base>/volumes/<name> there.
   repeated VolumeMount volume_mounts = 13;
+  // When true the agent captures payload stdout/stderr to
+  // <base>/<strategy>/.stdio/payload.log (size-rotated). Default false =
+  // discard (current policy). Apply is authoritative: omit means false.
+  bool capture_stdio = 14;
 }
 
 // VolumeMount references a machine-level volume by name.

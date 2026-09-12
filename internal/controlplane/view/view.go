@@ -89,6 +89,7 @@ func BuildStrategyView(rec *store.MachineRecord, name string, st store.Store, pr
 		v.Schedules = spec.GetSchedules()
 		v.Stopped = spec.GetStopped()
 		v.VolumeMounts = spec.GetVolumeMounts()
+		v.CaptureStdio = spec.GetCaptureStdio()
 	}
 	if status := rec.Status[name]; status != nil {
 		v.Phase = status.GetPhase()

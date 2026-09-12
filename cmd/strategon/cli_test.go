@@ -210,6 +210,35 @@ func TestApplyStrategyAssignment(t *testing.T) {
 	}
 }
 
+func TestApplyCaptureStdioYAML(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 4})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:h", Uri: "file:///hello"},
+	}))
+	p := filepath.Join(t.TempDir(), "cap.yaml")
+	body := []byte(`apiVersion: strategon/v1
+kind: StrategyAssignment
+metadata:
+  name: hello
+spec:
+  machineId: m1
+  artifactVersion: v1
+  captureStdio: true
+`)
+	if err := os.WriteFile(p, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyFile(ctx, client, p); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if !rec.Assignments["hello"].GetCaptureStdio() {
+		t.Fatal("captureStdio not applied")
+	}
+}
+
 func TestGetAndWaitAssignmentSet(t *testing.T) {
 	client, st, _ := startCLIAPI(t)
 	seedNATSExample(t, client, st)
@@ -327,6 +356,21 @@ func TestPeelLeadingGlobals(t *testing.T) {
 	}
 	if os.Getenv("STRATEGON_ADDR") != "http://example:8081" || os.Getenv("STRATEGON_TOKEN") != "t" {
 		t.Fatalf("env addr=%s token=%s", os.Getenv("STRATEGON_ADDR"), os.Getenv("STRATEGON_TOKEN"))
+	}
+}
+
+func TestFilesAndLogsUsage(t *testing.T) {
+	for _, args := range [][]string{
+		{"files"},
+		{"files", "nope"},
+		{"files", "ls"},
+		{"files", "get"},
+		{"logs"},
+	} {
+		err := run(args)
+		if err == nil || !isUsage(err) {
+			t.Fatalf("%v: %v", args, err)
+		}
 	}
 }
 

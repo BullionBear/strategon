@@ -67,6 +67,9 @@ message MemberTemplate {
   ResourceLimits limits = 5;
   PeerList peers = 6;
   repeated VolumeMount volume_mounts = 7;
+  // Durable stdio capture for every member. Human SetStdioCapture is
+  // rejected on set-owned slots; this field is the only write path.
+  bool capture_stdio = 8;
 }
 
 // PeerList renders ${peers} for one member.

@@ -51,6 +51,13 @@ type StartSpec struct {
 
 	// VolumeBinds are OCI-only host→container mounts. EXEC ignores this field.
 	VolumeBinds []VolumeBind
+
+	// CaptureStdio, when true, wraps the payload with a size-rotated tee
+	// writing <PayloadLogDir>/payload.log. PayloadLogDir is the host
+	// .stdio directory (StrategyDir, not WorkDir).
+	CaptureStdio   bool
+	PayloadLogDir  string
+	PayloadVersion string
 }
 
 // VolumeBind is one OCI bind of a machine volume directory at containerPath.

@@ -37,6 +37,7 @@ type Strategy struct {
 	PrevArtifact       *Artifact `json:"prev_artifact,omitempty"`
 	ObservedGeneration int64     `json:"observed_generation"`
 	LastBadVersion     string    `json:"last_bad_version,omitempty"`
+	CaptureStdio       bool      `json:"capture_stdio,omitempty"`
 }
 
 // Artifact is a JSON-friendly ArtifactRef subset.

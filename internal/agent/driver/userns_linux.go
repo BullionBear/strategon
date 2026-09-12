@@ -50,9 +50,9 @@ func probeCommand() *exec.Cmd {
 	return exec.Command("/proc/self/exe", flagOCIProbe)
 }
 
-// MaybeRunOCIHelper intercepts --oci-init / --oci-probe before the agent
-// required-flag checks. Returns true if this process should not continue as
-// the agent (the helper already os.Exit'd).
+// MaybeRunOCIHelper intercepts --oci-init / --oci-probe / --stdio-tee before
+// the agent required-flag checks. Returns true if this process should not
+// continue as the agent (the helper already os.Exit'd).
 func MaybeRunOCIHelper() bool {
 	if len(os.Args) < 2 {
 		return false
@@ -63,6 +63,9 @@ func MaybeRunOCIHelper() bool {
 		return true
 	case flagOCIInit:
 		os.Exit(runOCIInit(os.Args[2:]))
+		return true
+	case flagStdioTee:
+		os.Exit(runStdioTeeFromArgs(os.Args[2:]))
 		return true
 	}
 	return false

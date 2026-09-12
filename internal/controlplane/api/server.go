@@ -38,6 +38,10 @@ const MinFileBrowseAgentVersion int32 = 2
 // BrowseDir/DownloadFiles against a machine volume root.
 const MinVolumeBrowseAgentVersion int32 = 3
 
+// MinStdioCaptureAgentVersion is the capability version that implements
+// payload stdio capture (tee + .stdio/).
+const MinStdioCaptureAgentVersion int32 = 4
+
 // AgentNotifier pushes a fresh DesiredState to a connected agent after a write.
 type AgentNotifier interface {
 	Notify(machineID string)
@@ -315,6 +319,7 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 		Readiness:    msg.GetReadiness(),
 		DeployPolicy: msg.GetDeployPolicy(),
 		VolumeMounts: msg.GetVolumeMounts(),
+		CaptureStdio: msg.GetCaptureStdio(),
 	}
 	if spec.GetDeployPolicy() == nil {
 		spec.DeployPolicy = defaultOrCloneSpec(nil, msg.GetStrategy()).GetDeployPolicy()
@@ -330,6 +335,11 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 	}
 	if err := applyDriverFromArtifact(spec, art, rec); err != nil {
 		return nil, err
+	}
+	if spec.GetCaptureStdio() {
+		if err := requireAgentCapability(msg.GetMachineId(), rec, MinStdioCaptureAgentVersion, "stdio capture"); err != nil {
+			return nil, err
+		}
 	}
 	if err := validateAssignmentMounts(msg.GetMachineId(), msg.GetStrategy(), rec, spec); err != nil {
 		var wc *volume.WriterConflictError
@@ -502,6 +512,44 @@ func (s *Server) Start(ctx context.Context, req *connect.Request[pb.StartRequest
 		return nil, err
 	}
 	return connect.NewResponse(&pb.StartResponse{Generation: gen}), nil
+}
+
+func (s *Server) SetStdioCapture(ctx context.Context, req *connect.Request[pb.SetStdioCaptureRequest]) (*connect.Response[pb.SetStdioCaptureResponse], error) {
+	msg := req.Msg
+	if msg.GetMachineId() == "" || msg.GetStrategy() == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("machine_id and strategy are required"))
+	}
+	rec, ok := s.store.GetMachine(msg.GetMachineId())
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine %q not found", msg.GetMachineId()))
+	}
+	spec := rec.Assignments[msg.GetStrategy()]
+	if spec == nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("strategy %q not assigned", msg.GetStrategy()))
+	}
+	if msg.GetCaptureStdio() {
+		if err := requireAgentCapability(msg.GetMachineId(), rec, MinStdioCaptureAgentVersion, "stdio capture"); err != nil {
+			return nil, err
+		}
+	}
+	next := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
+	next.CaptureStdio = msg.GetCaptureStdio()
+	gen, _, err := s.assign.Apply(ctx, assign.Request{
+		MachineID:   msg.GetMachineId(),
+		Strategy:    msg.GetStrategy(),
+		Spec:        next,
+		Action:      "SetStdioCapture",
+		Actor:       auth.ActorFromContext(ctx),
+		FromVersion: spec.GetArtifact().GetVersion(),
+		ToVersion:   spec.GetArtifact().GetVersion(),
+		Detail:      fmt.Sprintf("capture_stdio=%v", msg.GetCaptureStdio()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.logger.Info("set_stdio_capture", "machine_id", msg.GetMachineId(), "strategy", msg.GetStrategy(),
+		"capture_stdio", msg.GetCaptureStdio(), "generation", gen, "actor", auth.ActorFromContext(ctx))
+	return connect.NewResponse(&pb.SetStdioCaptureResponse{Generation: gen}), nil
 }
 
 // setRunState flips StrategyAssignmentSpec.stopped without touching
@@ -1163,6 +1211,10 @@ func (s *Server) gateFileBrowse(machineID, strategy, vol string) error {
 		need = MinVolumeBrowseAgentVersion
 		what = "volume browse"
 	}
+	return requireAgentCapability(machineID, rec, need, what)
+}
+
+func requireAgentCapability(machineID string, rec *store.MachineRecord, need int32, what string) error {
 	if rec.AgentVersion < need {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("machine %q agent_version %d does not support %s (need >= %d)",
