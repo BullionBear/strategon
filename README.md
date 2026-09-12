@@ -134,11 +134,13 @@ Requirements and limits:
   (capability is reported only at Register).
 - Payload is PID 1: SIGTERM is ignored unless the process installs a handler;
   stop waits `stop_grace` then SIGKILL.
-- cwd is `<base>/<strategy>/work` (not StrategyDir). `${CONFIG}` and
-  `${VOLUME:name}` are valid in args; `${RELEASE_DIR}` and `${BINARY}` are
-  rejected. `${VOLUME:name}` also expands in env (to `containerPath` on
-  OCI, host `VolumeDir` on EXEC). Rootfs is remounted read-only after
-  start; persist image-default paths (`/var/lib/…`) via `volumeMounts`.
+- cwd is `<base>/<strategy>/work` on EXEC and OCI (`${WORK_DIR}`).
+  `${CONFIG}`, `${WORK_DIR}`, `${SHARED_DIR}`, and `${VOLUME:name}` are
+  valid in args; `${WORK_DIR}`, `${SHARED_DIR}`, and `${VOLUME:name}` also
+  expand in env (`${VOLUME:name}` → `containerPath` on OCI, host
+  `VolumeDir` on EXEC). `${RELEASE_DIR}` and `${BINARY}` are EXEC-only
+  and rejected for OCI. Rootfs is remounted read-only after start; persist
+  image-default paths (`/var/lib/…`) via `volumeMounts` or `${WORK_DIR}`.
 - No registry pull, no `/sys/fs/cgroup` inside the container, no per-run
   writable overlay. Old releases are GC'd (`--release-retention`, default 3);
   `Rollback` to a GC'd `target_version` re-downloads.
@@ -149,8 +151,9 @@ Requirements and limits:
 The control plane stores the object only; a rolling controller writes one
 member assignment at a time (`maxUnavailable`), advancing only when the
 in-flight member is converged **and** Ready. The assignment slot is
-`member.name` (WorkDir `<base>/<name>`); `spec.strategy` is the catalog
-family. Several members may share a machine when names and ports differ.
+`member.name` (slot `<base>/<name>`, process cwd `<base>/<name>/work`);
+`spec.strategy` is the catalog family. Several members may share a machine
+when names and ports differ.
 
 An `AssignmentSet` is workload-agnostic. Per-member identity and any peer list
 come from a template the manifest supplies:
@@ -164,10 +167,11 @@ members:
   - { machine: m1, name: nats-m1, vars: { route_host: "10.0.0.1", cluster_port: "6222" } }
 ```
 
-The control plane expands `${set.*}`, `${member.*}` and `${peers}`; `${CONFIG}`
-in args and `${VOLUME:name}` are left for the agent. `${CONFIG}` /
-`${BINARY}` / `${RELEASE_DIR}` in env are rejected at apply time, as is any
-unknown placeholder. Machine volumes are ensure-only (`kind:
+The control plane expands `${set.*}`, `${member.*}` and `${peers}`; `${CONFIG}`,
+`${WORK_DIR}`, `${SHARED_DIR}` and `${VOLUME:name}` are left for the agent.
+`${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` in env are rejected at apply
+time, as is any unknown placeholder. `${WORK_DIR}`, `${SHARED_DIR}` and
+`${VOLUME:name}` expand in args and env. Machine volumes are ensure-only (`kind:
 MachineVolumes` or `strategon volume create`); assignment apply mounts
 by name and does not create them.
 

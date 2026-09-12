@@ -21,7 +21,7 @@ import (
 // chunks are not silently lost under backpressure.
 type SendFunc func(ctx context.Context, msg *pb.AgentMessage) error
 
-// Fetch streams one or more WorkDir paths as FileChunks.
+// Fetch streams one or more assignment-slot paths as FileChunks.
 // A single regular file is sent raw; multiple paths or a directory become a tar.gz.
 func Fetch(ctx context.Context, root *os.Root, strategy, requestID string, paths []string, send SendFunc) error {
 	if len(paths) == 0 {

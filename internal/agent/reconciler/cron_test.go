@@ -1,6 +1,9 @@
 package reconciler
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -138,6 +141,64 @@ func TestCronRestartDrains(t *testing.T) {
 	r.reconcile()
 	if fd.starts() < 2 {
 		t.Fatalf("expected restart after cron drain, starts=%d", fd.starts())
+	}
+}
+
+func TestCronScriptCwdIsWorkDir(t *testing.T) {
+	t0 := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	r, fd, mgr, _, _ := newTestReconciler(t, t0)
+	r.deps.CronRand = func(n int32) int32 { return 0 }
+
+	slot := mgr.StrategyDir("s")
+	if err := os.MkdirAll(slot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(slot, "pwd.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\npwd > cwd.txt\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5})
+	spec.Schedules = []*pb.CronSchedule{{
+		Name:      "pwd",
+		CronExpr:  "0 0 * * *",
+		Timezone:  "UTC",
+		Action:    pb.CronAction_CRON_ACTION_RUN_SCRIPT,
+		ScriptRef: "pwd.sh",
+	}}
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.proc = mustStart(t, fd)
+	r.actual["s"] = st
+
+	r.tickCron(t0)
+	due := st.cron["pwd"].nextFire
+	r.tickCron(due)
+
+	wantWork, err := filepath.Abs(mgr.WorkDir("s"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(wantWork, "cwd.txt")
+	var got []byte
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got, err = os.ReadFile(marker)
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("cwd.txt missing under WorkDir: %v", err)
+	}
+	if cwd := strings.TrimSpace(string(got)); cwd != wantWork {
+		t.Fatalf("script cwd = %q, want WorkDir %q", cwd, wantWork)
+	}
+	if _, err := os.Stat(filepath.Join(slot, "cwd.txt")); err == nil {
+		t.Fatal("script wrote into the slot root; cwd should be WorkDir")
 	}
 }
 

@@ -480,9 +480,13 @@ func (r *Reconciler) buildStartSpec(spec *pb.StrategyAssignmentSpec, launch *pb.
 	if launch.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
 		return r.buildOCIStartSpec(spec, launch, out, args)
 	}
+	work, err := r.deps.Artifacts.EnsureWorkDir(spec.GetStrategy())
+	if err != nil {
+		return driver.StartSpec{}, err
+	}
 	out.Driver = driver.KindExec
 	out.BinaryPath = r.deps.Artifacts.CurrentBinaryPath(spec.GetStrategy())
-	out.WorkDir = r.deps.Artifacts.StrategyDir(spec.GetStrategy())
+	out.WorkDir = work
 	env, err := r.renderEnv(spec, launch, envPairs(spec.GetEnv()))
 	if err != nil {
 		return driver.StartSpec{}, err
@@ -604,8 +608,9 @@ func mergeEnv(image []string, spec map[string]string) []string {
 	return out
 }
 
-// renderArgs expands placeholders against the current symlink. OCI rejects
-// ${RELEASE_DIR} and ${BINARY} — those paths are not bound into the container.
+// renderArgs expands placeholders against the current symlink. ${WORK_DIR}
+// and ${SHARED_DIR} resolve on both drivers. OCI rejects ${RELEASE_DIR}
+// and ${BINARY} — those paths are not bound into the container.
 func (r *Reconciler) renderArgs(spec *pb.StrategyAssignmentSpec, launch *pb.ArtifactRef) ([]string, error) {
 	raw := spec.GetArgs()
 	if len(raw) == 0 {
@@ -642,6 +647,10 @@ func (r *Reconciler) renderEnv(spec *pb.StrategyAssignmentSpec, launch *pb.Artif
 	if pairs == nil {
 		pairs = []string{}
 	}
+	envVals, err := r.envPlaceholderValues(spec)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]string, len(pairs))
 	for i, p := range pairs {
 		k, v, ok := strings.Cut(p, "=")
@@ -649,7 +658,8 @@ func (r *Reconciler) renderEnv(spec *pb.StrategyAssignmentSpec, launch *pb.Artif
 			out[i] = p
 			continue
 		}
-		rendered, err := r.expandVolumePlaceholders(v, spec, launch)
+		rendered := expandKnownPlaceholders(v, envVals)
+		rendered, err = r.expandVolumePlaceholders(rendered, spec, launch)
 		if err != nil {
 			return nil, err
 		}
@@ -708,8 +718,11 @@ func (r *Reconciler) expandVolumePlaceholders(s string, spec *pb.StrategyAssignm
 }
 
 func (r *Reconciler) placeholderValues(spec *pb.StrategyAssignmentSpec, oci bool) (map[string]string, error) {
+	vals, err := r.envPlaceholderValues(spec)
+	if err != nil {
+		return nil, err
+	}
 	strat := spec.GetStrategy()
-	vals := map[string]string{}
 	if !oci {
 		releaseDir, err := r.deps.Artifacts.CurrentReleaseDir(strat)
 		if err != nil {
@@ -732,6 +745,28 @@ func (r *Reconciler) placeholderValues(spec *pb.StrategyAssignmentSpec, oci bool
 	return vals, nil
 }
 
+// envPlaceholderValues is the portable set: ${WORK_DIR} and ${SHARED_DIR}.
+// These expand in args and env on both drivers. ${CONFIG}/${BINARY}/${RELEASE_DIR}
+// are excluded so a leftover token in env stays verbatim.
+func (r *Reconciler) envPlaceholderValues(spec *pb.StrategyAssignmentSpec) (map[string]string, error) {
+	vals := map[string]string{}
+	if r.deps.Artifacts == nil {
+		return vals, nil
+	}
+	strat := spec.GetStrategy()
+	work, err := filepath.Abs(r.deps.Artifacts.WorkDir(strat))
+	if err != nil {
+		return nil, fmt.Errorf("resolve ${WORK_DIR}: %w", err)
+	}
+	shared, err := filepath.Abs(r.deps.Artifacts.SharedRoot())
+	if err != nil {
+		return nil, fmt.Errorf("resolve ${SHARED_DIR}: %w", err)
+	}
+	vals["WORK_DIR"] = work
+	vals["SHARED_DIR"] = shared
+	return vals, nil
+}
+
 func expandPlaceholders(arg string, vals map[string]string) (string, error) {
 	var firstErr error
 	out := placeholderRE.ReplaceAllStringFunc(arg, func(match string) string {
@@ -750,6 +785,21 @@ func expandPlaceholders(arg string, vals map[string]string) (string, error) {
 		return "", firstErr
 	}
 	return out, nil
+}
+
+// expandKnownPlaceholders replaces ${NAME} only when NAME is in vals.
+// Unknown tokens (e.g. ${CONFIG} in env) stay verbatim.
+func expandKnownPlaceholders(s string, vals map[string]string) string {
+	if len(vals) == 0 || !strings.Contains(s, "${") {
+		return s
+	}
+	return placeholderRE.ReplaceAllStringFunc(s, func(match string) string {
+		name := match[2 : len(match)-1]
+		if v, ok := vals[name]; ok {
+			return v
+		}
+		return match
+	})
 }
 
 // handleExit processes a process-exit notification.

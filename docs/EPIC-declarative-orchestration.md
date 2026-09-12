@@ -121,7 +121,7 @@ trading-process supervision to infrastructure topology.
 | New assignment | Lands `stopped=true` (create-then-start), `server.go:243` |
 | Config catalog | `{artifact}-config`, falling back to `{strategy}-config` (`resolveArtifact`) → **same bytes on every machine** |
 | Per-machine knobs | `args` / `env` on `StrategyAssignmentSpec` |
-| Placeholders | `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` expand in **`args` only**; apply rejects them in `env` (`RejectArgsOnlyPlaceholdersInEnv`) |
+| Placeholders | `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` expand in **`args` only**; apply rejects them in `env`. `${WORK_DIR}` / `${SHARED_DIR}` / `${VOLUME:*}` expand in args and env |
 | Deploy policy | Proto fields exist; human API almost never sets them; defaults `health_window_seconds: 30`, `enable_auto_rollback: true` (`server.go:889`) |
 | Ready | `health.UnixSocketChecker` exists; production agent uses `AlwaysReady` **and never sets `Deps.ReadyEndpoint`**, so the endpoint is always `""` — even `UnixSocketChecker` would return `NoEndpoint → TRUE`. Readiness is unconditionally true today, whichever checker is installed. |
 | Health window | On deadline with `enable_auto_rollback: false`, the agent calls **`markHealthy`** — the window is a grace period, not a gate (`reconciler.go:707`) |
@@ -311,11 +311,13 @@ membership itself, so cluster edits do not churn subscriptions.
 ### NATS as a manifest, not a `kind`
 
 One set → one catalog family (`spec.strategy`). Each member is its own
-assignment slot (`member.name` → WorkDir `<base>/<member.name>`). After
+assignment slot (`member.name` → `<base>/<member.name>`, process cwd
+`<base>/<member.name>/work`). After
 `status.assignment_key=member` the set owns those names only; the family
 name is an ordinary strategy again. Same-host members are allowed. The
 control plane substitutes `${set.*}`, `${member.*}` and `${peers}` and
-leaves `${CONFIG}` for the agent; an unknown placeholder is rejected at
+leaves `${CONFIG}`, `${WORK_DIR}`, `${SHARED_DIR}` and `${VOLUME:*}` for
+the agent; an unknown placeholder is rejected at
 apply time. Shared `nats.conf` in the catalog uses `$ENV` substitution:
 
 ```conf
@@ -898,7 +900,7 @@ unmigrated set cannot vanish and leave `nats` processes behind. Human
 
 **`member.name` is a disk identity.** The agent has no cross-strategy blob
 cache: three members on one host fetch and unpack the artifact three times.
-Renaming a member is recreate — new empty WorkDir; undeploy does not delete
+Renaming a member is recreate — new empty slot; undeploy does not delete
 the old directory. File browse / logs / status address
 `<base>/<member.name>`, which is the point of the split. Audit `Strategy`
 changes from `nats` to `nats-m1`. Durable process data is different: it

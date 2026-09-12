@@ -1,6 +1,6 @@
-// Package filebrowse serves WorkDir directory listings and file downloads
-// over the agent bidi stream. All paths are jailed under the strategy root
-// via os.OpenRoot.
+// Package filebrowse serves assignment-slot directory listings and file
+// downloads over the agent bidi stream. All paths are jailed under the
+// slot root (StrategyDir) via os.OpenRoot.
 package filebrowse
 
 const (

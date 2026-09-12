@@ -50,7 +50,7 @@ spec:
       # than staying dead. Either way the roll stops.
       enableAutoRollback: true
 
-  # member.name is the assignment slot and WorkDir. Same machine is allowed
+  # member.name is the assignment slot (process cwd is work/). Same machine is allowed
   # when names (and ports) differ — see single-host.yaml.
   members:
     - machine: m1

@@ -409,7 +409,7 @@ export type SetDeploymentRequest = Message<"strategyplatform.v1.SetDeploymentReq
   args: string[];
 
   /**
-   * environment (full replace); agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
+   * environment (full replace); agent expands ${WORK_DIR}/${SHARED_DIR}/${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
    *
    * @generated from field: map<string, string> env = 6;
    */
@@ -498,7 +498,7 @@ export type ApplyAssignmentRequest = Message<"strategyplatform.v1.ApplyAssignmen
   args: string[];
 
   /**
-   * agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
+   * agent expands ${WORK_DIR}/${SHARED_DIR}/${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
    *
    * @generated from field: map<string, string> env = 9;
    */
@@ -842,7 +842,7 @@ export type BrowseDirRequest = Message<"strategyplatform.v1.BrowseDirRequest"> &
   strategy: string;
 
   /**
-   * relative to strategy WorkDir or volume root; "" or "." = root
+   * relative to assignment slot or volume root; "" or "." = root
    *
    * @generated from field: string path = 3;
    */
@@ -1877,7 +1877,7 @@ export const ControlPlaneService: GenService<{
     output: typeof GetMachineMetricsResponseSchema;
   },
   /**
-   * Browse a strategy WorkDir on a connected agent (one directory level).
+   * Browse an assignment slot on a connected agent (one directory level).
    *
    * @generated from rpc strategyplatform.v1.ControlPlaneService.BrowseDir
    */
@@ -1887,7 +1887,7 @@ export const ControlPlaneService: GenService<{
     output: typeof BrowseDirResponseSchema;
   },
   /**
-   * Download one or more WorkDir paths. A single regular file streams as-is;
+   * Download one or more assignment-slot paths. A single regular file streams as-is;
    * multiple paths (or a directory) stream as a tar.gz built on the agent.
    *
    * @generated from rpc strategyplatform.v1.ControlPlaneService.DownloadFiles

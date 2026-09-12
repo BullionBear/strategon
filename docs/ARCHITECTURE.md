@@ -116,10 +116,11 @@ Key packages:
 
 ### File browse & retrieval
 
-Operators can browse a strategy **WorkDir** (`Manager.StrategyDir` =
-`<base>/<strategy>`) and download files from the UI. There is no object
-storage: bytes flow agent → control plane → browser over the existing
-agent-initiated `Connect` bidi stream.
+Operators can browse an assignment **slot** (`Manager.StrategyDir` =
+`<base>/<strategy>`) and download files from the UI. That jail is the
+agent's disk identity (releases, `work/`, `current`), not the process
+cwd. There is no object storage: bytes flow agent → control plane →
+browser over the existing agent-initiated `Connect` bidi stream.
 
 - Human RPCs: `BrowseDir` (unary), `DownloadFiles` (server-stream).
 - Southbound: `ListDir` / `FetchFiles` on `ControlMessage`.
@@ -131,7 +132,7 @@ agent-initiated `Connect` bidi stream.
   or, when `volume` is set, `VolumeDir(name)`.
 - Caps: single file ≤ 256 MiB; tarball ≤ 500 files and ≤ 512 MiB uncompressed;
   browse timeout 30s; download timeout 5m; chunk size 64 KiB.
-- Capability gate: WorkDir browse `agent_version >= 2`; volume browse
+- Capability gate: slot browse `agent_version >= 2`; volume browse
   `agent_version >= 3`. Older agents Nack unknown payloads.
 - Audit: a successful download (EOF) appends `action=DownloadFiles` with
   `detail` including paths, filename, transfer kind, and byte count. Failed
@@ -168,7 +169,7 @@ independent of assignment generations. Operators set them via
 
 | Path | Lives across GC? | Notes |
 |------|------------------|--------|
-| `<base>/<strategy>/work` | yes | OCI cwd / scratch |
+| `<base>/<strategy>/work` | yes | process cwd / scratch (EXEC and OCI) |
 | `<base>/shared/<name>` | yes | next-start reference data |
 | `<base>/volumes/<name>` | yes | durable process data; not tied to assignment name |
 | `releases/<ver>/rootfs` | no | remounted read-only after pivot; GC deletes old tags |
@@ -177,17 +178,16 @@ Every release gets `releases/<v>/shared` on Download even when no shared
 files are desired yet — so a later `SetSharedFiles` works without
 re-fetching the binary. A dangling symlink is inert.
 
-Process `WorkDir` is `StrategyDir` = `<base>/<strategy>`, while the shared
-tree is reached via `releases/<v>/shared`. So a path like
-`./shared/instruments.json` resolves **only** for binaries that resolve
-relative paths against the **config file's directory** (not cwd). `seq`
-does this (`filepath.Join(filepath.Dir(path), cfg.Catalog.Instruments)`).
-A binary resolving relative to cwd would look under
-`<base>/<strategy>/shared/…` and miss. **Shared paths in config must be
-written relative to the config file, and the consuming binary must resolve
-them that way.**
+Process cwd is WorkDir = `<base>/<strategy>/work` on both EXEC and OCI
+(`${WORK_DIR}`). Machine-shared files are opened via
+`${SHARED_DIR}/<name>` in args or env (`abs(<base>/shared)`). The
+`releases/<v>/shared` symlink remains so binaries that resolve
+`./shared/…` against the **config file's directory** still work; new
+specs should pass `${SHARED_DIR}` through args/env. A path like
+`./shared/instruments.json` from cwd looks under `work/shared/…` and
+misses.
 
-For seq, set:
+For seq (config-relative, compat):
 
 ```yaml
 catalog:
@@ -271,14 +271,15 @@ its `containerPath`, then `pivot_root`, mounts tmpfs on `/tmp`, remounts
 or the payload cannot exec), and
 `exec`. WatchExit / Signal / Adopt stay on the exec driver (same host PID).
 
-Path contract (OCI ≠ EXEC):
+Path contract (EXEC and OCI):
 
-| | EXEC | OCI |
-|--|--|--|
-| cwd | `StrategyDir` | `<base>/<strategy>/work` |
-| placeholders | `${CONFIG}`, `${RELEASE_DIR}`, `${BINARY}`, `${VOLUME:name}` | `${CONFIG}`, `${VOLUME:name}` |
-| `${VOLUME:name}` | host `VolumeDir(name)` | that mount's `containerPath` |
-| env expansion | `${VOLUME:*}` only; `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` rejected at apply | same |
+| | Both |
+|--|--|
+| cwd | `<base>/<strategy>/work` (`${WORK_DIR}`) |
+| portable placeholders | `${CONFIG}`, `${WORK_DIR}`, `${SHARED_DIR}`, `${VOLUME:name}` |
+| `${VOLUME:name}` | EXEC: host `VolumeDir(name)`; OCI: that mount's `containerPath` |
+| env expansion | `${WORK_DIR}`, `${SHARED_DIR}`, `${VOLUME:*}`; `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` rejected at apply |
+| EXEC-only args | `${BINARY}`, `${RELEASE_DIR}` (rejected for OCI) |
 
 OCI binds (inside the container):
 
@@ -289,21 +290,21 @@ OCI binds (inside the container):
 | config file | same host path |
 | `<base>/volumes/<name>` | `volumeMounts[].containerPath` |
 
-`${VOLUME:name}` is legal in args and env on both drivers. `${CONFIG}`,
-`${BINARY}` and `${RELEASE_DIR}` stay args-only; apply rejects them in env
-so they cannot reach a process as literal text. Deploy (version-only) keeps
-existing env, so a stored `${CONFIG}` survives a bump; the next
-`ApplyAssignmentSet` Expand of that template fails. Resolution is keyed
-off the **launch artifact**, not `spec.driver`, so auto-rollback from OCI
-to a previous BINARY still expands the same mount list.
+`${WORK_DIR}`, `${SHARED_DIR}` and `${VOLUME:name}` are legal in args and
+env on both drivers. `${CONFIG}`, `${BINARY}` and `${RELEASE_DIR}` stay
+args-only; apply rejects them in env so they cannot reach a process as
+literal text. Deploy (version-only) keeps existing env, so a stored
+`${CONFIG}` survives a bump; the next `ApplyAssignmentSet` Expand of that
+template fails. Resolution is keyed off the **launch artifact**, not
+`spec.driver`, so auto-rollback from OCI to a previous BINARY still
+expands the same mount list.
 
-Known limits: payload is PID 1 (SIGTERM may be discarded); rootfs is
-read-only after start (undeclared writes are EROFS); `/tmp` is tmpfs;
-no `/sys/fs/cgroup` in the container; release GC (`--release-retention`)
-makes `RollbackRequest.target_version` a re-fetch if that version was
-deleted.
-Unprivileged user ns is probed at Register; enabling it later requires an
-agent restart.
+OCI runtime (not a path-contract split): payload is PID 1 (SIGTERM may be
+discarded); rootfs is read-only after start (undeclared writes are EROFS);
+`/tmp` is tmpfs; no `/sys/fs/cgroup` in the container; release GC
+(`--release-retention`) makes `RollbackRequest.target_version` a re-fetch
+if that version was deleted. Unprivileged user ns is probed at Register;
+enabling it later requires an agent restart.
 
 ### Deploy phases
 

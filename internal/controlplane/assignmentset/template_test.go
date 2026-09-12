@@ -240,18 +240,31 @@ func TestExpandSeparator(t *testing.T) {
 	}
 }
 
-func TestArgsOnlyPlaceholdersAreExactlyAgentPlaceholders(t *testing.T) {
-	// VOLUME is agent-side via prefix, not this map. Everything in
-	// agentPlaceholders is args-only and must be rejected in env — a name
-	// added only here would otherwise pass through as literal text.
-	if len(agentPlaceholders) == 0 {
-		t.Fatal("agentPlaceholders empty")
+func TestArgsOnlyPlaceholdersAreSubsetOfAgentPlaceholders(t *testing.T) {
+	if len(agentPlaceholders) == 0 || len(argsOnlyPlaceholders) == 0 {
+		t.Fatal("placeholder maps empty")
 	}
-	set := natsLike("m1")
+	for name := range argsOnlyPlaceholders {
+		if !agentPlaceholders[name] {
+			t.Fatalf("args-only ${%s} missing from agentPlaceholders", name)
+		}
+	}
 	for name := range agentPlaceholders {
+		if argsOnlyPlaceholders[name] {
+			continue
+		}
+		if name != "WORK_DIR" && name != "SHARED_DIR" {
+			t.Fatalf("agent placeholder ${%s} is neither args-only nor env-legal", name)
+		}
+	}
+}
+
+func TestValidateAcceptsEnvLegalAgentPlaceholders(t *testing.T) {
+	set := natsLike("m1")
+	for _, name := range []string{"WORK_DIR", "SHARED_DIR"} {
 		set.Spec.Template.Env["X"] = "${" + name + "}"
-		if err := Validate(set); err == nil {
-			t.Fatalf("${%s} is an agent placeholder but not rejected in env", name)
+		if err := Validate(set); err != nil {
+			t.Fatalf("${%s} in env should pass: %v", name, err)
 		}
 	}
 	set.Spec.Template.Env["X"] = "${VOLUME:nats-a-data}"

@@ -21,7 +21,7 @@ export const file_strategyplatform_v1_assignmentset: GenFile = /*@__PURE__*/
  * them, at most max_unavailable members at a time.
  *
  * spec.strategy is the catalog / artifact family (e.g. "nats"). The
- * assignment slot — WorkDir, status, reservation after transition — is
+ * assignment slot — disk identity, status, reservation after transition — is
  * member.name. Members on the same machine are allowed when names differ.
  *
  * The control plane knows nothing about what the members run. Per-member
@@ -116,11 +116,12 @@ export const AssignmentSetSpecSchema: GenMessage<AssignmentSetSpec> = /*@__PURE_
  * 	${member.vars.KEY}     this member's vars[KEY]
  * 	${peers}               peers rendered and joined, see PeerList
  *
- * Agent-side placeholders (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) are left
- * untouched in args and expanded later by the agent. The same tokens in env
- * values are rejected at apply time — the agent does not expand them there.
- * ${VOLUME:*} is left for the agent in both args and env. Any other ${...}
- * is rejected at apply time rather than surfacing as an agent start failure.
+ * Agent-side placeholders are left untouched by the control plane and
+ * expanded later by the agent. ${CONFIG}, ${BINARY} and ${RELEASE_DIR}
+ * expand in args only — the same tokens in env are rejected at apply.
+ * ${WORK_DIR}, ${SHARED_DIR} and ${VOLUME:*} expand in both args and env.
+ * Any other ${...} is rejected at apply time rather than surfacing as an
+ * agent start failure.
  *
  * @generated from message strategyplatform.v1.MemberTemplate
  */
@@ -220,7 +221,7 @@ export type SetMember = Message<"strategyplatform.v1.SetMember"> & {
 
   /**
    * Member identity, unique within the set (e.g. "nats-m1"). This is the
-   * assignment strategy name and WorkDir segment. Renaming is recreate.
+   * assignment strategy name and slot segment. Renaming is recreate.
    *
    * @generated from field: string name = 2;
    */

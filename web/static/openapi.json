@@ -134,7 +134,7 @@
           "ControlPlaneService"
         ],
         "summary": "BrowseDir",
-        "description": "Browse a strategy WorkDir on a connected agent (one directory level).",
+        "description": "Browse an assignment slot on a connected agent (one directory level).",
         "operationId": "strategyplatform.v1.ControlPlaneService.BrowseDir",
         "parameters": [
           {
@@ -1677,7 +1677,7 @@
               "type": "string",
               "title": "value"
             },
-            "description": "agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
+            "description": "agent expands ${WORK_DIR}/${SHARED_DIR}/${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
           },
           "limits": {
             "title": "limits",
@@ -1844,7 +1844,7 @@
         },
         "title": "AssignmentSet",
         "additionalProperties": false,
-        "description": "AssignmentSet places one assignment per member and rolls changes across\n them, at most max_unavailable members at a time.\n\n spec.strategy is the catalog / artifact family (e.g. \"nats\"). The\n assignment slot — WorkDir, status, reservation after transition — is\n member.name. Members on the same machine are allowed when names differ.\n\n The control plane knows nothing about what the members run. Per-member\n identity and any peer list live in the template as placeholders, so a NATS\n cluster, a sharded feed handler, or anything else that needs \"N processes\n that know about each other\" is a manifest, not new server code.\n\n Apply persists spec only; a controller writes the per-member assignments\n over time."
+        "description": "AssignmentSet places one assignment per member and rolls changes across\n them, at most max_unavailable members at a time.\n\n spec.strategy is the catalog / artifact family (e.g. \"nats\"). The\n assignment slot — disk identity, status, reservation after transition — is\n member.name. Members on the same machine are allowed when names differ.\n\n The control plane knows nothing about what the members run. Per-member\n identity and any peer list live in the template as placeholders, so a NATS\n cluster, a sharded feed handler, or anything else that needs \"N processes\n that know about each other\" is a manifest, not new server code.\n\n Apply persists spec only; a controller writes the per-member assignments\n over time."
       },
       "strategyplatform.v1.AssignmentSetSpec": {
         "type": "object",
@@ -1981,7 +1981,7 @@
           "path": {
             "type": "string",
             "title": "path",
-            "description": "relative to strategy WorkDir or volume root; \"\" or \".\" = root"
+            "description": "relative to assignment slot or volume root; \"\" or \".\" = root"
           },
           "volume": {
             "type": "string",
@@ -2956,7 +2956,7 @@
         },
         "title": "MemberTemplate",
         "additionalProperties": false,
-        "description": "MemberTemplate is shared by every member. Strings in args, env values, and\n the readiness endpoint may contain placeholders the control plane expands\n per member before writing the assignment:\n\n\t${set.name}            the AssignmentSet's metadata.name\n\t${member.name}         this member's name\n\t${member.machine}      this member's machine id\n\t${member.vars.KEY}     this member's vars[KEY]\n\t${peers}               peers rendered and joined, see PeerList\n\n Agent-side placeholders (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) are left\n untouched in args and expanded later by the agent. The same tokens in env\n values are rejected at apply time — the agent does not expand them there.\n ${VOLUME:*} is left for the agent in both args and env. Any other ${...}\n is rejected at apply time rather than surfacing as an agent start failure."
+        "description": "MemberTemplate is shared by every member. Strings in args, env values, and\n the readiness endpoint may contain placeholders the control plane expands\n per member before writing the assignment:\n\n\t${set.name}            the AssignmentSet's metadata.name\n\t${member.name}         this member's name\n\t${member.machine}      this member's machine id\n\t${member.vars.KEY}     this member's vars[KEY]\n\t${peers}               peers rendered and joined, see PeerList\n\n Agent-side placeholders are left untouched by the control plane and\n expanded later by the agent. ${CONFIG}, ${BINARY} and ${RELEASE_DIR}\n expand in args only — the same tokens in env are rejected at apply.\n ${WORK_DIR}, ${SHARED_DIR} and ${VOLUME:*} expand in both args and env.\n Any other ${...} is rejected at apply time rather than surfacing as an\n agent start failure."
       },
       "strategyplatform.v1.MemberTemplate.EnvEntry": {
         "type": "object",
@@ -3266,7 +3266,7 @@
               "type": "string",
               "title": "value"
             },
-            "description": "environment (full replace); agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
+            "description": "environment (full replace); agent expands ${WORK_DIR}/${SHARED_DIR}/${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
           }
         },
         "title": "SetDeploymentRequest",
@@ -3314,7 +3314,7 @@
           "name": {
             "type": "string",
             "title": "name",
-            "description": "Member identity, unique within the set (e.g. \"nats-m1\"). This is the\n assignment strategy name and WorkDir segment. Renaming is recreate."
+            "description": "Member identity, unique within the set (e.g. \"nats-m1\"). This is the\n assignment strategy name and slot segment. Renaming is recreate."
           },
           "vars": {
             "type": "object",

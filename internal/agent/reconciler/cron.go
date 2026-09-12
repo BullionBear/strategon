@@ -138,8 +138,10 @@ func (r *Reconciler) dispatchCron(spec *pb.StrategyAssignmentSpec, st *strategyS
 	}
 }
 
-// runCronScript executes script_ref relative to the strategy directory (or as an
-// absolute path). It runs asynchronously so the reconciler loop stays non-blocking.
+// runCronScript executes script_ref relative to the assignment slot
+// (StrategyDir) or as an absolute path. The script's cwd is WorkDir so
+// relative file I/O matches the process. It runs asynchronously so the
+// reconciler loop stays non-blocking.
 func (r *Reconciler) runCronScript(spec *pb.StrategyAssignmentSpec, s *pb.CronSchedule) error {
 	ref := s.GetScriptRef()
 	if ref == "" {
@@ -152,11 +154,15 @@ func (r *Reconciler) runCronScript(spec *pb.StrategyAssignmentSpec, s *pb.CronSc
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("script %q: %w", path, err)
 	}
+	work, err := r.deps.Artifacts.EnsureWorkDir(spec.GetStrategy())
+	if err != nil {
+		return fmt.Errorf("work dir: %w", err)
+	}
 	strategy := spec.GetStrategy()
 	name := s.GetName()
 	go func() {
 		cmd := exec.CommandContext(r.ctx, path)
-		cmd.Dir = r.deps.Artifacts.StrategyDir(strategy)
+		cmd.Dir = work
 		out, err := cmd.CombinedOutput()
 		msg := string(out)
 		if len(msg) > 512 {

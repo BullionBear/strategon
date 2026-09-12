@@ -61,7 +61,7 @@ func (m *Manager) CurrentOCIMetaPath(strategy string) string {
 	return filepath.Join(m.CurrentLink(strategy), ociMetaName)
 }
 
-// WorkDir is <base>/<strategy>/work — OCI cwd and bind target.
+// WorkDir is <base>/<strategy>/work — process cwd (EXEC and OCI) and OCI bind target.
 func (m *Manager) WorkDir(strategy string) string {
 	return filepath.Join(m.StrategyDir(strategy), "work")
 }

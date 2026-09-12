@@ -664,7 +664,7 @@ type SetDeploymentRequest struct {
 	ArtifactVersion string            `protobuf:"bytes,3,opt,name=artifact_version,json=artifactVersion,proto3" json:"artifact_version,omitempty"`                                          // required; references a registered binary artifact
 	ConfigVersion   string            `protobuf:"bytes,4,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"`                                                // optional; empty = keep current config
 	Args            []string          `protobuf:"bytes,5,rep,name=args,proto3" json:"args,omitempty"`                                                                                       // launch args; may include ${CONFIG}/${RELEASE_DIR}/${BINARY}
-	Env             map[string]string `protobuf:"bytes,6,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // environment (full replace); agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
+	Env             map[string]string `protobuf:"bytes,6,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // environment (full replace); agent expands ${WORK_DIR}/${SHARED_DIR}/${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
 }
 
 func (x *SetDeploymentRequest) Reset() {
@@ -807,7 +807,7 @@ type ApplyAssignmentRequest struct {
 	DeployPolicy    *DeployPolicy     `protobuf:"bytes,6,opt,name=deploy_policy,json=deployPolicy,proto3" json:"deploy_policy,omitempty"`
 	Schedules       []*CronSchedule   `protobuf:"bytes,7,rep,name=schedules,proto3" json:"schedules,omitempty"`
 	Args            []string          `protobuf:"bytes,8,rep,name=args,proto3" json:"args,omitempty"`
-	Env             map[string]string `protobuf:"bytes,9,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
+	Env             map[string]string `protobuf:"bytes,9,rep,name=env,proto3" json:"env,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"` // agent expands ${WORK_DIR}/${SHARED_DIR}/${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected
 	Limits          *ResourceLimits   `protobuf:"bytes,10,opt,name=limits,proto3" json:"limits,omitempty"`
 	Lease           *LeaseSpec        `protobuf:"bytes,11,opt,name=lease,proto3" json:"lease,omitempty"`
 	Readiness       *ReadinessProbe   `protobuf:"bytes,12,opt,name=readiness,proto3" json:"readiness,omitempty"`
@@ -1634,7 +1634,7 @@ type BrowseDirRequest struct {
 
 	MachineId string `protobuf:"bytes,1,opt,name=machine_id,json=machineId,proto3" json:"machine_id,omitempty"`
 	Strategy  string `protobuf:"bytes,2,opt,name=strategy,proto3" json:"strategy,omitempty"`
-	Path      string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"` // relative to strategy WorkDir or volume root; "" or "." = root
+	Path      string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"` // relative to assignment slot or volume root; "" or "." = root
 	// When set, browse <base>/volumes/<volume> and strategy is ignored.
 	Volume string `protobuf:"bytes,4,opt,name=volume,proto3" json:"volume,omitempty"`
 }
