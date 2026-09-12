@@ -98,6 +98,64 @@ func TestApplyAssignmentHonoursStoppedAndNoPrune(t *testing.T) {
 	}
 }
 
+func TestApplyAssignmentRejectsArgsOnlyPlaceholderInEnv(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId:       "m1",
+		Strategy:        "hello",
+		ArtifactVersion: "v1",
+		Env:             map[string]string{"MFTIK_CONFIG": "${CONFIG}"},
+		Args:            []string{"-c", "${CONFIG}"},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("config in env: %v", err)
+	}
+	if !strings.Contains(err.Error(), "expands in args only") {
+		t.Fatalf("error = %v", err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["hello"] != nil {
+		t.Fatal("rejected apply wrote an assignment")
+	}
+}
+
+func TestApplyAssignmentSetRejectsArgsOnlyPlaceholderInEnv(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	}))
+	_, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "trading"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Template: &pb.MemberTemplate{
+					Args: []string{"-c", "${CONFIG}"},
+					Env:  map[string]string{"MFTIK_CONFIG": "${CONFIG}"},
+				},
+				Members: []*pb.SetMember{{Machine: "m1", Name: "n1"}},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("config in env: %v", err)
+	}
+	if !strings.Contains(err.Error(), "expands in args only") {
+		t.Fatalf("error = %v", err)
+	}
+	if _, ok := st.GetAssignmentSet("trading"); ok {
+		t.Fatal("rejected apply wrote a row")
+	}
+}
+
 func TestApplyAssignmentErrorClasses(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()

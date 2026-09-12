@@ -197,8 +197,10 @@ func (x *AssignmentSetSpec) GetUpdate() *RollingUpdate {
 //	${peers}               peers rendered and joined, see PeerList
 //
 // Agent-side placeholders (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) are left
-// untouched and expanded later by the agent. Any other ${...} is rejected at
-// apply time rather than surfacing as an agent start failure.
+// untouched in args and expanded later by the agent. The same tokens in env
+// values are rejected at apply time — the agent does not expand them there.
+// ${VOLUME:*} is left for the agent in both args and env. Any other ${...}
+// is rejected at apply time rather than surfacing as an agent start failure.
 type MemberTemplate struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

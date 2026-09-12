@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -476,6 +477,32 @@ func TestSetDeploymentSetsArgsEnvAndConfig(t *testing.T) {
 	}
 	if spec.GetConfig().GetVersion() != "c17" {
 		t.Fatalf("Deploy should keep config, got %q", spec.GetConfig().GetVersion())
+	}
+}
+
+func TestSetDeploymentRejectsArgsOnlyPlaceholderInEnv(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "s", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	_, err := client.SetDeployment(ctx, connect.NewRequest(&pb.SetDeploymentRequest{
+		MachineId:       "m1",
+		Strategy:        "s",
+		ArtifactVersion: "v1",
+		Args:            []string{"-c", "${CONFIG}"},
+		Env:             map[string]string{"MFTIK_CONFIG": "${CONFIG}"},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("config in env: %v", err)
+	}
+	if !strings.Contains(err.Error(), "expands in args only") {
+		t.Fatalf("error = %v", err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["s"] != nil {
+		t.Fatal("rejected SetDeployment wrote an assignment")
 	}
 }
 

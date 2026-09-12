@@ -5,6 +5,10 @@
 // leaves the agent's (${CONFIG}, ${BINARY}, ${RELEASE_DIR}, ${VOLUME:*})
 // verbatim, so the two expansion stages cannot collide. Anything else is
 // rejected at apply time instead of surfacing later as an agent start failure.
+//
+// ${CONFIG}/${BINARY}/${RELEASE_DIR} are args-only on the agent. After
+// substitution they are rejected in env so they cannot reach a process as
+// literal text. ${VOLUME:*} is legal in both args and env.
 package assignmentset
 
 import (
@@ -15,7 +19,9 @@ import (
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 )
 
-// agentPlaceholders are expanded by the agent, not here. They pass through.
+// agentPlaceholders pass through here. The agent expands these in args
+// only; RejectArgsOnlyPlaceholdersInEnv rejects them in env. ${VOLUME:*}
+// is a separate prefix and is legal in both args and env.
 var agentPlaceholders = map[string]bool{
 	"CONFIG":      true,
 	"BINARY":      true,
@@ -59,6 +65,9 @@ func Expand(set *pb.AssignmentSet, idx int) (*Expanded, error) {
 			}
 			env[k] = out
 		}
+		if err := RejectArgsOnlyPlaceholdersInEnv(env); err != nil {
+			return nil, err
+		}
 	}
 	endpoint, err := expand(tmpl.GetReadiness().GetEndpoint(), vals, "readiness endpoint")
 	if err != nil {
@@ -95,6 +104,27 @@ func isAgentPlaceholder(name string) bool {
 		return true
 	}
 	return strings.HasPrefix(name, "VOLUME:")
+}
+
+// RejectArgsOnlyPlaceholdersInEnv fails if an env value still contains
+// ${CONFIG}, ${BINARY} or ${RELEASE_DIR} after control-plane substitution.
+// The agent would otherwise pass those tokens through verbatim.
+func RejectArgsOnlyPlaceholdersInEnv(env map[string]string) error {
+	for k, v := range env {
+		if name := argsOnlyPlaceholderIn(v); name != "" {
+			return fmt.Errorf("env %q: ${%s} expands in args only", k, name)
+		}
+	}
+	return nil
+}
+
+func argsOnlyPlaceholderIn(s string) string {
+	for name := range agentPlaceholders {
+		if strings.Contains(s, "${"+name+"}") {
+			return name
+		}
+	}
+	return ""
 }
 
 // Validate renders every member so a bad placeholder is a FailedPrecondition at

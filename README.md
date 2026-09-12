@@ -165,8 +165,9 @@ members:
 ```
 
 The control plane expands `${set.*}`, `${member.*}` and `${peers}`; `${CONFIG}`
-and `${VOLUME:name}` are left for the agent. An unknown placeholder is
-rejected at apply time. Machine volumes are ensure-only (`kind:
+in args and `${VOLUME:name}` are left for the agent. `${CONFIG}` /
+`${BINARY}` / `${RELEASE_DIR}` in env are rejected at apply time, as is any
+unknown placeholder. Machine volumes are ensure-only (`kind:
 MachineVolumes` or `strategon volume create`); assignment apply mounts
 by name and does not create them.
 

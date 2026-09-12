@@ -1676,7 +1676,8 @@
             "additionalProperties": {
               "type": "string",
               "title": "value"
-            }
+            },
+            "description": "agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
           },
           "limits": {
             "title": "limits",
@@ -2955,7 +2956,7 @@
         },
         "title": "MemberTemplate",
         "additionalProperties": false,
-        "description": "MemberTemplate is shared by every member. Strings in args, env values, and\n the readiness endpoint may contain placeholders the control plane expands\n per member before writing the assignment:\n\n\t${set.name}            the AssignmentSet's metadata.name\n\t${member.name}         this member's name\n\t${member.machine}      this member's machine id\n\t${member.vars.KEY}     this member's vars[KEY]\n\t${peers}               peers rendered and joined, see PeerList\n\n Agent-side placeholders (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) are left\n untouched and expanded later by the agent. Any other ${...} is rejected at\n apply time rather than surfacing as an agent start failure."
+        "description": "MemberTemplate is shared by every member. Strings in args, env values, and\n the readiness endpoint may contain placeholders the control plane expands\n per member before writing the assignment:\n\n\t${set.name}            the AssignmentSet's metadata.name\n\t${member.name}         this member's name\n\t${member.machine}      this member's machine id\n\t${member.vars.KEY}     this member's vars[KEY]\n\t${peers}               peers rendered and joined, see PeerList\n\n Agent-side placeholders (${CONFIG}, ${BINARY}, ${RELEASE_DIR}) are left\n untouched in args and expanded later by the agent. The same tokens in env\n values are rejected at apply time — the agent does not expand them there.\n ${VOLUME:*} is left for the agent in both args and env. Any other ${...}\n is rejected at apply time rather than surfacing as an agent start failure."
       },
       "strategyplatform.v1.MemberTemplate.EnvEntry": {
         "type": "object",
@@ -3265,7 +3266,7 @@
               "type": "string",
               "title": "value"
             },
-            "description": "environment variables (full replace)"
+            "description": "environment (full replace); agent expands ${VOLUME:*} in env; ${CONFIG}/${BINARY}/${RELEASE_DIR} are rejected"
           }
         },
         "title": "SetDeploymentRequest",

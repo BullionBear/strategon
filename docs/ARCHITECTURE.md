@@ -278,7 +278,7 @@ Path contract (OCI ≠ EXEC):
 | cwd | `StrategyDir` | `<base>/<strategy>/work` |
 | placeholders | `${CONFIG}`, `${RELEASE_DIR}`, `${BINARY}`, `${VOLUME:name}` | `${CONFIG}`, `${VOLUME:name}` |
 | `${VOLUME:name}` | host `VolumeDir(name)` | that mount's `containerPath` |
-| env expansion | `${VOLUME:*}` only | `${VOLUME:*}` only |
+| env expansion | `${VOLUME:*}` only; `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` rejected at apply | same |
 
 OCI binds (inside the container):
 
@@ -289,10 +289,13 @@ OCI binds (inside the container):
 | config file | same host path |
 | `<base>/volumes/<name>` | `volumeMounts[].containerPath` |
 
-`${VOLUME:name}` is legal in args and env on both drivers. Other
-placeholders stay args-only. Resolution is keyed off the **launch
-artifact**, not `spec.driver`, so auto-rollback from OCI to a previous
-BINARY still expands the same mount list.
+`${VOLUME:name}` is legal in args and env on both drivers. `${CONFIG}`,
+`${BINARY}` and `${RELEASE_DIR}` stay args-only; apply rejects them in env
+so they cannot reach a process as literal text. Deploy (version-only) keeps
+existing env, so a stored `${CONFIG}` survives a bump; the next
+`ApplyAssignmentSet` Expand of that template fails. Resolution is keyed
+off the **launch artifact**, not `spec.driver`, so auto-rollback from OCI
+to a previous BINARY still expands the same mount list.
 
 Known limits: payload is PID 1 (SIGTERM may be discarded); rootfs is
 read-only after start (undeclared writes are EROFS); `/tmp` is tmpfs;

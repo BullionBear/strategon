@@ -121,7 +121,7 @@ trading-process supervision to infrastructure topology.
 | New assignment | Lands `stopped=true` (create-then-start), `server.go:243` |
 | Config catalog | `{artifact}-config`, falling back to `{strategy}-config` (`resolveArtifact`) → **same bytes on every machine** |
 | Per-machine knobs | `args` / `env` on `StrategyAssignmentSpec` |
-| Placeholders | `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` expand in **`args` only**; `env` values are passed verbatim (`renderArgs`, `placeholderValues`) |
+| Placeholders | `${CONFIG}` / `${BINARY}` / `${RELEASE_DIR}` expand in **`args` only**; apply rejects them in `env` (`RejectArgsOnlyPlaceholdersInEnv`) |
 | Deploy policy | Proto fields exist; human API almost never sets them; defaults `health_window_seconds: 30`, `enable_auto_rollback: true` (`server.go:889`) |
 | Ready | `health.UnixSocketChecker` exists; production agent uses `AlwaysReady` **and never sets `Deps.ReadyEndpoint`**, so the endpoint is always `""` — even `UnixSocketChecker` would return `NoEndpoint → TRUE`. Readiness is unconditionally true today, whichever checker is installed. |
 | Health window | On deadline with `enable_auto_rollback: false`, the agent calls **`markHealthy`** — the window is a grace period, not a gate (`reconciler.go:707`) |
@@ -350,9 +350,9 @@ env:
 
 `${CONFIG}` is mandatory and easy to miss: the agent materialises the
 config artifact on disk and expands `${CONFIG}` **only inside `args`**
-(`renderArgs` / `placeholderValues`). Env values are passed through
-verbatim — there is no expansion there — so nothing but an explicit
-`-c ${CONFIG}` gets the config file to `nats-server`.
+(`renderArgs` / `placeholderValues`). Apply rejects those tokens in env
+rather than passing them through as literal text, so nothing but an
+explicit `-c ${CONFIG}` gets the config file to `nats-server`.
 
 The route list is the other members' `nats://<routeHost>:<clusterPort>`,
 never self. `routeHost` is required on each server entry — do not guess
@@ -927,7 +927,7 @@ contact with a real `nats-server` was checking its flag behaviour.
 | `AlwaysReady` makes rolls too fast | E5 gate before calling a real cluster safe |
 | Same config blob cannot hold `server_name` | env substitution; required `routeHost` |
 | `routes: [ $NATS_ROUTES ]` silently produces one malformed route | Routes ride on `--routes` in `args`; E4 and E6 both assert no `NATS_ROUTES` env var is emitted |
-| Config never reaches nats-server because `${CONFIG}` was only put in `env` | Placeholders expand in `args` only; E4 asserts `-c ${CONFIG}` in generated args |
+| Config never reaches nats-server because `${CONFIG}` was only put in `env` | Placeholders expand in `args` only; apply rejects them in env; E4 asserts `-c ${CONFIG}` in generated args |
 | Delete cluster wipes an unrelated `nats` — and `SetAssignment(nil)` drops the status too, so the evidence goes with it | While `assignment_key` is empty, Apply still rejects an unowned family assignment and reserve includes the family name. After the flip, only `member.name` is reserved. |
 | Trading `Deploy` to the same strategy name | E3 admission on the owned slot (`member.name`, plus family during transition) |
 | Control-plane upgrade drains all family slots before writing member names, taking NATS below quorum | Paired replace: undeploy family + write member.name share one `maxUnavailable` slot |

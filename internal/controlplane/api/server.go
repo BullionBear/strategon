@@ -19,6 +19,7 @@ import (
 	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
 	"github.com/bullionbear/strategon/internal/controlplane/assign"
+	"github.com/bullionbear/strategon/internal/controlplane/assignmentset"
 	"github.com/bullionbear/strategon/internal/controlplane/filetransfer"
 	"github.com/bullionbear/strategon/internal/controlplane/ingest"
 	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
@@ -257,6 +258,11 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 			for k, v := range env {
 				spec.Env[k] = v
 			}
+			// Apply-time only. Deploy (setRuntime=false) clones existing env,
+			// so a stored ${CONFIG} survives a version bump.
+			if err := assignmentset.RejectArgsOnlyPlaceholdersInEnv(spec.Env); err != nil {
+				return nil, nil, "", connect.NewError(connect.CodeInvalidArgument, err)
+			}
 		}
 	}
 
@@ -317,6 +323,9 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 		spec.Env = make(map[string]string, len(env))
 		for k, v := range env {
 			spec.Env[k] = v
+		}
+		if err := assignmentset.RejectArgsOnlyPlaceholdersInEnv(spec.Env); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 	}
 	if err := applyDriverFromArtifact(spec, art, rec); err != nil {
