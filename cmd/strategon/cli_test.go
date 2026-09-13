@@ -275,6 +275,35 @@ func TestGetAndWaitAssignmentSet(t *testing.T) {
 	}
 }
 
+func TestPrintClusterConfigNameWithoutVersion(t *testing.T) {
+	var buf bytes.Buffer
+	printCluster(&buf, &pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "redis"},
+		Spec: &pb.AssignmentSetSpec{
+			Strategy:        "redis",
+			ArtifactVersion: "v7",
+			Config:          "${member.name}-config",
+			Members: []*pb.SetMember{
+				{Machine: "m1", Name: "redis-m1", ConfigVersion: "v1"},
+				{Machine: "m2", Name: "redis-m2", Config: "redis-m2-extra"},
+			},
+		},
+	})
+	got := buf.String()
+	if strings.Contains(got, "@\n") || strings.Contains(got, "@ ") {
+		t.Fatalf("dangling @: %s", got)
+	}
+	if !strings.Contains(got, "config: ${member.name}-config@—") {
+		t.Fatalf("set config = %s", got)
+	}
+	if !strings.Contains(got, "redis-m1") || !strings.Contains(got, "config=v1") {
+		t.Fatalf("member version override = %s", got)
+	}
+	if !strings.Contains(got, "config=redis-m2-extra@—") {
+		t.Fatalf("member name without version = %s", got)
+	}
+}
+
 func TestWaitTimeoutAndFailed(t *testing.T) {
 	client, st, _ := startCLIAPI(t)
 	seedNATSExample(t, client, st)
