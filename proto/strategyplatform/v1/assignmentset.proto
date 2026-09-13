@@ -32,10 +32,15 @@ message AssignmentSetSpec {
   // After status.assignment_key="member" this is not an assignment slot.
   string strategy = 1;
   string artifact_version = 2;
-  string config_version = 3; // optional
+  string config_version = 3; // optional default; empty member.config_version inherits this
   MemberTemplate template = 4;
   repeated SetMember members = 5;
   RollingUpdate update = 6;
+  // Optional catalog name for the config artifact. Empty falls through to
+  // {artifact}-config then {strategy}-config unless a member sets config.
+  // Expanded per member: ${set.name}, ${member.name}, ${member.machine},
+  // ${member.vars.*}. An explicit name does not fall back to those defaults.
+  string config = 7;
 }
 
 // MemberTemplate is shared by every member. Strings in args, env values, and
@@ -88,6 +93,12 @@ message SetMember {
   // Free-form per-member values referenced as ${member.vars.KEY} and, from
   // PeerList.format, ${peer.vars.KEY}.
   map<string, string> vars = 3;
+  // Optional catalog name for this member's config artifact. Empty inherits
+  // spec.config, then {artifact}-config / {strategy}-config. Same placeholders
+  // as spec.config. An explicit name does not fall back.
+  string config = 4;
+  // Optional config version. Empty inherits spec.config_version.
+  string config_version = 5;
 }
 
 message RollingUpdate {

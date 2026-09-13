@@ -110,16 +110,13 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 	if cl.GetStatus().GetDeleting() {
 		return c.reconcileDelete(ctx, cl)
 	}
-	art, cfg, err := resolveClusterArtifacts(c.Store, cl)
+	art, err := resolveClusterArtifact(c.Store, cl)
 	if err != nil {
-		return c.setStatus(cl, &pb.AssignmentSetStatus{
-			Phase:              "Failed",
-			ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
-			Reason:             "Artifact",
-			Message:            err.Error(),
-			Members:            cl.GetStatus().GetMembers(),
-			AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
-		})
+		return c.setArtifactFailed(cl, err)
+	}
+	cfgs, err := resolveMemberConfigs(c.Store, cl, art)
+	if err != nil {
+		return c.setArtifactFailed(cl, err)
 	}
 
 	ordered := orderedSpecMembers(cl)
@@ -149,7 +146,7 @@ func (c *Controller) Reconcile(ctx context.Context, cl *pb.AssignmentSet) error 
 
 	for _, item := range ordered {
 		srv := item.srv
-		computed, err := computeAssignment(cl, item.idx, art, cfg)
+		computed, err := computeAssignment(cl, item.idx, art, cfgs[item.idx])
 		if err != nil {
 			return c.setAssignFailed(cl, cl.GetStatus().GetMembers(), err)
 		}
@@ -615,26 +612,63 @@ func waitReadySeconds(cl *pb.AssignmentSet) int32 {
 	return 60
 }
 
-func resolveClusterArtifacts(st store.Store, cl *pb.AssignmentSet) (art, cfg *pb.ArtifactRef, err error) {
+func (c *Controller) setArtifactFailed(cl *pb.AssignmentSet, err error) error {
+	return c.setStatus(cl, &pb.AssignmentSetStatus{
+		Phase:              "Failed",
+		ObservedGeneration: cl.GetStatus().GetObservedGeneration(),
+		Reason:             "Artifact",
+		Message:            err.Error(),
+		Members:            cl.GetStatus().GetMembers(),
+		AssignmentKey:      cl.GetStatus().GetAssignmentKey(),
+	})
+}
+
+func resolveClusterArtifact(st store.Store, cl *pb.AssignmentSet) (*pb.ArtifactRef, error) {
 	strategy := store.SetStrategy(cl)
 	ver := cl.GetSpec().GetArtifactVersion()
 	art, ok := st.GetArtifact(strategy, ver)
 	if !ok {
-		return nil, nil, fmt.Errorf("artifact %s@%s not registered", strategy, ver)
+		return nil, fmt.Errorf("artifact %s@%s not registered", strategy, ver)
 	}
 	if rec, ok := st.GetArtifactRecord(art.GetName(), art.GetVersion()); ok && rec.State != store.ArtifactStateReady {
-		return nil, nil, fmt.Errorf("artifact %s@%s is %s", art.GetName(), art.GetVersion(), rec.State)
+		return nil, fmt.Errorf("artifact %s@%s is %s", art.GetName(), art.GetVersion(), rec.State)
 	}
-	if cv := cl.GetSpec().GetConfigVersion(); cv != "" {
-		cfg, ok = st.GetArtifact(art.GetName()+"-config", cv)
-		if !ok {
-			cfg, ok = st.GetArtifact(strategy+"-config", cv)
+	return art, nil
+}
+
+func resolveMemberConfigs(st store.Store, cl *pb.AssignmentSet, art *pb.ArtifactRef) ([]*pb.ArtifactRef, error) {
+	members := cl.GetSpec().GetMembers()
+	out := make([]*pb.ArtifactRef, len(members))
+	for i := range members {
+		cfg, err := resolveMemberConfig(st, cl, i, art)
+		if err != nil {
+			return nil, err
 		}
-		if !ok {
-			return nil, nil, fmt.Errorf("config %s@%s not registered", strategy+"-config", cv)
-		}
+		out[i] = cfg
 	}
-	return art, cfg, nil
+	return out, nil
+}
+
+func resolveMemberConfig(st store.Store, cl *pb.AssignmentSet, idx int, art *pb.ArtifactRef) (*pb.ArtifactRef, error) {
+	want, err := assignmentset.WantConfig(cl, idx, art.GetName())
+	if err != nil {
+		return nil, err
+	}
+	if want.Version == "" {
+		return nil, nil
+	}
+	cfg, ok := st.GetArtifact(want.Primary, want.Version)
+	if !ok && want.Fallback != "" {
+		cfg, ok = st.GetArtifact(want.Fallback, want.Version)
+	}
+	if !ok {
+		name := want.Primary
+		if want.Fallback != "" {
+			name = want.Fallback
+		}
+		return nil, fmt.Errorf("config %s@%s not registered", name, want.Version)
+	}
+	return cfg, nil
 }
 
 // orderedSpecMembers sorts members by (machine, name) while keeping the

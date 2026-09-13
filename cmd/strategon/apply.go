@@ -36,6 +36,7 @@ type yamlMeta struct {
 type setSpecYAML struct {
 	ArtifactVersion    string          `yaml:"artifactVersion"`
 	ArtifactVersionAlt string          `yaml:"artifact_version"`
+	Config             string          `yaml:"config"`
 	ConfigVersion      string          `yaml:"configVersion"`
 	ConfigVersionAlt   string          `yaml:"config_version"`
 	Strategy           string          `yaml:"strategy"`
@@ -74,9 +75,12 @@ type peersYAML struct {
 }
 
 type setMemberYAML struct {
-	Machine string            `yaml:"machine"`
-	Name    string            `yaml:"name"`
-	Vars    map[string]string `yaml:"vars"`
+	Machine          string            `yaml:"machine"`
+	Name             string            `yaml:"name"`
+	Vars             map[string]string `yaml:"vars"`
+	Config           string            `yaml:"config"`
+	ConfigVersion    string            `yaml:"configVersion"`
+	ConfigVersionAlt string            `yaml:"config_version"`
 }
 
 type natsUpdateYAML struct {
@@ -235,9 +239,11 @@ func applyAssignmentSet(ctx context.Context, client strategyplatformv1connect.Co
 	members := make([]*pb.SetMember, 0, len(spec.Members))
 	for _, m := range spec.Members {
 		members = append(members, &pb.SetMember{
-			Machine: m.Machine,
-			Name:    m.Name,
-			Vars:    m.Vars,
+			Machine:       m.Machine,
+			Name:          m.Name,
+			Vars:          m.Vars,
+			Config:        m.Config,
+			ConfigVersion: firstNonEmpty(m.ConfigVersion, m.ConfigVersionAlt),
 		})
 	}
 	tmpl := &pb.MemberTemplate{
@@ -270,6 +276,7 @@ func applyAssignmentSet(ctx context.Context, client strategyplatformv1connect.Co
 			Metadata: &pb.ObjectMeta{Name: name, Labels: doc.Metadata.Labels},
 			Spec: &pb.AssignmentSetSpec{
 				ArtifactVersion: firstNonEmpty(spec.ArtifactVersion, spec.ArtifactVersionAlt),
+				Config:          spec.Config,
 				ConfigVersion:   firstNonEmpty(spec.ConfigVersion, spec.ConfigVersionAlt),
 				Strategy:        spec.Strategy,
 				Template:        tmpl,

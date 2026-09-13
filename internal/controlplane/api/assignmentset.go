@@ -116,6 +116,10 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 		spec.Update.WaitReadySeconds = 60
 	}
 
+	if spec.GetConfigVersion() == "latest" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("config_version must not be \"latest\""))
+	}
+
 	seenName := map[string]struct{}{}
 	for i, srv := range spec.GetMembers() {
 		if srv.GetMachine() == "" {
@@ -127,6 +131,9 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 		}
 		if err := assignmentset.ValidateMemberName(srv.GetName()); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: %w", i, err))
+		}
+		if srv.GetConfigVersion() == "latest" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("members[%d]: config_version must not be \"latest\"", i))
 		}
 		rec, ok := s.store.GetMachine(srv.GetMachine())
 		if !ok {
@@ -159,8 +166,19 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 	if err := s.requireArtifactReady(art.GetName(), art.GetVersion()); err != nil {
 		return nil, err
 	}
-	if spec.GetConfigVersion() != "" {
-		cfg, err := s.resolveArtifact(art.GetName()+"-config", spec.Strategy+"-config", spec.GetConfigVersion())
+	set := &pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: name},
+		Spec:     spec,
+	}
+	for i := range spec.GetMembers() {
+		want, err := assignmentset.WantConfig(set, i, art.GetName())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		if want.Version == "" {
+			continue
+		}
+		cfg, err := s.resolveArtifact(want.Primary, want.Fallback, want.Version)
 		if err != nil {
 			return nil, err
 		}

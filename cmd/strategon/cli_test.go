@@ -275,6 +275,35 @@ func TestGetAndWaitAssignmentSet(t *testing.T) {
 	}
 }
 
+func TestPrintClusterConfigNameWithoutVersion(t *testing.T) {
+	var buf bytes.Buffer
+	printCluster(&buf, &pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "redis"},
+		Spec: &pb.AssignmentSetSpec{
+			Strategy:        "redis",
+			ArtifactVersion: "v7",
+			Config:          "${member.name}-config",
+			Members: []*pb.SetMember{
+				{Machine: "m1", Name: "redis-m1", ConfigVersion: "v1"},
+				{Machine: "m2", Name: "redis-m2", Config: "redis-m2-extra"},
+			},
+		},
+	})
+	got := buf.String()
+	if strings.Contains(got, "@\n") || strings.Contains(got, "@ ") {
+		t.Fatalf("dangling @: %s", got)
+	}
+	if !strings.Contains(got, "config: ${member.name}-config@—") {
+		t.Fatalf("set config = %s", got)
+	}
+	if !strings.Contains(got, "redis-m1") || !strings.Contains(got, "config=v1") {
+		t.Fatalf("member version override = %s", got)
+	}
+	if !strings.Contains(got, "config=redis-m2-extra@—") {
+		t.Fatalf("member name without version = %s", got)
+	}
+}
+
 func TestWaitTimeoutAndFailed(t *testing.T) {
 	client, st, _ := startCLIAPI(t)
 	seedNATSExample(t, client, st)
@@ -441,6 +470,60 @@ func TestApplyExampleNatsManifest(t *testing.T) {
 	}
 	if got.Endpoint != "http://127.0.0.1:8222/healthz" {
 		t.Fatalf("endpoint = %q", got.Endpoint)
+	}
+}
+
+func TestApplyMemberConfigYAML(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	st.UpsertMachine(&pb.Register{MachineId: "m2"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats-config", Version: "c1", Digest: "sha256:cfg1", Uri: "file:///nats.conf"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats-m2-config", Version: "c1", Digest: "sha256:cfg-m2", Uri: "file:///nats-m2.conf"},
+	}))
+	body := `
+kind: AssignmentSet
+metadata:
+  name: trading
+spec:
+  strategy: nats
+  artifactVersion: v1
+  configVersion: c1
+  members:
+    - machine: m1
+      name: nats-m1
+    - machine: m2
+      name: nats-m2
+      config: nats-m2-config
+      configVersion: c1
+`
+	var doc yamlDoc
+	if err := yaml.NewDecoder(strings.NewReader(body)).Decode(&doc); err != nil {
+		t.Fatal(err)
+	}
+	var spec setSpecYAML
+	if err := doc.Spec.Decode(&spec); err != nil {
+		t.Fatal(err)
+	}
+	if spec.Members[1].Config != "nats-m2-config" || spec.Members[1].ConfigVersion != "c1" {
+		t.Fatalf("decoded members = %+v", spec.Members)
+	}
+	if _, err := applyReader(ctx, client, strings.NewReader(body)); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := st.GetAssignmentSet("trading")
+	if !ok {
+		t.Fatal("set not persisted")
+	}
+	m := got.GetSpec().GetMembers()[1]
+	if m.GetConfig() != "nats-m2-config" || m.GetConfigVersion() != "c1" {
+		t.Fatalf("persisted member = %+v", m)
 	}
 }
 

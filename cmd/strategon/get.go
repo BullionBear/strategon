@@ -54,8 +54,8 @@ func printCluster(w io.Writer, c *pb.AssignmentSet) {
 		fmt.Fprintf(w, "  message: %s\n", st.GetMessage())
 	}
 	fmt.Fprintf(w, "  artifact: %s\n", spec.GetArtifactVersion())
-	if spec.GetConfigVersion() != "" {
-		fmt.Fprintf(w, "  config: %s\n", spec.GetConfigVersion())
+	if spec.GetConfig() != "" || spec.GetConfigVersion() != "" {
+		fmt.Fprintf(w, "  config: %s\n", configRef(spec.GetConfig(), spec.GetConfigVersion()))
 	}
 	fmt.Fprintf(w, "  strategy: %s\n", emptyDash(spec.GetStrategy()))
 	if k := st.GetAssignmentKey(); k != "" {
@@ -77,8 +77,12 @@ func printCluster(w io.Writer, c *pb.AssignmentSet) {
 			ready = ss.GetReady()
 			conv = ss.GetConverged()
 		}
-		fmt.Fprintf(w, "    %s  %s  phase=%s ready=%t converged=%t\n",
+		fmt.Fprintf(w, "    %s  %s  phase=%s ready=%t converged=%t",
 			srv.GetMachine(), srv.GetName(), phase, ready, conv)
+		if srv.GetConfig() != "" || srv.GetConfigVersion() != "" {
+			fmt.Fprintf(w, "  config=%s", configRef(srv.GetConfig(), firstNonEmpty(srv.GetConfigVersion(), spec.GetConfigVersion())))
+		}
+		fmt.Fprintln(w)
 	}
 }
 
@@ -87,4 +91,13 @@ func emptyDash(s string) string {
 		return "—"
 	}
 	return s
+}
+
+// configRef formats a catalog binding. A name without a version is valid when
+// each member carries its own; do not print a dangling '@'.
+func configRef(name, version string) string {
+	if name == "" {
+		return version
+	}
+	return name + "@" + emptyDash(version)
 }
