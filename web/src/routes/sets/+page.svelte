@@ -89,8 +89,13 @@
 							<p class="muted tiny">
 								catalog <span class="mono">{catalog}</span>
 								· artifact <span class="mono">{c.spec?.artifactVersion || '—'}</span>
-								{#if c.spec?.configVersion}
-									· config <span class="mono">{c.spec.configVersion}</span>
+								{#if c.spec?.config || c.spec?.configVersion}
+									· config
+									<span class="mono">
+										{c.spec.config
+											? `${c.spec.config}@${c.spec.configVersion || '—'}`
+											: c.spec.configVersion}
+									</span>
 								{/if}
 							</p>
 						</div>
@@ -129,6 +134,7 @@
 								<tr>
 									<th>Machine</th>
 									<th>Server</th>
+									<th>Config</th>
 									<th>Assignment</th>
 									<th>Ready</th>
 									<th>Converged</th>
@@ -142,6 +148,15 @@
 											<a class="row-link mono" href="/machines/{srv.machine}">{srv.machine}</a>
 										</td>
 										<td class="mono muted">{srv.name}</td>
+										<td class="mono muted">
+											{#if srv.config || srv.configVersion}
+												{srv.config
+													? `${srv.config}@${srv.configVersion || c.spec?.configVersion || '—'}`
+													: srv.configVersion}
+											{:else}
+												—
+											{/if}
+										</td>
 										<td>
 											<a class="row-link mono" href="/machines/{srv.machine}/{srv.name}">
 												{memberPhaseLabel(st?.phase)}
@@ -170,6 +185,13 @@
 								</div>
 								<div class="card-meta">
 									<span class="mono">{srv.name}</span>
+									{#if srv.config || srv.configVersion}
+										<span class="mono">
+											{srv.config
+												? `${srv.config}@${srv.configVersion || c.spec?.configVersion || '—'}`
+												: srv.configVersion}
+										</span>
+									{/if}
 									<a class="mono" href="/machines/{srv.machine}/{srv.name}">{memberPhaseLabel(st?.phase)}</a>
 									<span>{st?.converged ? 'converged' : 'diverged'}</span>
 								</div>

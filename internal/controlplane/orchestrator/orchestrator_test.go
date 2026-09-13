@@ -309,10 +309,11 @@ func TestVersionBumpRollsOneAtATime(t *testing.T) {
 func TestComputeAssignmentCaptureStdioEqual(t *testing.T) {
 	_, st, _ := setupCluster(t, 1)
 	cl := loadCluster(t, st)
-	art, cfg, err := resolveClusterArtifacts(st, cl)
+	art, cfgs, err := resolveTestConfigs(t, st, cl)
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg := cfgs[0]
 	a, err := computeAssignment(cl, 0, art, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -344,7 +345,7 @@ func TestRestartOnlyWritesRemaining(t *testing.T) {
 	_, st, asg := setupCluster(t, 3)
 	ctx := context.Background()
 	cl := loadCluster(t, st)
-	art, cfg, err := resolveClusterArtifacts(st, cl)
+	art, cfgs, err := resolveTestConfigs(t, st, cl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +354,7 @@ func TestRestartOnlyWritesRemaining(t *testing.T) {
 		if i == 2 {
 			break
 		}
-		spec, err := computeAssignment(cl, i, art, cfg)
+		spec, err := computeAssignment(cl, i, art, cfgs[i])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -463,6 +464,91 @@ func TestNoConfigOmitsConfigArg(t *testing.T) {
 	joined := strings.Join(rec.Assignments[slotName("m1")].GetArgs(), " ")
 	if strings.Contains(joined, "${CONFIG}") || strings.Contains(joined, "-c") {
 		t.Fatalf("args = %v, want no -c ${CONFIG}", rec.Assignments[slotName("m1")].GetArgs())
+	}
+}
+
+func TestMemberConfigsAttachDifferentDigests(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 2)
+	ctx := context.Background()
+	if err := st.RegisterArtifact(&pb.ArtifactRef{
+		Name: "nats-m2-config", Version: "c1", Digest: "sha256:cfg-m2", Uri: "file:///nats-m2.conf",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cl := loadCluster(t, st)
+	cl.Spec.Members[1].Config = "nats-m2-config"
+	if _, _, err := st.ApplyAssignmentSet(cl); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	markReady(t, st, "m1", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	r1, _ := st.GetMachine("m1")
+	r2, _ := st.GetMachine("m2")
+	c1 := r1.Assignments[slotName("m1")].GetConfig()
+	c2 := r2.Assignments[slotName("m2")].GetConfig()
+	if c1.GetName() != "nats-config" || c1.GetDigest() != "sha256:cfg1" {
+		t.Fatalf("m1 config = %+v", c1)
+	}
+	if c2.GetName() != "nats-m2-config" || c2.GetDigest() != "sha256:cfg-m2" {
+		t.Fatalf("m2 config = %+v", c2)
+	}
+}
+
+func TestMemberConfigVersionBumpRollsOneSlot(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 2)
+	ctx := context.Background()
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	markReady(t, st, "m1", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	markReady(t, st, "m2", true, pb.DeployPhase_DEPLOY_PHASE_HEALTHY)
+	if err := st.RegisterArtifact(&pb.ArtifactRef{
+		Name: "nats-config", Version: "c2", Digest: "sha256:cfg2", Uri: "file:///nats-c2.conf",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cl := loadCluster(t, st)
+	cl.Spec.Members[0].ConfigVersion = "c2"
+	if _, _, err := st.ApplyAssignmentSet(cl); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(ctx, loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	r1, _ := st.GetMachine("m1")
+	r2, _ := st.GetMachine("m2")
+	if r1.Assignments[slotName("m1")].GetConfig().GetVersion() != "c2" {
+		t.Fatalf("m1 config = %+v", r1.Assignments[slotName("m1")].GetConfig())
+	}
+	if r2.Assignments[slotName("m2")].GetConfig().GetVersion() != "c1" {
+		t.Fatalf("m2 config = %+v", r2.Assignments[slotName("m2")].GetConfig())
+	}
+}
+
+func TestMissingMemberConfigWritesArtifactAndDoesNotAssign(t *testing.T) {
+	ctrl, st, _ := setupCluster(t, 2)
+	cl := loadCluster(t, st)
+	cl.Spec.Members[1].Config = "nats-m2-config"
+	if _, _, err := st.ApplyAssignmentSet(cl); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrl.Reconcile(context.Background(), loadCluster(t, st)); err != nil {
+		t.Fatal(err)
+	}
+	cl = loadCluster(t, st)
+	if cl.GetStatus().GetReason() != "Artifact" {
+		t.Fatalf("reason = %q message = %q", cl.GetStatus().GetReason(), cl.GetStatus().GetMessage())
+	}
+	if assigned(st, "m1") || assigned(st, "m2") {
+		t.Fatal("missing member config must not write assignments")
 	}
 }
 
@@ -999,14 +1085,27 @@ func statusHasMember(cl *pb.AssignmentSet, machine, name string) bool {
 	return false
 }
 
+func resolveTestConfigs(t *testing.T, st store.Store, cl *pb.AssignmentSet) (*pb.ArtifactRef, []*pb.ArtifactRef, error) {
+	t.Helper()
+	art, err := resolveClusterArtifact(st, cl)
+	if err != nil {
+		return nil, nil, err
+	}
+	cfgs, err := resolveMemberConfigs(st, cl, art)
+	if err != nil {
+		return nil, nil, err
+	}
+	return art, cfgs, nil
+}
+
 func seedLegacyFamily(t *testing.T, st store.Store, cl *pb.AssignmentSet) {
 	t.Helper()
-	art, cfg, err := resolveClusterArtifacts(st, cl)
+	art, cfgs, err := resolveTestConfigs(t, st, cl)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i, srv := range cl.GetSpec().GetMembers() {
-		spec, err := computeAssignment(cl, i, art, cfg)
+		spec, err := computeAssignment(cl, i, art, cfgs[i])
 		if err != nil {
 			t.Fatal(err)
 		}

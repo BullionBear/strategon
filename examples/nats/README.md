@@ -76,6 +76,29 @@ Machines listed in `spec.members[].machine` must already be registered
 (agent connected at least once). The same machine may appear more than
 once when `member.name` values differ.
 
+## Per-member config
+
+NATS shares one `nats-config` and differentiates via env. A workload whose
+config file itself must differ (Redis `maxmemory` that cannot live in env)
+binds a catalog name per member. `spec.config` and `members[].config` use
+the same placeholders as the template except `${peers}`. An explicit name
+does not fall back to `{strategy}-config`.
+
+```yaml
+spec:
+  strategy: redis
+  artifactVersion: v7
+  config: ${member.name}-config   # redis-m1-config, redis-m2-config
+  configVersion: v1
+  members:
+    - { machine: m1, name: redis-m1 }
+    - { machine: m2, name: redis-m2, configVersion: v2 }  # this member only
+    - { machine: m3, name: redis-m3, config: redis-m3-extra }  # different artifact
+```
+
+Omit both `config` fields to keep today's `{artifact}-config` then
+`{strategy}-config` lookup. `configVersion: latest` is rejected.
+
 ## Routes and `routeHost`
 
 `nats.conf` has **no** `routes:` block. `$VAR` cannot expand into a NATS

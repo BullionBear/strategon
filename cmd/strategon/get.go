@@ -54,7 +54,9 @@ func printCluster(w io.Writer, c *pb.AssignmentSet) {
 		fmt.Fprintf(w, "  message: %s\n", st.GetMessage())
 	}
 	fmt.Fprintf(w, "  artifact: %s\n", spec.GetArtifactVersion())
-	if spec.GetConfigVersion() != "" {
+	if spec.GetConfig() != "" {
+		fmt.Fprintf(w, "  config: %s@%s\n", spec.GetConfig(), spec.GetConfigVersion())
+	} else if spec.GetConfigVersion() != "" {
 		fmt.Fprintf(w, "  config: %s\n", spec.GetConfigVersion())
 	}
 	fmt.Fprintf(w, "  strategy: %s\n", emptyDash(spec.GetStrategy()))
@@ -77,8 +79,16 @@ func printCluster(w io.Writer, c *pb.AssignmentSet) {
 			ready = ss.GetReady()
 			conv = ss.GetConverged()
 		}
-		fmt.Fprintf(w, "    %s  %s  phase=%s ready=%t converged=%t\n",
+		fmt.Fprintf(w, "    %s  %s  phase=%s ready=%t converged=%t",
 			srv.GetMachine(), srv.GetName(), phase, ready, conv)
+		if srv.GetConfig() != "" || srv.GetConfigVersion() != "" {
+			if srv.GetConfig() != "" {
+				fmt.Fprintf(w, "  config=%s@%s", srv.GetConfig(), firstNonEmpty(srv.GetConfigVersion(), spec.GetConfigVersion()))
+			} else {
+				fmt.Fprintf(w, "  config=%s", srv.GetConfigVersion())
+			}
+		}
+		fmt.Fprintln(w)
 	}
 }
 

@@ -563,3 +563,105 @@ func TestSetStdioCaptureRejectsReservedSlot(t *testing.T) {
 		t.Fatalf("reserved SetStdioCapture: %v", err)
 	}
 }
+
+func TestApplyAssignmentSetPerMemberConfig(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	st.UpsertMachine(&pb.Register{MachineId: "m2"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats-config", Version: "c1", Digest: "sha256:cfg1", Uri: "file:///nats.conf"},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats-m2-config", Version: "c1", Digest: "sha256:cfg-m2", Uri: "file:///nats-m2.conf"},
+	}))
+
+	resp, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "trading"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				ConfigVersion:   "c1",
+				Members: []*pb.SetMember{
+					{Machine: "m1", Name: "nats-m1", Vars: map[string]string{"route_host": "10.0.0.1", "cluster_port": "6222", "monitor_port": "8222"}},
+					{Machine: "m2", Name: "nats-m2", Config: "nats-m2-config", Vars: map[string]string{"route_host": "10.0.0.2", "cluster_port": "6222", "monitor_port": "8222"}},
+				},
+			},
+		},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := resp.Msg.GetSet().GetSpec().GetMembers()
+	if got[1].GetConfig() != "nats-m2-config" {
+		t.Fatalf("persisted member config = %q", got[1].GetConfig())
+	}
+
+	_, err = client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "missing"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				ConfigVersion:   "c1",
+				Members: []*pb.SetMember{
+					{Machine: "m1", Name: "x", Config: "no-such-config", Vars: map[string]string{"route_host": "10.0.0.1"}},
+				},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("missing explicit name: %v", err)
+	}
+
+	_, err = client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "nover"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Members: []*pb.SetMember{
+					{Machine: "m1", Name: "y", Config: "nats-m2-config"},
+				},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "requires a version") {
+		t.Fatalf("name without version: %v", err)
+	}
+
+	_, err = client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "latest-set"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				ConfigVersion:   "latest",
+				Members:         []*pb.SetMember{{Machine: "m1", Name: "z"}},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "latest") {
+		t.Fatalf("set latest: %v", err)
+	}
+
+	_, err = client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "latest-member"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Members: []*pb.SetMember{{
+					Machine: "m1", Name: "w", ConfigVersion: "latest",
+				}},
+			},
+		},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "latest") {
+		t.Fatalf("member latest: %v", err)
+	}
+}

@@ -2042,7 +2042,7 @@
           "configVersion": {
             "type": "string",
             "title": "config_version",
-            "description": "optional"
+            "description": "optional default; empty member.config_version inherits this"
           },
           "template": {
             "title": "template",
@@ -2058,6 +2058,11 @@
           "update": {
             "title": "update",
             "$ref": "#/components/schemas/strategyplatform.v1.RollingUpdate"
+          },
+          "config": {
+            "type": "string",
+            "title": "config",
+            "description": "Optional catalog name for the config artifact. Empty falls through to\n {artifact}-config then {strategy}-config unless a member sets config.\n Expanded per member: ${set.name}, ${member.name}, ${member.machine},\n ${member.vars.*}. An explicit name does not fall back to those defaults."
           }
         },
         "title": "AssignmentSetSpec",
@@ -3602,6 +3607,16 @@
               "title": "value"
             },
             "description": "Free-form per-member values referenced as ${member.vars.KEY} and, from\n PeerList.format, ${peer.vars.KEY}."
+          },
+          "config": {
+            "type": "string",
+            "title": "config",
+            "description": "Optional catalog name for this member's config artifact. Empty inherits\n spec.config, then {artifact}-config / {strategy}-config. Same placeholders\n as spec.config. An explicit name does not fall back."
+          },
+          "configVersion": {
+            "type": "string",
+            "title": "config_version",
+            "description": "Optional config version. Empty inherits spec.config_version."
           }
         },
         "title": "SetMember",
