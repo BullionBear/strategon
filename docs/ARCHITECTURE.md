@@ -5,6 +5,8 @@ they talk, and where to look in the tree. For a runnable walkthrough, see the
 root [README](../README.md). For the design record behind the apply surface
 and the AssignmentSet orchestrator, see
 [EPIC-declarative-orchestration.md](EPIC-declarative-orchestration.md).
+Sealed env envelopes (credentials in `env` / `member.vars`) are specified in
+[DESIGN-sealed-env.md](DESIGN-sealed-env.md) and are not implemented yet.
 
 ## Idea in one paragraph
 
@@ -320,7 +322,9 @@ env on both drivers. `${CONFIG}`, `${BINARY}` and `${RELEASE_DIR}` stay
 args-only; apply rejects them in env so they cannot reach a process as
 literal text. Deploy (version-only) keeps existing env, so a stored
 `${CONFIG}` survives a bump; the next `ApplyAssignmentSet` Expand of that
-template fails. Resolution is keyed off the **launch artifact**, not
+template fails. Env values are still a plain string map today; sealed
+envelopes for credentials are the [DESIGN-sealed-env.md](DESIGN-sealed-env.md)
+contract, not current behaviour. Resolution is keyed off the **launch artifact**, not
 `spec.driver`, so auto-rollback from OCI to a previous BINARY still
 expands the same mount list.
 
