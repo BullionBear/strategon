@@ -64,6 +64,29 @@ func (s *Server) ListSecrets(ctx context.Context, _ *connect.Request[pb.ListSecr
 	return connect.NewResponse(&pb.ListSecretsResponse{Secrets: out}), nil
 }
 
+func (s *Server) DeleteSecret(ctx context.Context, req *connect.Request[pb.DeleteSecretRequest]) (*connect.Response[pb.DeleteSecretResponse], error) {
+	if s.secrets.Dark() {
+		return nil, secretError(secrets.ErrDark)
+	}
+	name := strings.TrimSpace(req.Msg.GetName())
+	token := secrets.Token(name)
+	if err := s.secrets.Delete(ctx, name); err != nil {
+		return nil, secretError(err)
+	}
+	_ = s.store.AppendAudit(&pb.AuditEntry{
+		Timestamp: timestamppb.Now(),
+		Actor:     auth.ActorFromContext(ctx),
+		Action:    "DeleteSecret",
+		Detail:    fmt.Sprintf("name=%s", name),
+	})
+	for _, id := range machinesReferencingSecret(s.store, token) {
+		if s.agents != nil {
+			s.agents.Notify(id)
+		}
+	}
+	return connect.NewResponse(&pb.DeleteSecretResponse{}), nil
+}
+
 func secretView(v secrets.View) *pb.SecretView {
 	return &pb.SecretView{
 		Name:        v.Name,

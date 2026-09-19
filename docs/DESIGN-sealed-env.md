@@ -1,6 +1,6 @@
 # Secret management
 
-Status: implemented — v1 (Put/Get/List, apply refs, southbound resolve, CLI, `/secrets`)
+Status: implemented — v1 (Put/Get/List/Delete, apply refs, southbound resolve, CLI, `/secrets`)
 Depends on: [Architecture](ARCHITECTURE.md)
 Addresses: [issue #48](https://github.com/BullionBear/strategon/issues/48)
 
@@ -152,6 +152,10 @@ with neither the input nor any ciphertext stored in `Detail`.
 `GetSecret` / `ListSecrets`: name, length, key id. Never plaintext. Never
 ciphertext.
 
+`DeleteSecret`: name in, empty out. Missing is NotFound. Assignments that
+still store `secret.<name>` are left as-is; the next southbound resolve
+fails closed (no new snapshot). Audited as "delete secret <name>".
+
 There is no `Decrypt`. Any RPC that takes a Secret and returns plaintext
 collapses the model.
 
@@ -179,8 +183,9 @@ of catalog as `/artifacts`, not Observe-next-to-tokens):
   copy control. The name is listable afterwards; the plaintext is not.
 - Overwrite is the same form (Put is upsert). Confirm that a running
   process keeps the old env until the next start.
-- No delete button in v1. There is no `DeleteSecret` RPC; assignments would
-  keep `secret.<name>` and the next resolve would fail closed.
+- Delete calls `DeleteSecret` after confirm. Running processes keep the old
+  env; the next resolve of that token fails closed. List is full-width:
+  metadata left-aligned, action buttons right-aligned.
 - SecretManagement dark (missing `K`, every Secret RPC failing): the page
   stays reachable and shows that the module is down. Do not pretend the
   list is empty.
@@ -273,7 +278,7 @@ not strip env on stop.
 | OCI image `Config.Env` | no |
 | File browse / `DownloadFiles` | no — can still read on-disk config and `.stdio` |
 | `capture_stdio` payload logs | no — the process can print its own env |
-| SPA `/secrets`, Deploy env picker | yes — list/put/copy `secret.<name>` only |
+| SPA `/secrets`, Deploy env picker | yes — list/put/copy/delete `secret.<name>` only |
 | `GetMachine` / `WatchMachine` / strategy page | no — `StrategyView` has no env |
 
 `supervision.json` already omits env. OCI `--oci-init` already keeps env

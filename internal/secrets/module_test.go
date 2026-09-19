@@ -50,6 +50,16 @@ func (m *memPersist) ListSecrets(context.Context) ([]Row, error) {
 	return out, nil
 }
 
+func (m *memPersist) DeleteSecret(_ context.Context, name string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.rows[name]; !ok {
+		return false, nil
+	}
+	delete(m.rows, name)
+	return true, nil
+}
+
 func testKey() []byte { return bytes.Repeat([]byte{0x11}, 32) }
 
 func testModule(t *testing.T) (*Module, *memPersist) {
@@ -134,6 +144,23 @@ func TestPutReSealDoesNotChangeToken(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	m, _ := testModule(t)
+	ctx := context.Background()
+	if _, _, err := m.Put(ctx, "db-url", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Delete(ctx, "db-url"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Get(ctx, "db-url"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("get after delete: %v", err)
+	}
+	if err := m.Delete(ctx, "db-url"); err == nil {
+		t.Fatal("second delete should be not found")
+	}
+}
+
 func TestDark(t *testing.T) {
 	m, err := New(Config{}, nil)
 	if err != nil || !m.Dark() {
@@ -145,6 +172,9 @@ func TestDark(t *testing.T) {
 	}
 	if _, err := m.List(ctx); err != ErrDark {
 		t.Fatalf("list dark: %v", err)
+	}
+	if err := m.Delete(ctx, "x"); err != ErrDark {
+		t.Fatalf("delete dark: %v", err)
 	}
 	if err := ValidateMaps(ctx, m, map[string]string{"A": "plain"}); err != nil {
 		t.Fatalf("plain env while dark: %v", err)

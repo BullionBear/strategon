@@ -101,6 +101,7 @@ Commands:
   secret put NAME               Write a secret (value from stdin); prints secret.<name>
   secret get NAME               Show secret metadata (never plaintext)
   secret ls                     List secrets (name, token, bytes, key id)
+  secret rm NAME                Delete a secret (assignments keep the token)
 
   Apply is authoritative: omit captureStdio to turn payload stdio capture off.
 

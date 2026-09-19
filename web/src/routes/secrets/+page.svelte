@@ -12,6 +12,7 @@
 	let busy = $state(false);
 	let lastToken = $state('');
 	let overwrite = $state(false);
+	let showPut = $state(false);
 
 	onMount(() => {
 		void load();
@@ -36,6 +37,16 @@
 			}
 			error = e instanceof Error ? e.message : String(e);
 		}
+	}
+
+	function openPut(n = '') {
+		name = n;
+		value = '';
+		overwrite = !!n && secrets.some((s) => s.name === n);
+		showPut = true;
+		error = '';
+		info = '';
+		lastToken = '';
 	}
 
 	async function onPut() {
@@ -72,6 +83,37 @@
 		}
 	}
 
+	async function onDelete(s: SecretView) {
+		error = '';
+		info = '';
+		const ok = confirm(
+			`Delete ${s.token}? Assignments that still reference it keep the token; the next resolve fails closed and running processes keep the old env.`
+		);
+		if (!ok) return;
+		busy = true;
+		try {
+			await client.deleteSecret({ name: s.name });
+			if (name.trim() === s.name) {
+				name = '';
+				overwrite = false;
+			}
+			if (lastToken === s.token) {
+				lastToken = '';
+			}
+			info = `Deleted ${s.token}`;
+			await load();
+		} catch (e) {
+			if (isDarkError(e)) {
+				dark = true;
+				error = 'Secret management is down (STRATEGON_SEAL_KEY is not set).';
+			} else {
+				error = e instanceof Error ? e.message : String(e);
+			}
+		} finally {
+			busy = false;
+		}
+	}
+
 	async function copyToken(token: string) {
 		try {
 			await navigator.clipboard.writeText(token);
@@ -80,16 +122,11 @@
 			info = token;
 		}
 	}
-
-	function fillName(n: string) {
-		name = n;
-		overwrite = true;
-	}
 </script>
 
-<section class="fade-in">
+<section class="fade-in page">
 	<div class="head">
-		<div>
+		<div class="head-copy">
 			<h1>Secrets</h1>
 			<p class="muted">
 				Named credentials for assignment env and <span class="mono">member.vars</span>. The public
@@ -97,6 +134,7 @@
 				after submit — list shows name, length, and wrap key id only.
 			</p>
 		</div>
+		<button class="btn" type="button" disabled={dark} onclick={() => openPut()}>Put secret</button>
 	</div>
 
 	{#if dark}
@@ -106,45 +144,52 @@
 		</p>
 	{/if}
 
-	<div class="panel" style="margin-top:1.25rem">
-		<h2>{overwrite ? 'Overwrite' : 'Put'} secret</h2>
-		<p class="muted" style="margin-bottom:0.85rem">
-			Value is a password field and is cleared after submit. The browser does not store it.
-		</p>
-		<div class="form">
-			<label>
-				Name
-				<input
-					bind:value={name}
-					autocomplete="off"
-					placeholder="db-url"
-					disabled={dark || busy}
-					oninput={() => (overwrite = secrets.some((s) => s.name === name.trim()))}
-				/>
-			</label>
-			<label class="wide">
-				Value
-				<input
-					type="password"
-					bind:value={value}
-					autocomplete="new-password"
-					placeholder="plaintext — shown only in this field"
-					disabled={dark || busy}
-				/>
-			</label>
-			<button class="btn" type="button" disabled={dark || busy || !name.trim()} onclick={onPut}>
-				{overwrite ? 'Overwrite' : 'Put'}
-			</button>
+	{#if showPut}
+		<div class="panel" style="margin-top:1.25rem">
+			<div class="panel-head">
+				<div>
+					<h2>{overwrite ? 'Overwrite' : 'Put'} secret</h2>
+					<p class="muted">
+						Value is a password field and is cleared after submit. The browser does not store it.
+					</p>
+				</div>
+				<button class="btn secondary" type="button" disabled={busy} onclick={() => (showPut = false)}>
+					Cancel
+				</button>
+			</div>
+			<div class="form">
+				<label>
+					Name
+					<input
+						bind:value={name}
+						autocomplete="off"
+						placeholder="db-url"
+						disabled={dark || busy}
+						oninput={() => (overwrite = secrets.some((s) => s.name === name.trim()))}
+					/>
+				</label>
+				<label class="wide">
+					Value
+					<input
+						type="password"
+						bind:value={value}
+						autocomplete="new-password"
+						placeholder="plaintext — shown only in this field"
+						disabled={dark || busy}
+					/>
+				</label>
+				<button class="btn form-action" type="button" disabled={dark || busy || !name.trim()} onclick={onPut}>
+					{overwrite ? 'Overwrite' : 'Put'}
+				</button>
+			</div>
+			{#if lastToken}
+				<div class="created">
+					<code class="mono">{lastToken}</code>
+					<button type="button" class="btn secondary" onclick={() => copyToken(lastToken)}>Copy</button>
+				</div>
+			{/if}
 		</div>
-		{#if lastToken}
-			<p class="mono created" style="margin-top:0.85rem">
-				Public token
-				<button type="button" class="btn ghost" onclick={() => copyToken(lastToken)}>Copy</button>
-				<br />
-				<code>{lastToken}</code>
-			</p>
-		{/if}
-	</div>
+	{/if}
 
 	{#if info}
 		<p class="pill ok" style="margin-top:1rem">{info}</p>
@@ -155,57 +200,148 @@
 
 	{#if !dark && secrets.length === 0}
 		<div class="panel empty" style="margin-top:1.25rem">
-			<p class="muted">No secrets yet. Put one above, then paste <span class="mono">secret.&lt;name&gt;</span> into Deploy env.</p>
+			<p class="muted">
+				No secrets yet. Put one, then paste <span class="mono">secret.&lt;name&gt;</span> into Deploy
+				env.
+			</p>
 		</div>
 	{:else if !dark}
-		<table style="margin-top:1.25rem">
-			<thead>
-				<tr>
-					<th>Name</th>
-					<th>Token</th>
-					<th>Bytes</th>
-					<th>Key id</th>
-					<th></th>
-				</tr>
-			</thead>
-			<tbody>
-				{#each secrets as s}
+		<div class="table-wrap">
+			<table>
+				<thead>
 					<tr>
-						<td class="mono">{s.name}</td>
-						<td class="mono">{s.token}</td>
-						<td>{s.lengthBytes}</td>
-						<td class="mono">{s.keyId}</td>
-						<td>
-							<button type="button" class="btn ghost" onclick={() => copyToken(s.token)}>Copy</button>
-							<button type="button" class="btn ghost" onclick={() => fillName(s.name)}>Overwrite</button>
-						</td>
+						<th>Name</th>
+						<th>Token</th>
+						<th>Bytes</th>
+						<th>Key</th>
+						<th class="actions">Actions</th>
 					</tr>
-				{/each}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					{#each secrets as s (s.name)}
+						<tr>
+							<td class="mono name">{s.name}</td>
+							<td class="mono token">{s.token}</td>
+							<td>{s.lengthBytes}</td>
+							<td class="mono">{s.keyId || '—'}</td>
+							<td class="actions">
+								<button type="button" class="btn secondary" disabled={busy} onclick={() => copyToken(s.token)}>
+									Copy
+								</button>
+								<button type="button" class="btn secondary" disabled={busy} onclick={() => openPut(s.name)}>
+									Overwrite
+								</button>
+								<button type="button" class="btn danger" disabled={busy} onclick={() => onDelete(s)}>
+									Delete
+								</button>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
 	{/if}
 </section>
 
 <style>
-	.head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
+	.page {
+		width: 100%;
 	}
+	.head,
+	.panel-head,
+	.created,
 	.form {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.75rem;
 		align-items: flex-end;
+		justify-content: space-between;
+		gap: 1rem;
+		width: 100%;
+	}
+	.head,
+	.panel-head {
+		align-items: flex-start;
+	}
+	.head-copy {
+		text-align: left;
+		min-width: 0;
+		flex: 1;
+	}
+	.head > .btn,
+	.panel-head > .btn,
+	.form-action,
+	.created > .btn {
+		margin-left: auto;
+		flex-shrink: 0;
+	}
+	.form {
+		flex-wrap: wrap;
+		align-items: flex-end;
+		margin-top: 0.85rem;
+	}
+	.form label {
+		text-align: left;
 	}
 	.form label.wide {
 		flex: 1 1 16rem;
 	}
+	.empty {
+		text-align: left;
+	}
+	.table-wrap {
+		width: 100%;
+		margin-top: 1.25rem;
+		overflow-x: auto;
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--surface);
+		box-shadow: var(--shadow);
+	}
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		table-layout: auto;
+		font-size: 0.9rem;
+	}
+	th,
+	td {
+		text-align: left;
+		padding: 0.7rem 0.85rem;
+		border-bottom: 1px solid var(--line);
+		vertical-align: middle;
+	}
+	th {
+		font-size: 0.72rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: var(--ink-muted);
+		background: rgba(255, 255, 255, 0.55);
+	}
+	tbody tr:last-child td {
+		border-bottom: none;
+	}
+	.name {
+		font-weight: 650;
+		color: var(--ink);
+	}
+	.token {
+		color: var(--ink-muted);
+	}
+	th.actions,
+	td.actions {
+		text-align: right;
+	}
+	td.actions {
+		white-space: nowrap;
+	}
+	td.actions .btn {
+		margin-left: 0.35rem;
+	}
 	.created {
-		display: flex;
-		flex-wrap: wrap;
+		margin-top: 0.85rem;
 		align-items: center;
-		gap: 0.5rem;
+	}
+	.created code {
+		word-break: break-all;
 	}
 </style>

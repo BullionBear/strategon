@@ -61,3 +61,24 @@ func TestSecretCLIList(t *testing.T) {
 		t.Fatalf("list leaked plaintext: %q", out)
 	}
 }
+
+func TestSecretCLIDelete(t *testing.T) {
+	client := startCLIAPIWithSecrets(t)
+	ctx := context.Background()
+	if _, err := client.PutSecret(ctx, connect.NewRequest(&pb.PutSecretRequest{
+		Name: "db-url", Value: "postgres://s3cret",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := deleteSecret(ctx, client, "db-url", &buf); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "secret/db-url deleted") {
+		t.Fatalf("rm = %q", buf.String())
+	}
+	_, err := client.GetSecret(ctx, connect.NewRequest(&pb.GetSecretRequest{Name: "db-url"}))
+	if err == nil || connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("get after rm: %v", err)
+	}
+}

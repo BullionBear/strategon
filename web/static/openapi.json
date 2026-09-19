@@ -361,6 +361,65 @@
         }
       }
     },
+    "/strategyplatform.v1.ControlPlaneService/DeleteSecret": {
+      "post": {
+        "tags": [
+          "ControlPlaneService"
+        ],
+        "summary": "DeleteSecret",
+        "description": "DeleteSecret removes the named row. Assignments that still store\n secret.\u003cname\u003e are left as-is; the next southbound resolve fails closed.",
+        "operationId": "strategyplatform.v1.ControlPlaneService.DeleteSecret",
+        "parameters": [
+          {
+            "name": "Connect-Protocol-Version",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/connect-protocol-version"
+            }
+          },
+          {
+            "name": "Connect-Timeout-Ms",
+            "in": "header",
+            "schema": {
+              "$ref": "#/components/schemas/connect-timeout-header"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/strategyplatform.v1.DeleteSecretRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "default": {
+            "description": "Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/connect.error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/strategyplatform.v1.DeleteSecretResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/strategyplatform.v1.ControlPlaneService/DeleteVolume": {
       "post": {
         "tags": [
@@ -2300,7 +2359,7 @@
           "action": {
             "type": "string",
             "title": "action",
-            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"CreateArtifactUpload\" | \"SetSharedFiles\" | \"ResolveArtifactSource\" | \"ReapStrategies\" | \"PutSecret\""
+            "description": "\"Deploy\" | \"SetDeployment\" | \"Rollback\" | \"ConfigChange\" | \"Stop\" | \"Start\" | \"Undeploy\" | \"DownloadFiles\" | \"CreateToken\" | \"RevokeToken\" | \"RegisterArtifact\" | \"CreateArtifactUpload\" | \"SetSharedFiles\" | \"ResolveArtifactSource\" | \"ReapStrategies\" | \"PutSecret\" | \"DeleteSecret\""
           },
           "machineId": {
             "type": "string",
@@ -2568,6 +2627,22 @@
       "strategyplatform.v1.DeleteAssignmentSetResponse": {
         "type": "object",
         "title": "DeleteAssignmentSetResponse",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DeleteSecretRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "name"
+          }
+        },
+        "title": "DeleteSecretRequest",
+        "additionalProperties": false
+      },
+      "strategyplatform.v1.DeleteSecretResponse": {
+        "type": "object",
+        "title": "DeleteSecretResponse",
         "additionalProperties": false
       },
       "strategyplatform.v1.DeleteVolumeRequest": {

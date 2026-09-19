@@ -30,4 +30,5 @@ type Persistence interface {
 	UpsertSecret(ctx context.Context, row Row) error
 	GetSecret(ctx context.Context, name string) (Row, bool, error)
 	ListSecrets(ctx context.Context) ([]Row, error)
+	DeleteSecret(ctx context.Context, name string) (bool, error)
 }

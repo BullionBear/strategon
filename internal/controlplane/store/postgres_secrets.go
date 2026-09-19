@@ -74,3 +74,16 @@ func (p *Postgres) ListSecrets(ctx context.Context) ([]secrets.Row, error) {
 	}
 	return out, rows.Err()
 }
+
+func (p *Postgres) DeleteSecret(ctx context.Context, name string) (bool, error) {
+	if ctx == nil {
+		var cancel context.CancelFunc
+		ctx, cancel = opCtx()
+		defer cancel()
+	}
+	tag, err := p.pool.Exec(ctx, `DELETE FROM secrets WHERE name=$1`, name)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}

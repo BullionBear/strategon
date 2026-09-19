@@ -15,7 +15,7 @@ import (
 
 func cmdSecret(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
-		return usageError{msg: "secret requires put|get|ls"}
+		return usageError{msg: "secret requires put|get|ls|rm"}
 	}
 	switch args[0] {
 	case "put":
@@ -24,8 +24,10 @@ func cmdSecret(args []string) error {
 		return cmdSecretGet(args[1:])
 	case "ls", "list":
 		return cmdSecretList(args[1:])
+	case "rm", "delete":
+		return cmdSecretDelete(args[1:])
 	default:
-		return usageError{msg: fmt.Sprintf("unknown secret command %q (want put|get|ls)", args[0])}
+		return usageError{msg: fmt.Sprintf("unknown secret command %q (want put|get|ls|rm)", args[0])}
 	}
 }
 
@@ -73,6 +75,25 @@ func cmdSecretGet(args []string) error {
 		return usageError{msg: "secret get NAME is required"}
 	}
 	return printSecret(context.Background(), newClient(cfg), rest[0], os.Stdout)
+}
+
+func cmdSecretDelete(args []string) error {
+	cfg, rest, err := parseSecretCmd("rm", args)
+	if err != nil {
+		return err
+	}
+	if len(rest) < 1 || strings.TrimSpace(rest[0]) == "" {
+		return usageError{msg: "secret rm NAME is required"}
+	}
+	return deleteSecret(context.Background(), newClient(cfg), strings.TrimSpace(rest[0]), os.Stdout)
+}
+
+func deleteSecret(ctx context.Context, client strategyplatformv1connect.ControlPlaneServiceClient, name string, w io.Writer) error {
+	if _, err := client.DeleteSecret(ctx, connect.NewRequest(&pb.DeleteSecretRequest{Name: name})); err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "secret/%s deleted\n", name)
+	return nil
 }
 
 func cmdSecretList(args []string) error {

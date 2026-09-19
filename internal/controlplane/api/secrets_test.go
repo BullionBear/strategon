@@ -102,6 +102,56 @@ func TestPutSecretAuditSafe(t *testing.T) {
 	}
 }
 
+func TestDeleteSecret(t *testing.T) {
+	client, st, _, agents := startHumanAPIWithSecrets(t)
+	ctx := context.Background()
+	if _, err := client.PutSecret(ctx, connect.NewRequest(&pb.PutSecretRequest{
+		Name: "db-url", Value: "v1",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	if _, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1",
+		Env: map[string]string{"DATABASE_URL": "secret.db-url"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	before := agents.n
+	if _, err := client.DeleteSecret(ctx, connect.NewRequest(&pb.DeleteSecretRequest{Name: "db-url"})); err != nil {
+		t.Fatal(err)
+	}
+	if agents.n <= before {
+		t.Fatalf("DeleteSecret should Notify; n=%d before=%d", agents.n, before)
+	}
+	_, err := client.GetSecret(ctx, connect.NewRequest(&pb.GetSecretRequest{Name: "db-url"}))
+	if err == nil || connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("get after delete: %v", err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["hello"].GetEnv()["DATABASE_URL"] != "secret.db-url" {
+		t.Fatal("delete must not rewrite assignment env")
+	}
+	found := false
+	for _, e := range st.ListAudit("", "") {
+		if e.GetAction() == "DeleteSecret" && strings.Contains(e.GetDetail(), "name=db-url") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("missing DeleteSecret audit")
+	}
+	_, err = client.DeleteSecret(ctx, connect.NewRequest(&pb.DeleteSecretRequest{Name: "db-url"}))
+	if err == nil || connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("second delete: %v", err)
+	}
+}
+
 func TestSecretRPCDark(t *testing.T) {
 	client, _, _, _ := startHumanAPI(t)
 	ctx := context.Background()
@@ -112,6 +162,10 @@ func TestSecretRPCDark(t *testing.T) {
 	_, err = client.ListMachines(ctx, connect.NewRequest(&pb.ListMachinesRequest{}))
 	if err != nil {
 		t.Fatalf("list machines while dark: %v", err)
+	}
+	_, err = client.DeleteSecret(ctx, connect.NewRequest(&pb.DeleteSecretRequest{Name: "db-url"}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("delete dark: %v", err)
 	}
 }
 

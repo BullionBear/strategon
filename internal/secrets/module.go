@@ -138,6 +138,25 @@ func (m *Module) List(ctx context.Context) ([]View, error) {
 	return out, nil
 }
 
+// Delete removes the named row. Missing is ErrNotFound. Assignments that
+// still reference secret.<name> fail closed on the next southbound resolve.
+func (m *Module) Delete(ctx context.Context, name string) error {
+	if m.Dark() {
+		return ErrDark
+	}
+	if err := ValidateName(name); err != nil {
+		return err
+	}
+	ok, err := m.persist.DeleteSecret(ctx, name)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrNotFound, name)
+	}
+	return nil
+}
+
 // Exists reports whether name is in the store. Used at apply time (metadata
 // only; does not need to unwrap). Dark and missing are errors.
 func (m *Module) Exists(ctx context.Context, name string) error {

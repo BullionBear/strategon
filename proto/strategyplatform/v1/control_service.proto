@@ -211,7 +211,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "CreateArtifactUpload" | "SetSharedFiles" | "ResolveArtifactSource" | "ReapStrategies" | "PutSecret"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "CreateArtifactUpload" | "SetSharedFiles" | "ResolveArtifactSource" | "ReapStrategies" | "PutSecret" | "DeleteSecret"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -342,6 +342,12 @@ message ListSecretsRequest {}
 message ListSecretsResponse {
   repeated SecretView secrets = 1;
 }
+
+message DeleteSecretRequest {
+  string name = 1;
+}
+
+message DeleteSecretResponse {}
 
 // Control-plane binary build metadata (display only; not stored).
 message GetControlPlaneVersionRequest {}
@@ -513,6 +519,9 @@ service ControlPlaneService {
   rpc PutSecret(PutSecretRequest) returns (PutSecretResponse);
   rpc GetSecret(GetSecretRequest) returns (GetSecretResponse);
   rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  // DeleteSecret removes the named row. Assignments that still store
+  // secret.<name> are left as-is; the next southbound resolve fails closed.
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
 
   // Ops display: control-plane build version (header/footer).
   rpc GetControlPlaneVersion(GetControlPlaneVersionRequest) returns (ControlPlaneVersion);

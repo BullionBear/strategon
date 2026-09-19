@@ -117,6 +117,9 @@ const (
 	// ControlPlaneServiceListSecretsProcedure is the fully-qualified name of the ControlPlaneService's
 	// ListSecrets RPC.
 	ControlPlaneServiceListSecretsProcedure = "/strategyplatform.v1.ControlPlaneService/ListSecrets"
+	// ControlPlaneServiceDeleteSecretProcedure is the fully-qualified name of the ControlPlaneService's
+	// DeleteSecret RPC.
+	ControlPlaneServiceDeleteSecretProcedure = "/strategyplatform.v1.ControlPlaneService/DeleteSecret"
 	// ControlPlaneServiceGetControlPlaneVersionProcedure is the fully-qualified name of the
 	// ControlPlaneService's GetControlPlaneVersion RPC.
 	ControlPlaneServiceGetControlPlaneVersionProcedure = "/strategyplatform.v1.ControlPlaneService/GetControlPlaneVersion"
@@ -168,6 +171,7 @@ var (
 	controlPlaneServicePutSecretMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("PutSecret")
 	controlPlaneServiceGetSecretMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("GetSecret")
 	controlPlaneServiceListSecretsMethodDescriptor            = controlPlaneServiceServiceDescriptor.Methods().ByName("ListSecrets")
+	controlPlaneServiceDeleteSecretMethodDescriptor           = controlPlaneServiceServiceDescriptor.Methods().ByName("DeleteSecret")
 	controlPlaneServiceGetControlPlaneVersionMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("GetControlPlaneVersion")
 	controlPlaneServiceGetMachineMetricsMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachineMetrics")
 	controlPlaneServiceBrowseDirMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("BrowseDir")
@@ -208,6 +212,9 @@ type ControlPlaneServiceClient interface {
 	PutSecret(context.Context, *connect.Request[v1.PutSecretRequest]) (*connect.Response[v1.PutSecretResponse], error)
 	GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error)
 	ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error)
+	// DeleteSecret removes the named row. Assignments that still store
+	// secret.<name> are left as-is; the next southbound resolve fails closed.
+	DeleteSecret(context.Context, *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
@@ -401,6 +408,12 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceListSecretsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		deleteSecret: connect.NewClient[v1.DeleteSecretRequest, v1.DeleteSecretResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceDeleteSecretProcedure,
+			connect.WithSchema(controlPlaneServiceDeleteSecretMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		getControlPlaneVersion: connect.NewClient[v1.GetControlPlaneVersionRequest, v1.ControlPlaneVersion](
 			httpClient,
 			baseURL+ControlPlaneServiceGetControlPlaneVersionProcedure,
@@ -470,6 +483,7 @@ type controlPlaneServiceClient struct {
 	putSecret              *connect.Client[v1.PutSecretRequest, v1.PutSecretResponse]
 	getSecret              *connect.Client[v1.GetSecretRequest, v1.GetSecretResponse]
 	listSecrets            *connect.Client[v1.ListSecretsRequest, v1.ListSecretsResponse]
+	deleteSecret           *connect.Client[v1.DeleteSecretRequest, v1.DeleteSecretResponse]
 	getControlPlaneVersion *connect.Client[v1.GetControlPlaneVersionRequest, v1.ControlPlaneVersion]
 	getMachineMetrics      *connect.Client[v1.GetMachineMetricsRequest, v1.GetMachineMetricsResponse]
 	browseDir              *connect.Client[v1.BrowseDirRequest, v1.BrowseDirResponse]
@@ -618,6 +632,11 @@ func (c *controlPlaneServiceClient) ListSecrets(ctx context.Context, req *connec
 	return c.listSecrets.CallUnary(ctx, req)
 }
 
+// DeleteSecret calls strategyplatform.v1.ControlPlaneService.DeleteSecret.
+func (c *controlPlaneServiceClient) DeleteSecret(ctx context.Context, req *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error) {
+	return c.deleteSecret.CallUnary(ctx, req)
+}
+
 // GetControlPlaneVersion calls strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion.
 func (c *controlPlaneServiceClient) GetControlPlaneVersion(ctx context.Context, req *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error) {
 	return c.getControlPlaneVersion.CallUnary(ctx, req)
@@ -681,6 +700,9 @@ type ControlPlaneServiceHandler interface {
 	PutSecret(context.Context, *connect.Request[v1.PutSecretRequest]) (*connect.Response[v1.PutSecretResponse], error)
 	GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error)
 	ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error)
+	// DeleteSecret removes the named row. Assignments that still store
+	// secret.<name> are left as-is; the next southbound resolve fails closed.
+	DeleteSecret(context.Context, *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
@@ -870,6 +892,12 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceListSecretsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServiceDeleteSecretHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceDeleteSecretProcedure,
+		svc.DeleteSecret,
+		connect.WithSchema(controlPlaneServiceDeleteSecretMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	controlPlaneServiceGetControlPlaneVersionHandler := connect.NewUnaryHandler(
 		ControlPlaneServiceGetControlPlaneVersionProcedure,
 		svc.GetControlPlaneVersion,
@@ -964,6 +992,8 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceGetSecretHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceListSecretsProcedure:
 			controlPlaneServiceListSecretsHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceDeleteSecretProcedure:
+			controlPlaneServiceDeleteSecretHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceGetControlPlaneVersionProcedure:
 			controlPlaneServiceGetControlPlaneVersionHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceGetMachineMetricsProcedure:
@@ -1095,6 +1125,10 @@ func (UnimplementedControlPlaneServiceHandler) GetSecret(context.Context, *conne
 
 func (UnimplementedControlPlaneServiceHandler) ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListSecrets is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) DeleteSecret(context.Context, *connect.Request[v1.DeleteSecretRequest]) (*connect.Response[v1.DeleteSecretResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.DeleteSecret is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error) {

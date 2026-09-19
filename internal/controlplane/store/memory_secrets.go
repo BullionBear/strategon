@@ -52,3 +52,14 @@ func (m *Memory) ListSecrets(ctx context.Context) ([]secrets.Row, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
 }
+
+func (m *Memory) DeleteSecret(ctx context.Context, name string) (bool, error) {
+	_ = ctx
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.secrets[name]; !ok {
+		return false, nil
+	}
+	delete(m.secrets, name)
+	return true, nil
+}
