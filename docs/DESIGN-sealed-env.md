@@ -1,16 +1,20 @@
-# Sealed env envelopes
+# Secret management
 
 Status: design — not implemented
 Depends on: [Architecture](ARCHITECTURE.md)
 Addresses: [issue #48](https://github.com/BullionBear/strategon/issues/48)
 
-Assignment `env` (and `member.vars`) stay `map<string, string>`. Credentials
-are stored as a **sealed envelope in the value**. The control plane holds the
-unwrap key, human read APIs never return plaintext, and the only decrypt sink
-is the southbound `DesiredState` clone pushed to the assigned agent.
+v1 lands an independent **SecretManagement** module on the deploy path.
+Credentials live in a named Secret store. Assignment `env` and `member.vars`
+stay `map<string, string>`. The public token on both sides is
+`secret.<name>` (for example `secret.db-url`). Ciphertext never leaves the
+store. Human read APIs never return plaintext. The only decrypt sink is the
+southbound `DesiredState` clone, resolved live by name, then pushed to the
+assigned agent.
 
-This is not a Secret object, not `valueFrom`, and not an authorization model.
-Auth stays flat: a session or API token is still a full operator.
+This is not `valueFrom`, not an envelope pasted into the manifest, and not
+an authorization model. Auth stays flat: a session or API token is still a
+full operator.
 
 ---
 
@@ -23,15 +27,21 @@ backup or a pasted list response is the production password.
 
 Three things this design changes:
 
-1. Values that have been sealed are ciphertext at rest and on every human RPC.
+1. Named secrets are ciphertext at rest. Every human RPC that touches an
+   assignment or a Secret returns `secret.<name>` (plus metadata), never
+   plaintext, never ciphertext.
 2. There is no decrypt / unwrap RPC.
 3. The agent still receives ordinary plaintext env, because that is what
    `execve` requires. The agent is the last mile, not a new trust root.
 
 It does not change who may apply, and it does not make unsealed values
 illegal. Putting a password in env as ordinary text still works and is still
-insecure. Credentials must use an envelope; that is an operator rule, not an
-admission default in v1.
+insecure. Credentials must go through SecretManagement; that is an operator
+rule, not an admission default in v1.
+
+A later change may reshape the store. The v1 contract is already a
+SecretManagement participant in deploy, not a string-encoding hack waiting
+to be replaced.
 
 ---
 
@@ -39,60 +49,65 @@ admission default in v1.
 
 | Place | After this design |
 |-------|-------------------|
-| `assignment_sets.spec` / `assignments.spec` | Envelope only |
-| `GetAssignmentSet`, `ListAssignmentSets`, apply responses, CLI `get` | Envelope only |
+| Secret store | Ciphertext + metadata only |
+| `assignment_sets.spec` / `assignments.spec` | `secret.<name>` or ordinary text |
+| `GetAssignmentSet`, `ListAssignmentSets`, apply responses, CLI `get` | `secret.<name>` or ordinary text |
+| `GetSecret` / `ListSecrets` | name, length, key id — never plaintext, never ciphertext |
 | `GetMachine` / `WatchMachine` | Unchanged — `StrategyView` has no env |
-| Audit `Detail` | Names, lengths, key id — never plaintext, never the envelope |
+| Audit `Detail` | Names, lengths, key id — never plaintext, never ciphertext |
 | Control plane process | Holds `K`; sees plaintext only while building the southbound clone |
 | Agent + payload | Plaintext env (required for injection) |
 | Host `/opt/strategon/deploy/.env` | `K`, same class as `SESSION_SECRET` / S3 keys |
 
-A token that can only call read APIs sees ciphertext. A token that can also
-`Apply*` can hang the same envelope on a machine the caller already controls;
-the control plane will unwrap onto that agent. That is the intended decrypt
-sink, not a read-API leak. Splitting "may list" from "may apply" is a
-separate auth ticket.
+A token that can only call read APIs sees `secret.db-url`. A token that can
+also `Apply*` can hang that same name on a machine the caller already
+controls; SecretManagement will resolve onto that agent. That is the
+intended decrypt sink, not a read-API leak. Splitting "may list" from
+"may apply" is a separate auth ticket.
 
 ---
 
-## Envelope
+## Public contract
 
-The process name stays the real env key. The value is the envelope:
+The process name stays the real env key. The value is either ordinary text
+or a Secret reference:
 
 ```text
-DATABASE_URL=strsec1.<keyid>.<nonce>.<ct>
+DATABASE_URL=secret.db-url
 ```
 
-`strsec1` is the version tag. `<keyid>`, `<nonce>`, and `<ct>` are
-unpadded base64url. That alphabet has no `$` or `{`, so control-plane
-placeholder expansion cannot corrupt an envelope.
+`secret.` is the reserved prefix. `db-url` is the Secret name. The same
+string is what `PutSecret` returns, what List/Get Secret echo, and what
+operators write in manifests and `member.vars`. There is one public token
+on both sides. `$name` in discussion is a documentation placeholder, not
+wire syntax — the wire form is `secret.db-url`, not `secret.$db-url`.
 
 Do not encode secrecy in the key name (`STR_SECRET.DATABASE_URL=...`).
 That forces a rename before `exec`, collides with template expansion, and
 splits `DATABASE_URL` / `STR_SECRET.DATABASE_URL`.
 
-Algorithm: AES-256-GCM (or equivalent AEAD). Fresh random nonce per
-`Encrypt`. The envelope carries a key id so two wrap keys can be live
-during rotation.
+Do not introduce `valueFrom`. Expand, `SetDeployment`, Apply, and existing
+nats manifests already walk string values. `${member.vars.DB}` expands to
+the same `secret.<name>` token; live resolve happens later on the
+`DesiredState` clone.
 
-AAD is protocol context only (`env` / `v1`), **not** set name, machine, or
-key name. Ciphertext is **portable**: encrypt once, hand the string to
-whoever applies, paste it on any key or set. The unwrap key accepts it
-anywhere. Binding to a resource would break that hand-off and is out of
-scope.
+A value that starts with `secret.` is a reference. Apply looks the name up
+in SecretManagement. Unknown name, empty name, or a structurally broken
+token is rejected. It does not need `K` when the module is up (existence
+is metadata). To store the literal string `secret.db-url` as an env value,
+put that literal in a Secret and reference it.
 
-Re-encrypting the same plaintext yields a new nonce and a different string.
-`SetAssignment` compares specs with `proto.Equal`, so a re-seal looks like
-an env change and rolls. Do not re-run `Encrypt` unless the secret itself
-changed. Do not decrypt in order to compare — that pulls plaintext onto the
-store hot path.
+`strsec1` is not part of this contract. Ciphertext is store-internal.
 
 ---
 
-## Wrap key
+## Secret store and wrap key
 
-The control plane owns a symmetric wrap key `K`. Encrypt is an RPC, so `K`
-never leaves the process.
+SecretManagement owns the named rows and the symmetric wrap key `K`.
+`PutSecret` is an RPC, so `K` never leaves the process. The stored blob is
+AEAD ciphertext with a key id so two wrap keys can be live during rotation.
+That layout is not a public string and must not appear in env, vars, list
+responses, or git.
 
 Treat `K` like the other control-plane secrets: host-owned `.env`, injected
 as an environment variable (not a flag, so it stays out of argv / `docker
@@ -103,38 +118,93 @@ secrets; Actions only bumps `STRATEGON_VERSION`. Do not invent a
 Local / `auth-mode=none` / tests use an explicit dev key. Do not bake a
 production-looking default into the binary.
 
+Missing `K` does not prevent the control plane from starting. SecretManagement
+goes dark: every Secret RPC fails, and resolve is unavailable. The rest of
+the plane (machines, artifacts, plaintext assignments) keeps serving.
+
 Operations:
 
 - Every replica must share `K` (or the same key-id set).
-- Rotation keeps the previous key id decrypt-only until every envelope is
+- Rotation keeps the previous key id decrypt-only until every Secret row is
   re-sealed.
-- Losing `K` means no southbound publish of any sealed assignment. Back up
-  `K` at the same sensitivity as the concatenation of every sealed secret.
-- If `K` leaks, rotate `K`, re-seal every envelope, **and** rotate the
-  underlying credentials. Historical envelopes in git, Postgres, and old
-  list responses become plaintext once the attacker has `K`.
+- Losing `K` means SecretManagement stays dark until `K` is restored. Back
+  up `K` at the same sensitivity as the concatenation of every stored
+  secret.
+- If `K` leaks, rotate `K`, re-seal every Secret row, **and** rotate the
+  underlying credentials. A database dump of the Secret store becomes
+  plaintext once the attacker has `K`. Assignment rows and list responses
+  only ever held `secret.<name>`, so they are not a historical ciphertext
+  leak.
+
+Do not decrypt in order to compare Secret rows. Re-`PutSecret` of the same
+plaintext yields a new nonce; that is a store write, not an assignment
+spec change. `SetAssignment` still uses `proto.Equal` on the spec, which
+still contains `secret.<name>`.
 
 ---
 
 ## Human API
 
-`Encrypt` (name TBD on `ControlPlaneService`): plaintext in, envelope out.
-Stateless. Size-capped. Audited as "encrypted N bytes, key id …" with
-neither the input nor the output stored in `Detail`.
+`PutSecret` on `ControlPlaneService`: name + plaintext in, `secret.<name>`
+out. Upsert. Size-capped. Audited as "put secret <name>, N bytes, key id …"
+with neither the input nor any ciphertext stored in `Detail`.
 
-There is no `Decrypt`. Any RPC that takes an envelope and returns plaintext
+`GetSecret` / `ListSecrets`: name, length, key id. Never plaintext. Never
+ciphertext.
+
+There is no `Decrypt`. Any RPC that takes a Secret and returns plaintext
 collapses the model.
 
-Get / list / apply return the stored maps unchanged. If the store has an
-envelope, the client sees that envelope.
+Get / list / apply of assignment sets return the stored maps unchanged. If
+the store has `secret.db-url`, the client sees `secret.db-url`.
 
 `Deploy` (version-only) already clones env. Leave those values untouched.
 
 ---
 
+## UI
+
+The embedded SPA is a human surface. It obeys the same invariants as
+`GetSecret` / `ListSecrets`: name, length, key id — never plaintext, never
+ciphertext. `StrategyView` still has no env; machine and strategy pages do
+not grow an env panel in order to "see" secrets.
+
+**`/secrets` page** (sidebar: Deploy group, next to Artifacts — same class
+of catalog as `/artifacts`, not Observe-next-to-tokens):
+
+- List: name, public token `secret.<name>`, byte length, wrap key id.
+  Empty state points at Put. No plaintext column, no "reveal", no download.
+- Put form: name + value. Value is a password field. Submit calls
+  `PutSecret`, then **clears the value field**. Show `secret.<name>` with a
+  copy control. The name is listable afterwards; the plaintext is not.
+- Overwrite is the same form (Put is upsert). Confirm that a running
+  process keeps the old env until the next start.
+- No delete button in v1. There is no `DeleteSecret` RPC; assignments would
+  keep `secret.<name>` and the next resolve would fail closed.
+- SecretManagement dark (missing `K`, every Secret RPC failing): the page
+  stays reachable and shows that the module is down. Do not pretend the
+  list is empty.
+
+**Deploy (`/deploy`) env box:** still `KEY=value` lines. A value of
+`secret.db-url` is valid. Offer a picker fed by `ListSecrets` (same pattern
+as the artifact version select) and a link to `/secrets`. Do not fetch
+plaintext to "help fill in".
+
+**Sets / assignment reads:** if a screen ever prints env or vars, it prints
+the stored token. Do not replace `secret.<name>` with bullets, a placeholder,
+or a fetch-on-click unwrap.
+
+**Audit:** `PutSecret` already lands in `ListAudit`. The audit page needs
+no new viewer; `Detail` already forbids plaintext and ciphertext.
+
+The browser must not persist the Put value (no `localStorage`, no replay
+into the form). The SPA does not grow a Decrypt client.
+
+---
+
 ## Write path and southbound
 
-Two persisted copies of env must stay sealed:
+Two persisted copies of env hold the public token, not ciphertext:
 
 1. `assignment_sets.spec` — template `env` and `member.vars`.
 2. `assignments.spec` — per-member spec after `assignmentset.Expand`.
@@ -143,72 +213,88 @@ Order:
 
 ```
 apply
-  → expand placeholders (envelope is inert)
-  → persist envelope on both rows
+  → expand placeholders (secret.<name> is inert)
+  → reject unknown / broken secret. refs
+  → persist secret.<name> on both rows
   → Notify
   → buildDesiredState clones rec.Assignments
-  → decrypt envelopes on the clone only
+  → live-resolve secret.<name> on the clone only
   → send DesiredState
 ```
 
-Decrypt never writes back. `computeAssignment` / `ApplyAssignment` must not
+Resolve never writes back. `computeAssignment` / `ApplyAssignment` must not
 unwrap before `SetAssignment`.
 
-`Expand` runs first so `${member.vars.*}` can resolve to an envelope; the
-southbound clone then unwraps. Never decrypt and then expand — a password
-containing `${` would be scanned again.
+`Expand` runs first so `${member.vars.*}` can resolve to `secret.<name>`;
+the southbound clone then unwraps. Never resolve and then expand — a
+password containing `${` would be scanned again.
 
-Apply may reject a value that claims to be `strsec1` but is structurally
-broken (wrong part count, bad base64, unknown version). It does not need
-`K` and must not verify the MAC. MAC verification happens when building
-the southbound clone.
+`PutSecret` that changes plaintext does not rewrite assignment specs.
+SecretManagement `Notify`s every machine that references the name.
+`DesiredState.generation` may stay put; the agent already overwrites its
+desired copy on every snapshot. Env is applied at process start only:
+`versionMatches` compares artifact/config digest, so a running HEALTHY
+process is not restarted. v1 is **next-start**, the same as shared files.
+Rotating a password that must evict a running process is a later ticket
+(it requires dropping "agent unchanged").
 
-**Decrypt failure does not publish.** Missing `K`, unknown key id, or bad
-MAC: do not send `DesiredState` for that snapshot (or withhold that
-assignment and do not start it). Never forward the envelope string as the
-env value. The payload would treat ciphertext as `DATABASE_URL`.
+**Resolve failure does not publish a mixed snapshot.**
 
-The agent does not learn the envelope format. It keeps receiving ordinary
+- SecretManagement dark (missing `K`) or any ref on that machine failing
+  (deleted name, unknown key id, bad MAC): do not push a new `DesiredState`
+  for that machine. The agent keeps the last snapshot it already has. Old
+  env keeps running.
+- `ApplyAssignment` that names a Secret it cannot use: that RPC fails.
+- `ApplyAssignmentSet` that names a Secret it cannot use: the whole apply
+  is rejected.
+
+Never omit an assignment from `DesiredState` to "hold" it. The list is
+full-snapshot; the agent `retire`s names that disappeared, which kills the
+process. Never forward `secret.db-url` as the env value. The payload would
+treat the token as `DATABASE_URL`.
+
+The agent does not learn SecretManagement. It keeps receiving ordinary
 `spec.Env`. No agent capability bump, no unwrap key on the machine.
 
-`stopped` assignments still travel in `DesiredState` with their env. The
-agent holds those secrets even when the process is down. v1 does not strip
-env on stop.
+`stopped` assignments still travel in `DesiredState` with their resolved
+env. The agent holds those secrets even when the process is down. v1 does
+not strip env on stop.
 
 ---
 
 ## Scope
 
-| Surface | Sealed? |
-|---------|---------|
+| Surface | Secret refs? |
+|---------|----------------|
 | `StrategyAssignmentSpec.env` | yes |
-| `SetMember.vars` (same envelope grammar) | yes |
-| `args` | no — not a sealed channel |
+| `SetMember.vars` (same `secret.<name>` grammar) | yes |
+| `args` | no — not a Secret channel |
 | Config artifacts, shared files, volumes | no |
 | OCI image `Config.Env` | no |
 | File browse / `DownloadFiles` | no — can still read on-disk config and `.stdio` |
 | `capture_stdio` payload logs | no — the process can print its own env |
+| SPA `/secrets`, Deploy env picker | yes — list/put/copy `secret.<name>` only |
+| `GetMachine` / `WatchMachine` / strategy page | no — `StrategyView` has no env |
 
 `supervision.json` already omits env. OCI `--oci-init` already keeps env
 off argv. Those stay as they are.
 
 If a credential must not appear in a list response, it goes in env or vars
-as an envelope. It does not go in a config blob, a flag, or an image.
+as `secret.<name>`. It does not go in a config blob, a flag, or an image.
 
 ---
 
 ## Operator flow
 
-1. The person who holds the plaintext calls `Encrypt` and receives an
-   envelope.
-2. They send that string to the publisher over a channel they trust. The
-   publisher cannot see the secret and cannot cryptographically prove the
-   blob is the intended value; that is a process problem, not an API
-   problem.
-3. The publisher writes `DATABASE_URL: strsec1....` in the manifest and
+1. The person who holds the plaintext calls `PutSecret("db-url", …)`
+   (CLI/RPC or `/secrets`) and receives `secret.db-url`.
+2. They give that name to the publisher. The publisher cannot see the
+   secret and cannot cryptographically prove the stored value is the
+   intended one; that is a process problem, not an API problem.
+3. The publisher writes `DATABASE_URL: secret.db-url` in the manifest and
    applies.
-4. Readers see the same string. The assigned agent receives plaintext and
-   starts the process.
+4. Readers see `secret.db-url`. The assigned agent receives plaintext on
+   the next process start.
 
 Unsealed values remain valid so existing manifests do not break. v1 does
 not require particular keys to be sealed.
@@ -217,26 +303,32 @@ not require particular keys to be sealed.
 
 ## What this is not
 
-- Not RBAC. Sealing hides plaintext from storage and read APIs; it does not
-  create a viewer role.
+- Not RBAC. SecretManagement hides plaintext from storage and read APIs;
+  it does not create a viewer role.
 - Not agent-blind injection. Something on the machine must `exec` with the
   env; here that is the agent.
 - Not a substitute for rotating the database password after `K` leaks.
-- Not offline GitOps sealing. Symmetric `Encrypt` needs a live control
-  plane. The envelope layout (version + key id) is left extensible so a
-  later public-key seal can produce the same `strsec1.…` shape.
+- Not offline GitOps sealing. Symmetric `PutSecret` needs a live control
+  plane with `K`.
 - Not encryption of config artifacts or file-browse results.
+- Not an admission webhook that guesses which keys are credentials.
+- Not a browser vault. The SPA never unwraps and never remembers the
+  Put value.
 
 ---
 
 ## Invariants
 
-1. No human RPC returns decrypted env or vars.
+1. No human RPC returns decrypted env, vars, or Secret payload.
 2. No decrypt RPC exists.
-3. Both assignment tables store envelopes; only the `DesiredState` clone is
-   unwrapped.
-4. A decrypt failure never delivers the envelope to the agent as a value.
-5. `K` is host-owned, env-injected, keyed by id, and dual-live during
+3. Ciphertext never leaves the Secret store. Assignment tables store
+   `secret.<name>`; only the `DesiredState` clone is resolved.
+4. A resolve failure never delivers `secret.<name>` to the agent as a
+   value, and never omits an assignment from the snapshot.
+5. Missing `K` leaves the control plane up and SecretManagement dark.
+6. `K` is host-owned, env-injected, keyed by id, and dual-live during
    rotation.
-6. Ciphertext is portable (no resource AAD).
-7. The agent binary is unchanged.
+7. The public token is `secret.<name>` on every human surface, including
+   the SPA.
+8. The agent binary is unchanged. Secret updates are next-start.
+9. The UI never displays, stores, or requests decrypted Secret payload.
