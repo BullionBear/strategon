@@ -33,6 +33,7 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/orchestrator"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/mtls"
+	"github.com/bullionbear/strategon/internal/secrets"
 	"github.com/bullionbear/strategon/internal/webassets"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -132,11 +133,32 @@ func run(logger *slog.Logger) error {
 	}
 	go authSvc.RunTokenFlusher(ctx, auth.DefaultTokenFlushInterval)
 
+	sealCfg, err := secrets.ConfigFromEnv()
+	if err != nil {
+		return fmt.Errorf("seal key: %w", err)
+	}
+	var persist secrets.Persistence
+	if pg != nil {
+		persist = pg
+	} else if mem, ok := st.(*store.Memory); ok {
+		persist = mem
+	}
+	secretMod, err := secrets.New(sealCfg, persist)
+	if err != nil {
+		return fmt.Errorf("secret management: %w", err)
+	}
+	if secretMod.Dark() {
+		logger.Warn("secret management dark; set STRATEGON_SEAL_KEY to enable PutSecret")
+	} else {
+		logger.Info("secret management enabled", "key_id", sealCfg.KeyID)
+	}
+
 	broker := filetransfer.New()
 	agentOpts := []grpcstream.Option{
 		grpcstream.WithResync(*resync),
 		grpcstream.WithLogger(logger),
 		grpcstream.WithBroker(broker),
+		grpcstream.WithSecrets(secretMod),
 	}
 	s3AK := firstNonEmpty(*s3AccessKey, os.Getenv("STRATEGON_S3_ACCESS_KEY"))
 	s3SK := firstNonEmpty(*s3SecretKey, os.Getenv("STRATEGON_S3_SECRET_KEY"))
@@ -158,7 +180,7 @@ func run(logger *slog.Logger) error {
 	}
 	agentSrv := grpcstream.New(st, agentOpts...)
 	leaseSrv := cpLease.New(st, logger)
-	humanSrv := api.NewWithBroker(st, hub, agentSrv, broker, logger)
+	humanSrv := api.NewWithBroker(st, hub, agentSrv, broker, logger).WithSecrets(secretMod)
 	orchAssign := assign.New(st, agentSrv)
 	go orchestrator.New(st, orchAssign, hub, logger).Run(ctx)
 

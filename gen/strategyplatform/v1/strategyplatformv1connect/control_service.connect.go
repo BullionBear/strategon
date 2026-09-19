@@ -108,6 +108,15 @@ const (
 	// ControlPlaneServiceListArtifactsProcedure is the fully-qualified name of the
 	// ControlPlaneService's ListArtifacts RPC.
 	ControlPlaneServiceListArtifactsProcedure = "/strategyplatform.v1.ControlPlaneService/ListArtifacts"
+	// ControlPlaneServicePutSecretProcedure is the fully-qualified name of the ControlPlaneService's
+	// PutSecret RPC.
+	ControlPlaneServicePutSecretProcedure = "/strategyplatform.v1.ControlPlaneService/PutSecret"
+	// ControlPlaneServiceGetSecretProcedure is the fully-qualified name of the ControlPlaneService's
+	// GetSecret RPC.
+	ControlPlaneServiceGetSecretProcedure = "/strategyplatform.v1.ControlPlaneService/GetSecret"
+	// ControlPlaneServiceListSecretsProcedure is the fully-qualified name of the ControlPlaneService's
+	// ListSecrets RPC.
+	ControlPlaneServiceListSecretsProcedure = "/strategyplatform.v1.ControlPlaneService/ListSecrets"
 	// ControlPlaneServiceGetControlPlaneVersionProcedure is the fully-qualified name of the
 	// ControlPlaneService's GetControlPlaneVersion RPC.
 	ControlPlaneServiceGetControlPlaneVersionProcedure = "/strategyplatform.v1.ControlPlaneService/GetControlPlaneVersion"
@@ -156,6 +165,9 @@ var (
 	controlPlaneServiceRegisterArtifactMethodDescriptor       = controlPlaneServiceServiceDescriptor.Methods().ByName("RegisterArtifact")
 	controlPlaneServiceCreateArtifactUploadMethodDescriptor   = controlPlaneServiceServiceDescriptor.Methods().ByName("CreateArtifactUpload")
 	controlPlaneServiceListArtifactsMethodDescriptor          = controlPlaneServiceServiceDescriptor.Methods().ByName("ListArtifacts")
+	controlPlaneServicePutSecretMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("PutSecret")
+	controlPlaneServiceGetSecretMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("GetSecret")
+	controlPlaneServiceListSecretsMethodDescriptor            = controlPlaneServiceServiceDescriptor.Methods().ByName("ListSecrets")
 	controlPlaneServiceGetControlPlaneVersionMethodDescriptor = controlPlaneServiceServiceDescriptor.Methods().ByName("GetControlPlaneVersion")
 	controlPlaneServiceGetMachineMetricsMethodDescriptor      = controlPlaneServiceServiceDescriptor.Methods().ByName("GetMachineMetrics")
 	controlPlaneServiceBrowseDirMethodDescriptor              = controlPlaneServiceServiceDescriptor.Methods().ByName("BrowseDir")
@@ -193,6 +205,9 @@ type ControlPlaneServiceClient interface {
 	RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error)
 	CreateArtifactUpload(context.Context, *connect.Request[v1.CreateArtifactUploadRequest]) (*connect.Response[v1.CreateArtifactUploadResponse], error)
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
+	PutSecret(context.Context, *connect.Request[v1.PutSecretRequest]) (*connect.Response[v1.PutSecretResponse], error)
+	GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error)
+	ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
@@ -368,6 +383,24 @@ func NewControlPlaneServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(controlPlaneServiceListArtifactsMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		putSecret: connect.NewClient[v1.PutSecretRequest, v1.PutSecretResponse](
+			httpClient,
+			baseURL+ControlPlaneServicePutSecretProcedure,
+			connect.WithSchema(controlPlaneServicePutSecretMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		getSecret: connect.NewClient[v1.GetSecretRequest, v1.GetSecretResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceGetSecretProcedure,
+			connect.WithSchema(controlPlaneServiceGetSecretMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		listSecrets: connect.NewClient[v1.ListSecretsRequest, v1.ListSecretsResponse](
+			httpClient,
+			baseURL+ControlPlaneServiceListSecretsProcedure,
+			connect.WithSchema(controlPlaneServiceListSecretsMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 		getControlPlaneVersion: connect.NewClient[v1.GetControlPlaneVersionRequest, v1.ControlPlaneVersion](
 			httpClient,
 			baseURL+ControlPlaneServiceGetControlPlaneVersionProcedure,
@@ -434,6 +467,9 @@ type controlPlaneServiceClient struct {
 	registerArtifact       *connect.Client[v1.RegisterArtifactRequest, v1.RegisterArtifactResponse]
 	createArtifactUpload   *connect.Client[v1.CreateArtifactUploadRequest, v1.CreateArtifactUploadResponse]
 	listArtifacts          *connect.Client[v1.ListArtifactsRequest, v1.ListArtifactsResponse]
+	putSecret              *connect.Client[v1.PutSecretRequest, v1.PutSecretResponse]
+	getSecret              *connect.Client[v1.GetSecretRequest, v1.GetSecretResponse]
+	listSecrets            *connect.Client[v1.ListSecretsRequest, v1.ListSecretsResponse]
 	getControlPlaneVersion *connect.Client[v1.GetControlPlaneVersionRequest, v1.ControlPlaneVersion]
 	getMachineMetrics      *connect.Client[v1.GetMachineMetricsRequest, v1.GetMachineMetricsResponse]
 	browseDir              *connect.Client[v1.BrowseDirRequest, v1.BrowseDirResponse]
@@ -567,6 +603,21 @@ func (c *controlPlaneServiceClient) ListArtifacts(ctx context.Context, req *conn
 	return c.listArtifacts.CallUnary(ctx, req)
 }
 
+// PutSecret calls strategyplatform.v1.ControlPlaneService.PutSecret.
+func (c *controlPlaneServiceClient) PutSecret(ctx context.Context, req *connect.Request[v1.PutSecretRequest]) (*connect.Response[v1.PutSecretResponse], error) {
+	return c.putSecret.CallUnary(ctx, req)
+}
+
+// GetSecret calls strategyplatform.v1.ControlPlaneService.GetSecret.
+func (c *controlPlaneServiceClient) GetSecret(ctx context.Context, req *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error) {
+	return c.getSecret.CallUnary(ctx, req)
+}
+
+// ListSecrets calls strategyplatform.v1.ControlPlaneService.ListSecrets.
+func (c *controlPlaneServiceClient) ListSecrets(ctx context.Context, req *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error) {
+	return c.listSecrets.CallUnary(ctx, req)
+}
+
 // GetControlPlaneVersion calls strategyplatform.v1.ControlPlaneService.GetControlPlaneVersion.
 func (c *controlPlaneServiceClient) GetControlPlaneVersion(ctx context.Context, req *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error) {
 	return c.getControlPlaneVersion.CallUnary(ctx, req)
@@ -627,6 +678,9 @@ type ControlPlaneServiceHandler interface {
 	RegisterArtifact(context.Context, *connect.Request[v1.RegisterArtifactRequest]) (*connect.Response[v1.RegisterArtifactResponse], error)
 	CreateArtifactUpload(context.Context, *connect.Request[v1.CreateArtifactUploadRequest]) (*connect.Response[v1.CreateArtifactUploadResponse], error)
 	ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error)
+	PutSecret(context.Context, *connect.Request[v1.PutSecretRequest]) (*connect.Response[v1.PutSecretResponse], error)
+	GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error)
+	ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error)
 	// Ops display: control-plane build version (header/footer).
 	GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error)
 	// Short-term resource trend from the PG sliding window (not a TSDB).
@@ -798,6 +852,24 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 		connect.WithSchema(controlPlaneServiceListArtifactsMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	controlPlaneServicePutSecretHandler := connect.NewUnaryHandler(
+		ControlPlaneServicePutSecretProcedure,
+		svc.PutSecret,
+		connect.WithSchema(controlPlaneServicePutSecretMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceGetSecretHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceGetSecretProcedure,
+		svc.GetSecret,
+		connect.WithSchema(controlPlaneServiceGetSecretMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	controlPlaneServiceListSecretsHandler := connect.NewUnaryHandler(
+		ControlPlaneServiceListSecretsProcedure,
+		svc.ListSecrets,
+		connect.WithSchema(controlPlaneServiceListSecretsMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	controlPlaneServiceGetControlPlaneVersionHandler := connect.NewUnaryHandler(
 		ControlPlaneServiceGetControlPlaneVersionProcedure,
 		svc.GetControlPlaneVersion,
@@ -886,6 +958,12 @@ func NewControlPlaneServiceHandler(svc ControlPlaneServiceHandler, opts ...conne
 			controlPlaneServiceCreateArtifactUploadHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceListArtifactsProcedure:
 			controlPlaneServiceListArtifactsHandler.ServeHTTP(w, r)
+		case ControlPlaneServicePutSecretProcedure:
+			controlPlaneServicePutSecretHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceGetSecretProcedure:
+			controlPlaneServiceGetSecretHandler.ServeHTTP(w, r)
+		case ControlPlaneServiceListSecretsProcedure:
+			controlPlaneServiceListSecretsHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceGetControlPlaneVersionProcedure:
 			controlPlaneServiceGetControlPlaneVersionHandler.ServeHTTP(w, r)
 		case ControlPlaneServiceGetMachineMetricsProcedure:
@@ -1005,6 +1083,18 @@ func (UnimplementedControlPlaneServiceHandler) CreateArtifactUpload(context.Cont
 
 func (UnimplementedControlPlaneServiceHandler) ListArtifacts(context.Context, *connect.Request[v1.ListArtifactsRequest]) (*connect.Response[v1.ListArtifactsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListArtifacts is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) PutSecret(context.Context, *connect.Request[v1.PutSecretRequest]) (*connect.Response[v1.PutSecretResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.PutSecret is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) GetSecret(context.Context, *connect.Request[v1.GetSecretRequest]) (*connect.Response[v1.GetSecretResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.GetSecret is not implemented"))
+}
+
+func (UnimplementedControlPlaneServiceHandler) ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("strategyplatform.v1.ControlPlaneService.ListSecrets is not implemented"))
 }
 
 func (UnimplementedControlPlaneServiceHandler) GetControlPlaneVersion(context.Context, *connect.Request[v1.GetControlPlaneVersionRequest]) (*connect.Response[v1.ControlPlaneVersion], error) {

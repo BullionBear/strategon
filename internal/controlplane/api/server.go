@@ -24,6 +24,7 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/ingest"
 	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"github.com/bullionbear/strategon/internal/secrets"
 	"github.com/bullionbear/strategon/internal/sharedfile"
 	"github.com/bullionbear/strategon/internal/volume"
 	"google.golang.org/protobuf/proto"
@@ -66,6 +67,7 @@ type Server struct {
 	broker  *filetransfer.Broker
 	ingest  *ingest.Service
 	objects objectstore.Store
+	secrets *secrets.Module
 	logger  *slog.Logger
 }
 
@@ -271,6 +273,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 			if err := assignmentset.RejectArgsOnlyPlaceholdersInEnv(spec.Env); err != nil {
 				return nil, nil, "", connect.NewError(connect.CodeInvalidArgument, err)
 			}
+			if err := secrets.ValidateMaps(context.Background(), s.secrets, spec.Env); err != nil {
+				return nil, nil, "", secretError(err)
+			}
 		}
 	}
 
@@ -335,6 +340,9 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 		}
 		if err := assignmentset.RejectArgsOnlyPlaceholdersInEnv(spec.Env); err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		if err := s.rejectSecretRefs(ctx, spec.Env); err != nil {
+			return nil, err
 		}
 	}
 	if err := applyDriverFromArtifact(spec, art, rec); err != nil {

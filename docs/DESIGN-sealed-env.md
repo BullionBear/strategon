@@ -1,6 +1,6 @@
 # Secret management
 
-Status: design — not implemented
+Status: implemented — v1 (Put/Get/List, apply refs, southbound resolve, CLI, `/secrets`)
 Depends on: [Architecture](ARCHITECTURE.md)
 Addresses: [issue #48](https://github.com/BullionBear/strategon/issues/48)
 

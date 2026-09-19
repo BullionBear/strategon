@@ -158,6 +158,16 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 	}); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	var secretMaps []map[string]string
+	if spec.GetTemplate() != nil {
+		secretMaps = append(secretMaps, spec.GetTemplate().GetEnv())
+	}
+	for _, mem := range spec.GetMembers() {
+		secretMaps = append(secretMaps, mem.GetVars())
+	}
+	if err := s.rejectSecretRefs(context.Background(), secretMaps...); err != nil {
+		return nil, err
+	}
 
 	art, err := s.resolveArtifact(spec.Strategy, spec.Strategy, spec.GetArtifactVersion())
 	if err != nil {

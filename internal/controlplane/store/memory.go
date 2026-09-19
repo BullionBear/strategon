@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/artifacturi"
+	"github.com/bullionbear/strategon/internal/secrets"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -26,6 +27,7 @@ type Memory struct {
 	audit       []*pb.AuditEntry
 	leases      map[string]*LeaseInfo // strategy -> lease
 	apiTokens   map[string]*TokenRow  // id -> row
+	secrets     map[string]secrets.Row
 	leaseMargin time.Duration
 	now         func() time.Time // injectable for tests
 	hub         *Hub
@@ -44,6 +46,7 @@ func NewMemory(hub *Hub) *Memory {
 		artifacts:    map[string]*ArtifactRecord{},
 		leases:       map[string]*LeaseInfo{},
 		apiTokens:    map[string]*TokenRow{},
+		secrets:      map[string]secrets.Row{},
 		leaseMargin:  DefaultLeaseMarginCP,
 		now:          time.Now,
 		hub:          hub,
