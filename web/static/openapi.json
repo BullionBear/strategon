@@ -2025,7 +2025,7 @@
         },
         "title": "AssignmentSet",
         "additionalProperties": false,
-        "description": "AssignmentSet places one assignment per member and rolls changes across\n them, at most max_unavailable members at a time.\n\n spec.strategy is the catalog / artifact family (e.g. \"nats\"). The\n assignment slot — disk identity, status, reservation after transition — is\n member.name. Members on the same machine are allowed when names differ.\n\n The control plane knows nothing about what the members run. Per-member\n identity and any peer list live in the template as placeholders, so a NATS\n cluster, a sharded feed handler, or anything else that needs \"N processes\n that know about each other\" is a manifest, not new server code.\n\n Apply persists spec only; a controller writes the per-member assignments\n over time."
+        "description": "AssignmentSet places one assignment per member and rolls changes across\n them, at most max_unavailable members at a time.\n\n spec.strategy is the catalog / artifact family (e.g. \"nats\"). The\n assignment slot — disk identity, status, reservation after transition — is\n member.name. Members on the same machine are allowed when names differ.\n\n While status.assignment_key is empty the family name is also reserved on\n each member machine (legacy slot). After it is \"member\", only member.name\n is reserved; several sets may share one family when names differ. Apply of\n a second new set that still claims the family slot fails with the same\n \"strategy is owned by AssignmentSet\" wording used for member collisions —\n the quoted strategy may be the family name, not a member.\n\n The control plane knows nothing about what the members run. Per-member\n identity and any peer list live in the template as placeholders, so a NATS\n cluster, a sharded feed handler, or anything else that needs \"N processes\n that know about each other\" is a manifest, not new server code.\n\n Apply persists spec only; a controller writes the per-member assignments\n over time."
       },
       "strategyplatform.v1.AssignmentSetSpec": {
         "type": "object",
@@ -2033,7 +2033,7 @@
           "strategy": {
             "type": "string",
             "title": "strategy",
-            "description": "Catalog / artifact family (binary name and {strategy}-config fallback).\n After status.assignment_key=\"member\" this is not an assignment slot."
+            "description": "Catalog / artifact family (binary name and {strategy}-config fallback).\n Reserved as a slot on each member machine only while\n status.assignment_key is empty. After \"member\" this is not an assignment\n slot; other sets may reuse the same family when member names differ."
           },
           "artifactVersion": {
             "type": "string",
@@ -2106,7 +2106,7 @@
           "assignmentKey": {
             "type": "string",
             "title": "assignment_key",
-            "description": "empty = still on the legacy family slot (spec.strategy); \"member\" means\n every live assignment is keyed by member.name and the family name is\n no longer reserved or auto-undeployed."
+            "description": "empty = still on the legacy family slot (spec.strategy); \"member\" means\n every live assignment is keyed by member.name and the family name is\n no longer reserved or auto-undeployed. A second new set that shares\n this family on the same machine conflicts until this field flips."
           }
         },
         "title": "AssignmentSetStatus",

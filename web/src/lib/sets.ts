@@ -26,7 +26,9 @@ export function setGenerationLag(c: AssignmentSet): boolean {
 /**
  * The set's catalog / artifact family (`spec.strategy`). Not an assignment
  * slot name: a member's slot is `member.name`, so never build a
- * /machines/<id>/<slot> link from this.
+ * /machines/<id>/<slot> link from this. The family is reserved on member
+ * machines only while `assignment_key` is empty; after the flip other
+ * sets may reuse it.
  */
 export function setStrategy(c: AssignmentSet): string {
 	return c.spec?.strategy?.trim() || 'nats';

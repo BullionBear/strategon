@@ -16,6 +16,9 @@ object is a generic `AssignmentSet`: N members, each an assignment slot
 named `member.name` (same primitive as a trading process), rolled
 `maxUnavailable` at a time. `spec.strategy` is the catalog family, not the
 process name. Members on the same machine are allowed when names differ.
+While `status.assignment_key` is empty the family name is reserved on each
+member machine; after it flips to `member`, several sets may share one
+family.
 
 A NATS cluster is the first *user* of that object, not a `kind` of its own.
 Everything NATS-specific — `NATS_SERVER_NAME`, the `nats://host:port` route
@@ -310,11 +313,15 @@ membership itself, so cluster edits do not churn subscriptions.
 
 ### NATS as a manifest, not a `kind`
 
-One set → one catalog family (`spec.strategy`). Each member is its own
-assignment slot (`member.name` → `<base>/<member.name>`, process cwd
-`<base>/<member.name>/work`). After
+Each set names one catalog family (`spec.strategy`). That is not a 1:1
+pairing. Each member is its own assignment slot (`member.name` →
+`<base>/<member.name>`, process cwd `<base>/<member.name>/work`). After
 `status.assignment_key=member` the set owns those names only; the family
-name is an ordinary strategy again. Same-host members are allowed. The
+name is an ordinary strategy again and another set may reuse it. While
+the key is empty the family name is reserved on each member machine, so
+two new sets that share a family on the same host fail apply. The error
+quotes the family as `strategy` and is easy to misread as a member-name
+collision. Same-host members are allowed. The
 control plane substitutes `${set.*}`, `${member.*}` and `${peers}` and
 leaves `${CONFIG}`, `${WORK_DIR}`, `${SHARED_DIR}` and `${VOLUME:*}` for
 the agent; an unknown placeholder is rejected at
@@ -891,12 +898,16 @@ row locks cannot guard it, because the conflicting set may not exist yet and
 **The assignment slot is `member.name`, not `spec.strategy`.** A machine can
 run several members of one set (or several sets) the same way it runs several
 trading processes: same binary, different names, different config/env. The
-catalog family stays on `spec.strategy`. Existing sets that still have
-assignments keyed by the family name migrate with a paired undeploy+write
-that shares one `maxUnavailable` slot, gated by `status.assignment_key`
-(empty = legacy; `member` = done). Delete lists the same slots, so an
-unmigrated set cannot vanish and leave `nats` processes behind. Human
-`Deploy nats` is rejected only while `assignment_key` is empty.
+catalog family stays on `spec.strategy`. Family and set are not 1:1: after
+the flip, two sets may share a family when member names differ. Existing
+sets that still have assignments keyed by the family name migrate with a
+paired undeploy+write that shares one `maxUnavailable` slot, gated by
+`status.assignment_key` (empty = legacy; `member` = done). While the key is
+empty, Apply still claims the family name, so a second new set that shares
+that family on the same machine is rejected — the error quotes the family
+as `strategy`, not a member. Delete lists the same slots, so an unmigrated
+set cannot vanish and leave `nats` processes behind. Human `Deploy nats` is
+rejected only while `assignment_key` is empty.
 
 **`member.name` is a disk identity.** The agent has no cross-strategy blob
 cache: three members on one host fetch and unpack the artifact three times.

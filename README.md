@@ -153,7 +153,14 @@ member assignment at a time (`maxUnavailable`), advancing only when the
 in-flight member is converged **and** Ready. The assignment slot is
 `member.name` (slot `<base>/<name>`, process cwd `<base>/<name>/work`);
 `spec.strategy` is the catalog family. Several members may share a machine
-when names and ports differ.
+when names and ports differ. A new set also reserves that family name on
+each member machine until `status.assignment_key` becomes `member`. The
+hold is the leftover legacy family slot, not a one-family-one-set rule:
+after the flip the family name is free, and another set may reuse the same
+`spec.strategy` when `member.name` values do not collide. Applying a second
+new set against the same family on the same machine fails until the first
+set flips. The error (`strategy "nats" is owned by AssignmentSet "…"`)
+quotes the family; it is not a member named `nats`.
 
 An `AssignmentSet` is workload-agnostic. Per-member identity and any peer list
 come from a template the manifest supplies:

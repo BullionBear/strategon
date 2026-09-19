@@ -24,6 +24,13 @@ export const file_strategyplatform_v1_assignmentset: GenFile = /*@__PURE__*/
  * assignment slot — disk identity, status, reservation after transition — is
  * member.name. Members on the same machine are allowed when names differ.
  *
+ * While status.assignment_key is empty the family name is also reserved on
+ * each member machine (legacy slot). After it is "member", only member.name
+ * is reserved; several sets may share one family when names differ. Apply of
+ * a second new set that still claims the family slot fails with the same
+ * "strategy is owned by AssignmentSet" wording used for member collisions —
+ * the quoted strategy may be the family name, not a member.
+ *
  * The control plane knows nothing about what the members run. Per-member
  * identity and any peer list live in the template as placeholders, so a NATS
  * cluster, a sharded feed handler, or anything else that needs "N processes
@@ -64,7 +71,9 @@ export const AssignmentSetSchema: GenMessage<AssignmentSet> = /*@__PURE__*/
 export type AssignmentSetSpec = Message<"strategyplatform.v1.AssignmentSetSpec"> & {
   /**
    * Catalog / artifact family (binary name and {strategy}-config fallback).
-   * After status.assignment_key="member" this is not an assignment slot.
+   * Reserved as a slot on each member machine only while
+   * status.assignment_key is empty. After "member" this is not an assignment
+   * slot; other sets may reuse the same family when member names differ.
    *
    * @generated from field: string strategy = 1;
    */
@@ -342,7 +351,8 @@ export type AssignmentSetStatus = Message<"strategyplatform.v1.AssignmentSetStat
   /**
    * empty = still on the legacy family slot (spec.strategy); "member" means
    * every live assignment is keyed by member.name and the family name is
-   * no longer reserved or auto-undeployed.
+   * no longer reserved or auto-undeployed. A second new set that shares
+   * this family on the same machine conflicts until this field flips.
    *
    * @generated from field: string assignment_key = 7;
    */

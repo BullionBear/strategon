@@ -131,6 +131,13 @@ Human `Deploy` / `ApplyAssignment` / `Rollback` of a **member name**
 `status.assignment_key` flips to `member`. After that, `nats` is an
 ordinary strategy name again.
 
+The same empty-key reserve is why two brand-new `AssignmentSet`s cannot
+share `spec.strategy: nats` on the same machine. After the first set
+flips, a second set may reuse the `nats` family if its `member.name`
+values are distinct. Family and set are not 1:1. An apply error
+`strategy "nats" is owned by AssignmentSet "…"` is that family hold —
+`nats` is the catalog name, not a member.
+
 `member.name` is the assignment slot (`<base>/<name>`; process cwd is
 `<base>/<name>/work`). The agent does not share a
 blob cache across names: three members on one host unpack the artifact

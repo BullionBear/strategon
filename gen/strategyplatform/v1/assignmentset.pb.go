@@ -27,6 +27,13 @@ const (
 // assignment slot — disk identity, status, reservation after transition — is
 // member.name. Members on the same machine are allowed when names differ.
 //
+// While status.assignment_key is empty the family name is also reserved on
+// each member machine (legacy slot). After it is "member", only member.name
+// is reserved; several sets may share one family when names differ. Apply of
+// a second new set that still claims the family slot fails with the same
+// "strategy is owned by AssignmentSet" wording used for member collisions —
+// the quoted strategy may be the family name, not a member.
+//
 // The control plane knows nothing about what the members run. Per-member
 // identity and any peer list live in the template as placeholders, so a NATS
 // cluster, a sharded feed handler, or anything else that needs "N processes
@@ -103,7 +110,9 @@ type AssignmentSetSpec struct {
 	unknownFields protoimpl.UnknownFields
 
 	// Catalog / artifact family (binary name and {strategy}-config fallback).
-	// After status.assignment_key="member" this is not an assignment slot.
+	// Reserved as a slot on each member machine only while
+	// status.assignment_key is empty. After "member" this is not an assignment
+	// slot; other sets may reuse the same family when member names differ.
 	Strategy        string          `protobuf:"bytes,1,opt,name=strategy,proto3" json:"strategy,omitempty"`
 	ArtifactVersion string          `protobuf:"bytes,2,opt,name=artifact_version,json=artifactVersion,proto3" json:"artifact_version,omitempty"`
 	ConfigVersion   string          `protobuf:"bytes,3,opt,name=config_version,json=configVersion,proto3" json:"config_version,omitempty"` // optional default; empty member.config_version inherits this
@@ -545,7 +554,8 @@ type AssignmentSetStatus struct {
 	Deleting           bool            `protobuf:"varint,6,opt,name=deleting,proto3" json:"deleting,omitempty"`
 	// empty = still on the legacy family slot (spec.strategy); "member" means
 	// every live assignment is keyed by member.name and the family name is
-	// no longer reserved or auto-undeployed.
+	// no longer reserved or auto-undeployed. A second new set that shares
+	// this family on the same machine conflicts until this field flips.
 	AssignmentKey string `protobuf:"bytes,7,opt,name=assignment_key,json=assignmentKey,proto3" json:"assignment_key,omitempty"`
 }
 
