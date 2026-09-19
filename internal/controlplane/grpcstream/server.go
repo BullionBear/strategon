@@ -21,6 +21,7 @@ import (
 	"github.com/bullionbear/strategon/internal/controlplane/objectstore"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
 	"github.com/bullionbear/strategon/internal/mtls"
+	"github.com/bullionbear/strategon/internal/secrets"
 )
 
 // session holds per-machine Connect-loop channels. All stream.Send calls stay
@@ -38,6 +39,7 @@ type Server struct {
 	logger  *slog.Logger
 	broker  *filetransfer.Broker
 	objects objectstore.Store
+	secrets *secrets.Module
 
 	mu       sync.Mutex
 	sessions map[string]*session // machineID -> session
@@ -60,6 +62,9 @@ func WithBroker(b *filetransfer.Broker) Option { return func(s *Server) { s.brok
 
 // WithObjectStore attaches the S3-compatible store used by ResolveArtifactSource.
 func WithObjectStore(o objectstore.Store) Option { return func(s *Server) { s.objects = o } }
+
+// WithSecrets attaches SecretManagement for live-resolve on DesiredState.
+func WithSecrets(m *secrets.Module) Option { return func(s *Server) { s.secrets = m } }
 
 // New constructs a Server backed by st.
 func New(st store.Store, opts ...Option) *Server {
@@ -189,6 +194,10 @@ func (s *Server) Connect(ctx context.Context, stream *connect.BidiStream[pb.Agen
 func (s *Server) pushDesired(stream *connect.BidiStream[pb.AgentMessage, pb.ControlMessage], machineID string) error {
 	ds, ok := s.store.DesiredState(machineID)
 	if !ok {
+		return nil
+	}
+	if err := secrets.ResolveDesiredState(context.Background(), s.secrets, ds); err != nil {
+		s.logger.Warn("desired state resolve skipped", "machine_id", machineID, "err", err)
 		return nil
 	}
 	return stream.Send(&pb.ControlMessage{Payload: &pb.ControlMessage_DesiredState{DesiredState: ds}})

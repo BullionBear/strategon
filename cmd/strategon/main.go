@@ -75,6 +75,8 @@ func run(args []string) error {
 		return cmdLogs(args[1:])
 	case "slots":
 		return cmdSlots(args[1:])
+	case "secret":
+		return cmdSecret(args[1:])
 	default:
 		return usageError{msg: fmt.Sprintf("unknown command %q\n\n%s", args[0], usageText)}
 	}
@@ -96,6 +98,10 @@ Commands:
   logs MACHINE STRATEGY         Fetch .stdio/payload.log (add --all for rotates)
   slots ls MACHINE              List on-disk strategy slots (includes orphans)
   slots reap MACHINE NAME [...] Delete named slots that are not assigned
+  secret put NAME               Write a secret (value from stdin); prints secret.<name>
+  secret get NAME               Show secret metadata (never plaintext)
+  secret ls                     List secrets (name, token, bytes, key id)
+  secret rm NAME                Delete a secret (assignments keep the token)
 
   Apply is authoritative: omit captureStdio to turn payload stdio capture off.
 

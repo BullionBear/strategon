@@ -6,6 +6,7 @@
 	import type { ArtifactRef } from '$lib/gen/strategyplatform/v1/common_pb';
 	import type { Machine } from '$lib/gen/strategyplatform/v1/control_service_pb';
 	import { groupArtifacts, latestVersion, versionsFor } from '$lib/artifacts';
+	import type { SecretView } from '$lib/gen/strategyplatform/v1/control_service_pb';
 
 	let machines = $state<Machine[]>([]);
 	let artifacts = $state<ArtifactRef[]>([]);
@@ -21,11 +22,13 @@
 	let versionTouched = $state(false);
 	let configTouched = $state(false);
 	let strategyOpen = $state(false);
+	let secretOptions = $state<SecretView[]>([]);
+	let secretPick = $state('');
 
 	onMount(async () => {
 		machineId = page.url.searchParams.get('machine') || '';
 		strategy = page.url.searchParams.get('strategy') || '';
-		await Promise.all([loadMachines(), loadArtifacts()]);
+		await Promise.all([loadMachines(), loadArtifacts(), loadSecrets()]);
 	});
 
 	async function loadMachines() {
@@ -39,6 +42,25 @@
 	async function loadArtifacts() {
 		const res = await client.listArtifacts({});
 		artifacts = res.artifacts;
+	}
+
+	async function loadSecrets() {
+		try {
+			const res = await client.listSecrets({});
+			secretOptions = res.secrets;
+		} catch {
+			secretOptions = [];
+		}
+	}
+
+	function insertSecretToken() {
+		if (!secretPick) return;
+		const picked = secretOptions.find((s) => s.token === secretPick);
+		const key = (picked?.name || 'SECRET').replace(/[^A-Za-z0-9]+/g, '_').toUpperCase();
+		envText = envText.trimEnd();
+		if (envText && !envText.endsWith('\n')) envText += '\n';
+		envText += `${key}=${secretPick}\n`;
+		secretPick = '';
 	}
 
 	/** Distinct binary artifact names (exclude `-config` siblings). */
@@ -255,7 +277,25 @@
 			</label>
 			<label class="block">
 				Env <span class="muted">(KEY=value, one per line)</span>
-				<textarea bind:value={envText} rows="3" placeholder={"FOO=bar\nBAZ=1"}></textarea>
+				<textarea bind:value={envText} rows="3" placeholder={"FOO=bar\nDATABASE_URL=secret.db-url"}></textarea>
+				{#if secretOptions.length}
+					<span class="secret-row">
+						<select bind:value={secretPick}>
+							<option value="">insert secret token…</option>
+							{#each secretOptions as s}
+								<option value={s.token}>{s.token}</option>
+							{/each}
+						</select>
+						<button type="button" class="btn ghost" disabled={!secretPick} onclick={insertSecretToken}>
+							Insert
+						</button>
+						<a href="/secrets">manage secrets →</a>
+					</span>
+				{:else}
+					<span class="empty-hint muted">
+						<a href="/secrets">Put a secret</a> to insert <span class="mono">secret.&lt;name&gt;</span>
+					</span>
+				{/if}
 			</label>
 			<button
 				class="btn"
@@ -299,6 +339,12 @@
 		flex-direction: column;
 		gap: 0.35rem;
 		align-items: stretch;
+	}
+	.secret-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
 	}
 	.form textarea {
 		font: inherit;

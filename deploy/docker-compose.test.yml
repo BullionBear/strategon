@@ -131,6 +131,8 @@ services:
     environment:
       STRATEGON_S3_ACCESS_KEY: strategon
       STRATEGON_S3_SECRET_KEY: strategonsecret
+      # 32-byte zero key, base64 — test-only; never use in production.
+      STRATEGON_SEAL_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     volumes:
       - mtls:/mtls:ro
     command:

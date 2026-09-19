@@ -53,6 +53,7 @@ services:
       # Env, not flags, so the secret keys never show up in argv/docker inspect.
       STRATEGON_S3_ACCESS_KEY: ${STRATEGON_S3_ACCESS_KEY:-}
       STRATEGON_S3_SECRET_KEY: ${STRATEGON_S3_SECRET_KEY:-}
+      STRATEGON_SEAL_KEY: ${STRATEGON_SEAL_KEY:-}
     ports:
       # Tailscale-only. Binding the host's 100.x address keeps AgentService off
       # the public interface entirely — 139.162.74.23:8443 stays closed.

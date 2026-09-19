@@ -131,6 +131,7 @@
 			items: [
 				{ href: '/deploy', label: 'Deploy', icon: 'deploy' as const },
 				{ href: '/artifacts', label: 'Artifacts', icon: 'artifacts' as const },
+				{ href: '/secrets', label: 'Secrets', icon: 'secrets' as const },
 				{ href: '/schedules', label: 'Schedules', icon: 'schedules' as const }
 			]
 		},
@@ -301,6 +302,24 @@
 											stroke-linejoin="round"
 										/>
 										<path d="M4 6.5 10 10l6-3.5M10 10v7" stroke="currentColor" stroke-width="1.5" />
+									</svg>
+								{:else if item.icon === 'secrets'}
+									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+										<rect
+											x="8"
+											y="9"
+											width="9"
+											height="7"
+											rx="1.5"
+											stroke="currentColor"
+											stroke-width="1.5"
+										/>
+										<path
+											d="M10.5 9V7.5a2.5 2.5 0 015 0V9"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+										/>
 									</svg>
 								{:else if item.icon === 'schedules'}
 									<svg width="18" height="18" viewBox="0 0 20 20" fill="none">

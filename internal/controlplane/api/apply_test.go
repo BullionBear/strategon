@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
 	"github.com/bullionbear/strategon/internal/controlplane/store"
+	"github.com/bullionbear/strategon/internal/secrets"
 )
 
 func TestApplyAssignmentHonoursStoppedAndNoPrune(t *testing.T) {
@@ -663,5 +664,105 @@ func TestApplyAssignmentSetPerMemberConfig(t *testing.T) {
 	}))
 	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "latest") {
 		t.Fatalf("member latest: %v", err)
+	}
+}
+
+func TestApplyAssignmentRejectsSecretRefWhenDark(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1",
+		Env: map[string]string{"DATABASE_URL": "secret.db-url"},
+	}))
+	if err == nil {
+		t.Fatal("expected dark/ref reject")
+	}
+}
+
+func TestApplyAssignmentRejectsUnknownSecretRef(t *testing.T) {
+	client, st, _, _ := startHumanAPIWithSecrets(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1",
+		Env: map[string]string{"DATABASE_URL": "secret.missing"},
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeInvalidArgument && connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("unknown secret: %v", err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["hello"] != nil {
+		t.Fatal("rejected apply wrote an assignment")
+	}
+}
+
+func TestApplyAssignmentPersistsSecretToken(t *testing.T) {
+	client, st, mod, _ := startHumanAPIWithSecrets(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:aaa", Uri: "file:///a"},
+	}))
+	if _, err := client.PutSecret(ctx, connect.NewRequest(&pb.PutSecretRequest{
+		Name: "db-url", Value: "postgres://s3cret",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1",
+		Env: map[string]string{"DATABASE_URL": "secret.db-url"},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["hello"].GetEnv()["DATABASE_URL"] != "secret.db-url" {
+		t.Fatalf("stored env = %#v", rec.Assignments["hello"].GetEnv())
+	}
+	ds, ok := st.DesiredState("m1")
+	if !ok || ds.GetAssignments()[0].GetEnv()["DATABASE_URL"] != "secret.db-url" {
+		t.Fatal("store DesiredState must stay unresolved")
+	}
+	if err := secrets.ResolveDesiredState(ctx, mod, ds); err != nil {
+		t.Fatal(err)
+	}
+	if ds.GetAssignments()[0].GetEnv()["DATABASE_URL"] != "postgres://s3cret" {
+		t.Fatalf("resolved = %#v", ds.GetAssignments()[0].GetEnv())
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["hello"].GetEnv()["DATABASE_URL"] != "secret.db-url" {
+		t.Fatal("resolve wrote back to store")
+	}
+}
+
+func TestApplyAssignmentSetRejectsUnknownSecretInVars(t *testing.T) {
+	client, st, _, _ := startHumanAPIWithSecrets(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{MachineId: "m1"})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "nats", Version: "v1", Digest: "sha256:nats", Uri: "file:///nats"},
+	}))
+	_, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(&pb.ApplyAssignmentSetRequest{
+		Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "trading"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        "nats",
+				ArtifactVersion: "v1",
+				Template:        &pb.MemberTemplate{Env: map[string]string{"DB": "${member.vars.dsn}"}},
+				Members:         []*pb.SetMember{{Machine: "m1", Name: "n1", Vars: map[string]string{"dsn": "secret.missing"}}},
+			},
+		},
+	}))
+	if err == nil {
+		t.Fatal("expected reject")
+	}
+	if _, ok := st.GetAssignmentSet("trading"); ok {
+		t.Fatal("rejected apply wrote a row")
 	}
 }

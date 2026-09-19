@@ -211,7 +211,7 @@ message SetScheduleResponse {
 message AuditEntry {
   google.protobuf.Timestamp timestamp = 1;
   string actor = 2;
-  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "CreateArtifactUpload" | "SetSharedFiles" | "ResolveArtifactSource" | "ReapStrategies"
+  string action = 3; // "Deploy" | "SetDeployment" | "Rollback" | "ConfigChange" | "Stop" | "Start" | "Undeploy" | "DownloadFiles" | "CreateToken" | "RevokeToken" | "RegisterArtifact" | "CreateArtifactUpload" | "SetSharedFiles" | "ResolveArtifactSource" | "ReapStrategies" | "PutSecret" | "DeleteSecret"
   string machine_id = 4;
   string strategy = 5;
   string from_version = 6;
@@ -310,6 +310,44 @@ message ListArtifactsResponse {
   repeated ArtifactRef artifacts = 1;
   repeated ArtifactCatalogEntry entries = 2;
 }
+
+// Secret catalog: ciphertext at rest; human APIs never return plaintext.
+// Public token on the wire is "secret.<name>" (PutSecret, env, member.vars).
+message PutSecretRequest {
+  string name = 1;  // e.g. "db-url" (not "secret.db-url")
+  string value = 2; // plaintext in; size-capped server-side
+}
+
+message PutSecretResponse {
+  string token = 1; // "secret.<name>"
+}
+
+message GetSecretRequest {
+  string name = 1;
+}
+
+message SecretView {
+  string name = 1;
+  string token = 2; // "secret.<name>"
+  int32 length_bytes = 3;
+  string key_id = 4; // wrap key id for rotation visibility
+}
+
+message GetSecretResponse {
+  SecretView secret = 1;
+}
+
+message ListSecretsRequest {}
+
+message ListSecretsResponse {
+  repeated SecretView secrets = 1;
+}
+
+message DeleteSecretRequest {
+  string name = 1;
+}
+
+message DeleteSecretResponse {}
 
 // Control-plane binary build metadata (display only; not stored).
 message GetControlPlaneVersionRequest {}
@@ -477,6 +515,13 @@ service ControlPlaneService {
   rpc RegisterArtifact(RegisterArtifactRequest) returns (RegisterArtifactResponse);
   rpc CreateArtifactUpload(CreateArtifactUploadRequest) returns (CreateArtifactUploadResponse);
   rpc ListArtifacts(ListArtifactsRequest) returns (ListArtifactsResponse);
+
+  rpc PutSecret(PutSecretRequest) returns (PutSecretResponse);
+  rpc GetSecret(GetSecretRequest) returns (GetSecretResponse);
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  // DeleteSecret removes the named row. Assignments that still store
+  // secret.<name> are left as-is; the next southbound resolve fails closed.
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
 
   // Ops display: control-plane build version (header/footer).
   rpc GetControlPlaneVersion(GetControlPlaneVersionRequest) returns (ControlPlaneVersion);
