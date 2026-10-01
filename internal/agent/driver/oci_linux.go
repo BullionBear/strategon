@@ -13,8 +13,9 @@ import (
 )
 
 // OCIDriver starts a strategy by re-execing this binary as --oci-init inside
-// a user+mount+pid+uts namespace (host network). Supervision is the same
-// host PID handle ExecDriver produces.
+// a user+mount+pid+uts namespace (host network), or without the pid namespace
+// when StartSpec.OCIHostPID is set. Supervision is the same host PID handle
+// ExecDriver produces.
 type OCIDriver struct {
 	exec *ExecDriver
 }
@@ -44,7 +45,7 @@ func (d *OCIDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		cmd.Env = []string{}
 	}
 	cmd.Dir = spec.WorkDir
-	cmd.SysProcAttr = ociSysProcAttr(uid, gid)
+	cmd.SysProcAttr = ociSysProcAttr(uid, gid, spec.OCIHostPID)
 	if spec.WorkDir != "" {
 		logPath := OCIInitLogPath(spec.WorkDir)
 		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)

@@ -47,6 +47,11 @@ const MinStdioCaptureAgentVersion int32 = 4
 // on-disk slot inventory in StatusReport and ReapStrategies.
 const MinReapStrategiesAgentVersion int32 = 5
 
+// MinOCIHostPIDAgentVersion is the capability version that honors
+// oci_host_pid. Older agents drop the unknown field and would keep a private
+// PID namespace while the control plane believed otherwise.
+const MinOCIHostPIDAgentVersion int32 = 6
+
 // AgentNotifier pushes a fresh DesiredState to a connected agent after a write.
 type AgentNotifier interface {
 	Notify(machineID string)
@@ -329,6 +334,7 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 		DeployPolicy: msg.GetDeployPolicy(),
 		VolumeMounts: msg.GetVolumeMounts(),
 		CaptureStdio: msg.GetCaptureStdio(),
+		OciHostPid:   msg.GetOciHostPid(),
 	}
 	if spec.GetDeployPolicy() == nil {
 		spec.DeployPolicy = defaultOrCloneSpec(nil, msg.GetStrategy()).GetDeployPolicy()
@@ -350,6 +356,11 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 	}
 	if spec.GetCaptureStdio() {
 		if err := requireAgentCapability(msg.GetMachineId(), rec, MinStdioCaptureAgentVersion, "stdio capture"); err != nil {
+			return nil, err
+		}
+	}
+	if spec.GetOciHostPid() {
+		if err := requireOCIHostPID(msg.GetMachineId(), rec, spec); err != nil {
 			return nil, err
 		}
 	}
@@ -1027,6 +1038,27 @@ func applyDriverFromArtifact(spec *pb.StrategyAssignmentSpec, art *pb.ArtifactRe
 		return requireOCISupported(rec)
 	}
 	spec.Driver = pb.ExecutionDriver_EXECUTION_DRIVER_EXEC
+	return nil
+}
+
+// requireOCIHostPID admits oci_host_pid only for an OCI image, on an agent
+// that understands the field, and — when Register carried a spec — on a host
+// whose probe actually bound the host /proc. A missing spec is not a probe
+// failure; the version gate is what stops an old agent from ignoring the field.
+func requireOCIHostPID(machineID string, rec *store.MachineRecord, spec *pb.StrategyAssignmentSpec) error {
+	if spec.GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_OCI {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("oci_host_pid requires an OCI image"))
+	}
+	if err := requireAgentCapability(machineID, rec, MinOCIHostPIDAgentVersion, "oci host pid"); err != nil {
+		return err
+	}
+	if rec == nil || rec.Register == nil || rec.Register.GetSpec() == nil {
+		return nil
+	}
+	if !rec.Register.GetSpec().GetOciHostPidAvailable() {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("machine %q does not advertise oci_host_pid (host /proc bind failed)", machineID))
+	}
 	return nil
 }
 

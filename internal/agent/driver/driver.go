@@ -58,6 +58,12 @@ type StartSpec struct {
 	CaptureStdio   bool
 	PayloadLogDir  string
 	PayloadVersion string
+
+	// OCIHostPID starts the OCI child without CLONE_NEWPID and bind-mounts
+	// the host /proc. The supervised process is never PID 1, so SIGTERM keeps
+	// its default disposition and setsid descendants outlive it. EXEC ignores
+	// this field.
+	OCIHostPID bool
 }
 
 // VolumeBind is one OCI bind of a machine volume directory at containerPath.

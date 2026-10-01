@@ -38,6 +38,10 @@ type Strategy struct {
 	ObservedGeneration int64     `json:"observed_generation"`
 	LastBadVersion     string    `json:"last_bad_version,omitempty"`
 	CaptureStdio       bool      `json:"capture_stdio,omitempty"`
+	// OCIHostPID is the mode the running process was started with. Missing
+	// means false, so a file written before this field existed does not drain
+	// on adopt.
+	OCIHostPID bool `json:"oci_host_pid,omitempty"`
 }
 
 // Artifact is a JSON-friendly ArtifactRef subset.

@@ -104,6 +104,7 @@ Commands:
   secret rm NAME                Delete a secret (assignments keep the token)
 
   Apply is authoritative: omit captureStdio to turn payload stdio capture off.
+  Omit ociHostPid to keep a private PID namespace (OCI only; agent_version >= 6).
 
 Apply dispatches on kind:
   AssignmentSet       → ApplyAssignmentSet (does not Deploy members)

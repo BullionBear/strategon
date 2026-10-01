@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -470,6 +471,56 @@ func TestGCReleasesRanksByStampNotMtime(t *testing.T) {
 	}
 	if _, err := os.Stat(mgr.ReleaseDir("s", "v2")); err != nil {
 		t.Fatalf("v2 is the newest extra and should survive: %v", err)
+	}
+}
+
+func TestGCReleasesSkipsInUseAndIgnoresBudget(t *testing.T) {
+	mgr := NewManager(t.TempDir(), LocalFetcher{})
+	mgr.ReleaseRetention = 3
+	now := time.Now()
+	for i, v := range []string{"v1", "v2", "v3", "v4", "v5"} {
+		dir := mgr.ReleaseDir("s", v)
+		if err := os.MkdirAll(filepath.Join(dir, "rootfs"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		stamp := now.Add(time.Duration(i) * time.Hour)
+		if err := os.WriteFile(ReleaseStampPath(dir), []byte(strconv.FormatInt(stamp.UnixNano(), 10)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pinned := filepath.Join(mgr.ReleaseDir("s", "v1"), "rootfs")
+	var log bytes.Buffer
+	mgr.Logger = slog.New(slog.NewTextHandler(&log, nil))
+	mgr.releaseUsers = func(rootfs string) []int {
+		if rootfs == pinned {
+			return []int{4242}
+		}
+		return nil
+	}
+	if err := mgr.GCReleases("s", []string{"v5", "v4"}); err != nil {
+		t.Fatal(err)
+	}
+	exists := func(v string) bool {
+		_, err := os.Stat(mgr.ReleaseDir("s", v))
+		return err == nil
+	}
+	// keep 2, budget 1. v1 is pinned and must not consume that slot, so the
+	// newest free extra (v3) stays and v2 is the one that goes.
+	if !exists("v1") || exists("v2") || !exists("v3") || !exists("v4") || !exists("v5") {
+		t.Fatalf("v1=%v v2=%v v3=%v v4=%v v5=%v", exists("v1"), exists("v2"), exists("v3"), exists("v4"), exists("v5"))
+	}
+	if !strings.Contains(log.String(), "4242") || !strings.Contains(log.String(), "v1") {
+		t.Fatalf("log = %q, want pinned pid and version", log.String())
+	}
+	mgr.releaseUsers = func(string) []int { return nil }
+	if err := mgr.GCReleases("s", []string{"v5", "v4"}); err != nil {
+		t.Fatal(err)
+	}
+	if exists("v1") {
+		t.Fatal("v1 should be removed once nothing pins it")
+	}
+	if !exists("v3") {
+		t.Fatal("v3 is still the newest free extra")
 	}
 }
 

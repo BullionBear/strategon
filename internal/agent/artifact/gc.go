@@ -10,6 +10,13 @@ import (
 
 const defaultReleaseRetention = 3
 
+// rootKey is the (dev, ino) of a directory. OCI pivot_root leaves a process's
+// /proc/<pid>/root on the same inode as releases/<v>/rootfs.
+type rootKey struct {
+	dev uint64
+	ino uint64
+}
+
 func (m *Manager) retention() int {
 	if m.ReleaseRetention <= 0 {
 		return defaultReleaseRetention
@@ -61,6 +68,7 @@ func (m *Manager) GCReleases(strategy string, keep []string) error {
 			keepSet[k] = struct{}{}
 		}
 	}
+	users := m.releaseUserLookup()
 	type ver struct {
 		name string
 		mod  time.Time
@@ -71,6 +79,15 @@ func (m *Manager) GCReleases(strategy string, keep []string) error {
 			continue
 		}
 		if _, ok := keepSet[e.Name()]; ok {
+			continue
+		}
+		rootfs := filepath.Join(root, e.Name(), "rootfs")
+		if pids := users(rootfs); len(pids) > 0 {
+			// In use counts against neither the delete set nor the retention
+			// budget. The next GC reconsiders it after the last process exits.
+			if m.Logger != nil {
+				m.Logger.Info("release in use", "strategy", strategy, "version", e.Name(), "pids", pids)
+			}
 			continue
 		}
 		info, err := e.Info()
@@ -104,4 +121,27 @@ func (m *Manager) GCReleases(strategy string, keep []string) error {
 		}
 	}
 	return nil
+}
+
+// releaseUserLookup reports pids whose root is the given rootfs directory.
+// The /proc walk happens once per GC, not once per release.
+func (m *Manager) releaseUserLookup() func(rootfs string) []int {
+	if m.releaseUsers != nil {
+		return m.releaseUsers
+	}
+	var (
+		loaded bool
+		roots  map[rootKey][]int
+	)
+	return func(rootfs string) []int {
+		if !loaded {
+			roots = scanProcRoots()
+			loaded = true
+		}
+		key, ok := statKey(rootfs)
+		if !ok {
+			return nil
+		}
+		return roots[key]
+	}
 }

@@ -2116,6 +2116,11 @@
             "type": "boolean",
             "title": "capture_stdio",
             "description": "Apply is authoritative: omit / false turns capture off."
+          },
+          "ociHostPid": {
+            "type": "boolean",
+            "title": "oci_host_pid",
+            "description": "Apply is authoritative: omit / false turns host-PID OCI mode off.\n Requires an OCI artifact, agent_version \u003e= 6, and a successful host-pid probe."
           }
         },
         "title": "ApplyAssignmentRequest",
@@ -3369,6 +3374,11 @@
             },
             "title": "supported_drivers",
             "description": "drivers this machine supports"
+          },
+          "ociHostPidAvailable": {
+            "type": "boolean",
+            "title": "oci_host_pid_available",
+            "description": "True when this agent probed a host-PID OCI start (no CLONE_NEWPID, recursive\n bind of the host /proc) and the kernel accepted it. Independent of\n supported_drivers: host PID is a mode of OCI, not a driver."
           }
         },
         "title": "MachineSpec",
@@ -3466,6 +3476,11 @@
             "type": "boolean",
             "title": "capture_stdio",
             "description": "Durable stdio capture for every member. Human SetStdioCapture is\n rejected on set-owned slots; this field is the only write path."
+          },
+          "ociHostPid": {
+            "type": "boolean",
+            "title": "oci_host_pid",
+            "description": "Durable host-PID OCI mode for every member. There is no one-field RPC;\n this template (or ApplyAssignment) is the only write path. Requires an\n OCI image, agent_version \u003e= 6, and oci_host_pid_available on the machine."
           }
         },
         "title": "MemberTemplate",
@@ -4374,6 +4389,11 @@
             "type": "boolean",
             "title": "capture_stdio",
             "description": "Desired payload stdio capture from StrategyAssignmentSpec.capture_stdio."
+          },
+          "ociHostPid": {
+            "type": "boolean",
+            "title": "oci_host_pid",
+            "description": "Desired host-PID OCI mode from StrategyAssignmentSpec.oci_host_pid.\n Echo of desired state, not of the running process."
           }
         },
         "title": "StrategyView",

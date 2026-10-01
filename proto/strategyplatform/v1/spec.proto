@@ -37,6 +37,12 @@ message StrategyAssignmentSpec {
   // <base>/<strategy>/.stdio/payload.log (size-rotated). Default false =
   // discard (current policy). Apply is authoritative: omit means false.
   bool capture_stdio = 14;
+  // When true an OCI payload is started in the host PID namespace (no
+  // CLONE_NEWPID) so setsid descendants survive redeploy, stop, and retire.
+  // Default false keeps today's private PID namespace. Apply is authoritative:
+  // omit means false. Only meaningful for an OCI image; BINARY is rejected.
+  // Requires agent_version >= 6 and a host that probed oci_host_pid_available.
+  bool oci_host_pid = 15;
 }
 
 // VolumeMount references a machine-level volume by name.

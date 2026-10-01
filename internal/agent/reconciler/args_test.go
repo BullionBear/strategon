@@ -139,6 +139,38 @@ func TestBuildStartSpecUsesLaunchTypeNotSpecDriver(t *testing.T) {
 	}
 }
 
+func TestBuildStartSpecOCIHostPID(t *testing.T) {
+	r, _, mgr, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	dir := mgr.ReleaseDir("s", "v1")
+	if err := os.MkdirAll(filepath.Join(dir, "rootfs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	meta := []byte(`{"schema_version":1,"entrypoint":["/bin/true"]}`)
+	if err := os.WriteFile(filepath.Join(dir, "oci.json"), meta, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.SwitchTo("s", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	launch := &pb.ArtifactRef{Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE, Name: "s", Version: "v1", Digest: "sha256:v1"}
+	spec := &pb.StrategyAssignmentSpec{Strategy: "s", Artifact: launch, OciHostPid: true}
+	sp, err := r.buildStartSpec(spec, launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sp.Driver != driver.KindOCI || !sp.OCIHostPID {
+		t.Fatalf("driver=%v hostpid=%v", sp.Driver, sp.OCIHostPID)
+	}
+	spec.OciHostPid = false
+	off, err := r.buildStartSpec(spec, launch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if off.OCIHostPID {
+		t.Fatal("flag off must not set OCIHostPID")
+	}
+}
+
 // A nil Env means "inherit the parent's environment" to exec.Cmd, which would
 // hand the agent's own env (control-plane URL, object-store credentials) to the
 // strategy container. mergeEnv must return an empty slice instead.

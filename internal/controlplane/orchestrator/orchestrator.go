@@ -562,6 +562,7 @@ func computeAssignment(cl *pb.AssignmentSet, idx int, art, cfg *pb.ArtifactRef) 
 		Args:         rendered.Args,
 		Env:          rendered.Env,
 		CaptureStdio: tmpl.GetCaptureStdio(),
+		OciHostPid:   tmpl.GetOciHostPid(),
 	}
 	if p := tmpl.GetDeployPolicy(); p != nil {
 		spec.DeployPolicy = proto.Clone(p).(*pb.DeployPolicy)

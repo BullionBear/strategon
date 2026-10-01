@@ -11,10 +11,10 @@ import (
 	"github.com/bullionbear/strategon/internal/agent/driver"
 )
 
-// MachineSpecFromHost probes for user namespaces, and the probe re-execs this
-// binary with --oci-probe. Answer that here or the re-exec would try to run the
-// test suite again with an unknown flag and the probe would report a false
-// negative.
+// MachineSpecFromHost probes for user namespaces and host-PID OCI, and each
+// probe re-execs this binary (--oci-probe / --oci-probe-host-pid). Answer that
+// here or the re-exec would try to run the test suite again and the probe
+// would report a false negative.
 func TestMain(m *testing.M) {
 	if driver.MaybeRunOCIHelper() {
 		return
@@ -69,5 +69,8 @@ func TestMachineSpecFromHost(t *testing.T) {
 	}
 	if spec.GetOs() != "linux" {
 		t.Fatalf("os=%q", spec.GetOs())
+	}
+	if spec.GetOciHostPidAvailable() != driver.HostPIDAvailable() {
+		t.Fatalf("oci_host_pid_available=%v, probe=%v", spec.GetOciHostPidAvailable(), driver.HostPIDAvailable())
 	}
 }

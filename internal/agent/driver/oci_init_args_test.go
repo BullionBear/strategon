@@ -107,6 +107,31 @@ func TestBuildInitArgsLogDir(t *testing.T) {
 	}
 }
 
+func TestBuildInitArgsHostPID(t *testing.T) {
+	args := BuildInitArgs(StartSpec{
+		Rootfs: "/r", WorkBind: "/w", SharedBind: "/s", WorkDir: "/w",
+		OCIHostPID: true,
+		Argv:       []string{"sleep", "1"},
+	})
+	got, err := parseInitFlag(args[1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.HostPID {
+		t.Fatalf("%+v", got)
+	}
+	off := BuildInitArgs(StartSpec{
+		Rootfs: "/r", WorkBind: "/w", SharedBind: "/s", WorkDir: "/w", Argv: []string{"true"},
+	})
+	gotOff, err := parseInitFlag(off[1:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotOff.HostPID {
+		t.Fatalf("host pid leaked: %+v", gotOff)
+	}
+}
+
 func TestSplitVolumeBindRejectsColonInPaths(t *testing.T) {
 	if _, _, ok := splitVolumeBind("/tmp/foo:bar:/data"); ok {
 		t.Fatal("colon in host should fail")

@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/agent/driver"
 )
 
 type hostCPUSample struct {
@@ -30,9 +31,10 @@ func sampleProcess(_ int32, prev procCPUSample) (int64, int32, float64, procCPUS
 // MachineSpecFromHost fills what we can without /proc.
 func MachineSpecFromHost() *pb.MachineSpec {
 	return &pb.MachineSpec{
-		Os:               runtime.GOOS,
-		Arch:             runtime.GOARCH,
-		NumCpus:          int32(runtime.NumCPU()),
-		SupportedDrivers: supportedDrivers(),
+		Os:                  runtime.GOOS,
+		Arch:                runtime.GOARCH,
+		NumCpus:             int32(runtime.NumCPU()),
+		SupportedDrivers:    supportedDrivers(),
+		OciHostPidAvailable: driver.HostPIDAvailable(),
 	}
 }

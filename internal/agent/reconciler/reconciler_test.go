@@ -135,6 +135,101 @@ func TestCaptureStdioFlipDrainsOnly(t *testing.T) {
 	}
 }
 
+func TestOCIHostPIDFlipDrainsOnly(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, _, _, _ := newTestReconciler(t, t0)
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5, StopGraceSeconds: 1})
+	spec.OciHostPid = true
+	r.generation = 8
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.ociHostPid = false
+	proc := mustStart(t, fd)
+	st.proc = proc
+	r.actual["s"] = st
+
+	starts := fd.starts()
+	r.reconcile()
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_DRAINING || !st.stopping {
+		t.Fatalf("phase=%v stopping=%v, want DRAINING", st.phase, st.stopping)
+	}
+	if fd.starts() != starts {
+		t.Fatalf("flip must not Start; starts %d -> %d", starts, fd.starts())
+	}
+	fd.kill(proc.PID)
+	r.handleExit(processExit{strategy: "s", info: exitAt(proc, t0.Add(time.Second))})
+	r.reconcile()
+	if fd.starts() < starts+1 {
+		t.Fatalf("after drain, reconcile should Start; starts=%d", fd.starts())
+	}
+	if !st.ociHostPid {
+		t.Fatal("installProcess should record ociHostPid")
+	}
+}
+
+func TestPeriodicReleaseGC(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, _, mgr, _, _ := newTestReconciler(t, t0)
+	mgr.ReleaseRetention = 3
+	base := time.Unix(1_700_000_000, 0)
+	for i, v := range []string{"v1", "v2", "v3", "v4", "v5"} {
+		dir := mgr.ReleaseDir("s", v)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		stamp := base.Add(time.Duration(i) * time.Hour)
+		if err := os.WriteFile(artifact.ReleaseStampPath(dir), []byte(fmt.Sprintf("%d", stamp.UnixNano())), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	spec := assignment("s", "v5", "sha256:v5", nil)
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.runningArtifact = artRef("v5", "sha256:v5")
+	st.prevArtifact = artRef("v4", "sha256:v4")
+	r.actual["s"] = st
+
+	exists := func(v string) bool {
+		_, err := os.Stat(mgr.ReleaseDir("s", v))
+		return err == nil
+	}
+	r.tick(t0)
+	if exists("v1") || exists("v2") || !exists("v3") || !exists("v4") || !exists("v5") {
+		t.Fatalf("after first gc v1=%v v2=%v v3=%v v4=%v v5=%v", exists("v1"), exists("v2"), exists("v3"), exists("v4"), exists("v5"))
+	}
+
+	dir := mgr.ReleaseDir("s", "v0")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := base.Add(-time.Hour)
+	if err := os.WriteFile(artifact.ReleaseStampPath(dir), []byte(fmt.Sprintf("%d", old.UnixNano())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.tick(t0.Add(30 * time.Second))
+	if !exists("v0") {
+		t.Fatal("gc inside the interval removed v0")
+	}
+	r.tick(t0.Add(releaseGCInterval))
+	if exists("v0") {
+		t.Fatal("gc after the interval should remove v0")
+	}
+
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(artifact.ReleaseStampPath(dir), []byte(fmt.Sprintf("%d", old.UnixNano())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st.inflight = &deployOp{target: artRef("v0", "sha256:v0"), cancel: func() {}}
+	r.tick(t0.Add(2 * releaseGCInterval))
+	if !exists("v0") {
+		t.Fatal("in-flight target must survive periodic gc")
+	}
+}
+
 func TestStopAndCrashDoNotDeleteStdio(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 	r, fd, mgr, _, _ := newTestReconciler(t, t0)

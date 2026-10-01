@@ -90,6 +90,7 @@ func BuildStrategyView(rec *store.MachineRecord, name string, st store.Store, pr
 		v.Stopped = spec.GetStopped()
 		v.VolumeMounts = spec.GetVolumeMounts()
 		v.CaptureStdio = spec.GetCaptureStdio()
+		v.OciHostPid = spec.GetOciHostPid()
 	}
 	if status := rec.Status[name]; status != nil {
 		v.Phase = status.GetPhase()

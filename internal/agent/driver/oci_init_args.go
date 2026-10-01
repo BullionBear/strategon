@@ -6,16 +6,18 @@ import (
 )
 
 const (
-	flagOCIInit   = "--oci-init"
-	flagOCIProbe  = "--oci-probe"
-	flagOCIRootfs = "--oci-rootfs"
-	flagOCIWork   = "--oci-work"
-	flagOCIShared = "--oci-shared"
-	flagOCIConfig = "--oci-config"
-	flagOCICWD    = "--oci-cwd"
-	flagOCIVolume = "--oci-volume"
-	flagOCILogDir = "--oci-logdir"
-	flagOCILogVer = "--oci-logver"
+	flagOCIInit         = "--oci-init"
+	flagOCIProbe        = "--oci-probe"
+	flagOCIRootfs       = "--oci-rootfs"
+	flagOCIWork         = "--oci-work"
+	flagOCIShared       = "--oci-shared"
+	flagOCIConfig       = "--oci-config"
+	flagOCICWD          = "--oci-cwd"
+	flagOCIVolume       = "--oci-volume"
+	flagOCILogDir       = "--oci-logdir"
+	flagOCILogVer       = "--oci-logver"
+	flagOCIHostPID      = "--oci-host-pid"
+	flagOCIProbeHostPID = "--oci-probe-host-pid"
 )
 
 // InitArgs is the non-secret flag set passed to --oci-init. Env stays on
@@ -29,6 +31,7 @@ type InitArgs struct {
 	Volumes []VolumeBind
 	LogDir  string
 	LogVer  string
+	HostPID bool
 	Argv    []string
 }
 
@@ -54,6 +57,9 @@ func BuildInitArgs(spec StartSpec) []string {
 			args = append(args, flagOCILogVer+"="+spec.PayloadVersion)
 		}
 	}
+	if spec.OCIHostPID {
+		args = append(args, flagOCIHostPID)
+	}
 	if len(spec.Argv) > 0 {
 		args = append(args, "--")
 		args = append(args, spec.Argv...)
@@ -69,6 +75,11 @@ func parseInitFlag(args []string) (InitArgs, error) {
 		if a == "--" {
 			out.Argv = append([]string(nil), args[i+1:]...)
 			return out, nil
+		}
+		if a == flagOCIHostPID {
+			out.HostPID = true
+			i++
+			continue
 		}
 		key, val, ok := splitFlag(a)
 		if !ok {

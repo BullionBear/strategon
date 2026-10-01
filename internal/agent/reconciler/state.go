@@ -58,6 +58,11 @@ type strategyState struct {
 	// in the supervision file so a self-update does not drain on rebuild.
 	captureStdio bool
 
+	// ociHostPid is the host-PID mode the running OCI process was started
+	// with. Persisted next to captureStdio for the same reason: rebuild must
+	// not see a false mismatch and drain.
+	ociHostPid bool
+
 	// cron tracks next fire times for DesiredState schedules.
 	cron map[string]*cronEntry
 }

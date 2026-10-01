@@ -84,6 +84,10 @@ message MemberTemplate {
   // Durable stdio capture for every member. Human SetStdioCapture is
   // rejected on set-owned slots; this field is the only write path.
   bool capture_stdio = 8;
+  // Durable host-PID OCI mode for every member. There is no one-field RPC;
+  // this template (or ApplyAssignment) is the only write path. Requires an
+  // OCI image, agent_version >= 6, and oci_host_pid_available on the machine.
+  bool oci_host_pid = 9;
 }
 
 // PeerList renders ${peers} for one member.

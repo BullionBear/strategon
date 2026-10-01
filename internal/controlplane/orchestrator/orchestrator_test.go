@@ -325,10 +325,11 @@ func TestComputeAssignmentCaptureStdioEqual(t *testing.T) {
 	if !proto.Equal(a, b) {
 		t.Fatal("unchanged template must proto.Equal")
 	}
-	if a.GetCaptureStdio() {
-		t.Fatal("default capture off")
+	if a.GetCaptureStdio() || a.GetOciHostPid() {
+		t.Fatal("default capture and oci_host_pid off")
 	}
 	cl.Spec.Template.CaptureStdio = true
+	cl.Spec.Template.OciHostPid = true
 	c, err := computeAssignment(cl, 0, art, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -336,8 +337,8 @@ func TestComputeAssignmentCaptureStdioEqual(t *testing.T) {
 	if proto.Equal(a, c) {
 		t.Fatal("capture flip must change spec")
 	}
-	if !c.GetCaptureStdio() {
-		t.Fatal("want capture on")
+	if !c.GetCaptureStdio() || !c.GetOciHostPid() {
+		t.Fatal("template flags must reach the assignment spec")
 	}
 }
 

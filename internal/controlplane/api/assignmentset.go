@@ -144,6 +144,15 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 				return nil, err
 			}
 		}
+		if spec.GetTemplate().GetOciHostPid() {
+			if err := requireAgentCapability(srv.GetMachine(), rec, MinOCIHostPIDAgentVersion, "oci host pid"); err != nil {
+				return nil, err
+			}
+			if rec.Register != nil && rec.Register.GetSpec() != nil && !rec.Register.GetSpec().GetOciHostPidAvailable() {
+				return nil, connect.NewError(connect.CodeFailedPrecondition,
+					fmt.Errorf("machine %q does not advertise oci_host_pid (host /proc bind failed)", srv.GetMachine()))
+			}
+		}
 		if _, dup := seenName[srv.GetName()]; dup {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate member name %q", srv.GetName()))
 		}
@@ -195,6 +204,9 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 		if err := s.requireArtifactReady(cfg.GetName(), cfg.GetVersion()); err != nil {
 			return nil, err
 		}
+	}
+	if spec.GetTemplate().GetOciHostPid() && art.GetType() != pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("oci_host_pid requires an OCI image"))
 	}
 	if art.GetType() == pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE {
 		for _, srv := range spec.GetMembers() {

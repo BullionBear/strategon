@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/agent/driver"
 )
 
 type hostCPUSample struct {
@@ -272,10 +273,11 @@ func readProcStatus(pid int32) (rss int64, fds int32) {
 // MachineSpecFromHost fills static enrollment metadata from the local host.
 func MachineSpecFromHost() *pb.MachineSpec {
 	spec := &pb.MachineSpec{
-		Os:               "linux",
-		Arch:             runtime.GOARCH,
-		NumCpus:          int32(runtime.NumCPU()),
-		SupportedDrivers: supportedDrivers(),
+		Os:                  "linux",
+		Arch:                runtime.GOARCH,
+		NumCpus:             int32(runtime.NumCPU()),
+		SupportedDrivers:    supportedDrivers(),
+		OciHostPidAvailable: driver.HostPIDAvailable(),
 	}
 	if _, total, err := readMemInfo(); err == nil {
 		spec.MemoryTotalBytes = total
