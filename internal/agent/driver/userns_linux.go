@@ -3,8 +3,10 @@
 package driver
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"golang.org/x/sys/unix"
@@ -84,14 +86,26 @@ func probeCommand(flag string) *exec.Cmd {
 	return exec.Command("/proc/self/exe", flag)
 }
 
-// MaybeRunOCIHelper intercepts --oci-init / --oci-probe / --stdio-tee before
-// the agent required-flag checks. Returns true if this process should not
+// MaybeRunOCIHelper intercepts --oci-init / --oci-probe / --stdio-tee /
+// --exec-payload before the agent required-flag checks, after applying an
+// optional leading --rlimit-nofile. Returns true if this process should not
 // continue as the agent (the helper already os.Exit'd).
 func MaybeRunOCIHelper() bool {
 	if len(os.Args) < 2 {
 		return false
 	}
-	switch os.Args[1] {
+	args := os.Args[1:]
+	if val, ok := strings.CutPrefix(args[0], flagRlimitNofile+"="); ok {
+		if err := applyRlimitNofile(val); err != nil {
+			fmt.Fprintln(os.Stderr, "rlimit:", err)
+			os.Exit(126)
+		}
+		args = args[1:]
+		if len(args) == 0 {
+			os.Exit(2)
+		}
+	}
+	switch args[0] {
 	case flagOCIProbe:
 		os.Exit(0)
 		return true
@@ -99,11 +113,17 @@ func MaybeRunOCIHelper() bool {
 		os.Exit(runHostPIDProbe())
 		return true
 	case flagOCIInit:
-		os.Exit(runOCIInit(os.Args[2:]))
+		os.Exit(runOCIInit(args[1:]))
 		return true
 	case flagStdioTee:
-		os.Exit(runStdioTeeFromArgs(os.Args[2:]))
+		os.Exit(runStdioTeeFromArgs(args[1:]))
 		return true
+	case flagExecPayload:
+		os.Exit(runExecPayload(args[1:]))
+		return true
+	}
+	if len(args) != len(os.Args)-1 {
+		os.Exit(2) // --rlimit-nofile without a helper: never continue as the agent
 	}
 	return false
 }

@@ -671,8 +671,9 @@ func TestRollbackImpossibleStaysFailed(t *testing.T) {
 	if st.failedAtGen != 12 {
 		t.Fatalf("failedAtGen = %d, want 12", st.failedAtGen)
 	}
-	if st.lastError != "no previous version to roll back to" {
-		t.Fatalf("lastError = %q", st.lastError)
+	if !strings.Contains(st.lastError, "no previous version to roll back to") ||
+		!strings.Contains(st.lastError, "exited after start") {
+		t.Fatalf("lastError = %q, want the crash cause kept alongside the rollback failure", st.lastError)
 	}
 
 	starts := fd.starts()
@@ -903,6 +904,112 @@ func waitWorkerPhase(t *testing.T, r *Reconciler, phase pb.DeployPhase) {
 		case <-deadline:
 			t.Fatalf("deploy worker did not reach %v", phase)
 		}
+	}
+}
+
+// A first deploy whose start fails has nothing to roll back to; the start
+// error, not just "no previous version", must reach status.
+func TestFirstDeployStartFailureKeepsCause(t *testing.T) {
+	r, _, _, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	r.generation = 4
+	spec := assignment("s", "v1", "sha256:v1", &pb.DeployPolicy{EnableAutoRollback: true})
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.inflight = &deployOp{target: spec.Artifact, cancel: func() {}}
+	r.actual["s"] = st
+
+	r.applyWorkerEvent(workerEvent{
+		strategy: "s",
+		phase:    pb.DeployPhase_DEPLOY_PHASE_ROLLING_BACK,
+		err:      errString("start: max_open_files 99999999 exceeds the agent's hard limit 524288"),
+		artifact: spec.Artifact,
+	})
+	if st.phase != pb.DeployPhase_DEPLOY_PHASE_FAILED {
+		t.Fatalf("phase = %v, want FAILED", st.phase)
+	}
+	if !strings.Contains(st.lastError, "max_open_files 99999999") || !strings.Contains(st.lastError, "no previous version") {
+		t.Fatalf("lastError = %q", st.lastError)
+	}
+}
+
+// A start that fails the same way every time must back off and report once,
+// not retry and emit StartFailed on every tick.
+func TestStartFailedBacksOffAndReportsOnce(t *testing.T) {
+	t0 := time.Unix(1000, 0)
+	r, fd, mgr, fk, out := newTestReconciler(t, t0)
+	seedRelease(t, mgr, "s", "v1")
+	if err := mgr.SwitchTo("s", "v1"); err != nil {
+		t.Fatal(err)
+	}
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5})
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	r.actual["s"] = st
+	fd.failStart = true
+
+	for i := 0; i < 45; i++ {
+		r.reconcile()
+		fk.Advance(time.Second)
+	}
+	events := 0
+	for len(out) > 0 {
+		if ev := (<-out).GetEvent(); ev.GetReason() == "StartFailed" {
+			events++
+		}
+	}
+	if events != 1 {
+		t.Fatalf("StartFailed events = %d over 45s, want 1", events)
+	}
+	fd.mu.Lock()
+	tries := fd.startTries
+	fd.mu.Unlock()
+	if tries > 7 {
+		t.Fatalf("start attempts = %d over 45s, want exponential backoff (1,2,4,8,16s...)", tries)
+	}
+	if st.lastError != "fake start failure" {
+		t.Fatalf("lastError = %q", st.lastError)
+	}
+}
+
+// An unenforceable limit fails the deploy while the old version still runs:
+// draining first would leave nothing running, and rollback (same spec)
+// would fail on the same limit.
+func TestDeployChecksLimitsBeforeDrain(t *testing.T) {
+	r, fd, _, _, _ := newTestReconciler(t, time.Unix(1000, 0))
+	ref := sharedRef(t, t.TempDir(), "bin", "#!/bin/true\n")
+	ref.Version = "v2"
+	spec := assignment("s", "v2", ref.GetDigest(), &pb.DeployPolicy{})
+	spec.Artifact = ref
+	spec.Limits = &pb.ResourceLimits{MemoryBytes: 1 << 30}
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:v1")
+	st.proc = mustStart(t, fd)
+	r.actual["s"] = st
+	fd.limitErr = errString("limits require a cgroup root and this agent has none (--cgroup-root)")
+
+	r.beginDeploy(spec, st)
+	deadline := time.After(2 * time.Second)
+	for done := false; !done; {
+		select {
+		case ev := <-r.workerCh:
+			if ev.phase == pb.DeployPhase_DEPLOY_PHASE_DRAINING {
+				t.Fatal("deploy drained the old process before checking limits")
+			}
+			r.applyWorkerEvent(ev)
+			done = ev.phase == pb.DeployPhase_DEPLOY_PHASE_FAILED
+		case <-deadline:
+			t.Fatal("deploy worker did not fail")
+		}
+	}
+	if len(fd.signalList()) != 0 {
+		t.Fatalf("old process signalled: %v", fd.signalList())
+	}
+	if st.proc == nil || !strings.Contains(st.lastError, "cgroup root") {
+		t.Fatalf("proc=%v lastError=%q", st.proc, st.lastError)
 	}
 }
 

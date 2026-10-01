@@ -21,6 +21,14 @@ type fakeDriver struct {
 	alive      map[int]bool
 	exitCh     map[int]chan struct{}
 	failStart  bool
+	startTries int
+	limitErr   error // returned by CheckLimits
+}
+
+func (f *fakeDriver) CheckLimits(driver.StartSpec) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.limitErr
 }
 
 func newFakeDriver() *fakeDriver {
@@ -30,6 +38,7 @@ func newFakeDriver() *fakeDriver {
 func (f *fakeDriver) Start(spec driver.StartSpec, now time.Time) (*driver.Process, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.startTries++
 	if f.failStart {
 		return nil, errors.New("fake start failure")
 	}

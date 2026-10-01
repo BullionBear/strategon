@@ -2,7 +2,10 @@
 
 package driver
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // UserNSAvailable is always false off Linux.
 func UserNSAvailable() bool { return false }
@@ -17,11 +20,14 @@ func MaybeRunOCIHelper() bool {
 	if len(os.Args) < 2 {
 		return false
 	}
+	if strings.HasPrefix(os.Args[1], flagRlimitNofile) {
+		os.Exit(2)
+	}
 	switch os.Args[1] {
 	case flagOCIProbe:
 		os.Exit(0)
 		return true
-	case flagOCIProbeHostPID, flagOCIInit, flagStdioTee:
+	case flagOCIProbeHostPID, flagOCIInit, flagStdioTee, flagExecPayload:
 		os.Exit(2)
 		return true
 	}

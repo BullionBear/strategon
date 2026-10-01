@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -17,32 +18,30 @@ import (
 
 // ExecDriver is the default bare-process driver. It uses setsid to detach the
 // strategy into its own session/process group and a pidfd for exit
-// notification. Optional cgroup v2 confinement is best-effort: if no delegated
-// cgroup subtree is writable (e.g. in CI), the limits are skipped rather than
-// failing the launch.
+// notification. With a cgroup root every payload starts in its slot cgroup;
+// without one, a spec that carries memory or cpu limits fails to start rather
+// than running unconfined.
 type ExecDriver struct {
-	// CgroupRoot is the delegated cgroup v2 base (e.g.
-	// "/sys/fs/cgroup/strategon"). Empty disables cgroup confinement.
+	// CgroupRoot is the prepared cgroup v2 directory holding one cgroup per
+	// slot (see SetupCgroupRoot). Empty disables cgroup confinement.
 	CgroupRoot string
 }
 
 // NewExecDriver returns an ExecDriver. cgroupRoot may be empty to disable
-// cgroup confinement (the common case outside a systemd-delegated deployment).
+// cgroup confinement (CI, or a host without a delegated subtree).
 func NewExecDriver(cgroupRoot string) *ExecDriver {
 	return &ExecDriver{CgroupRoot: cgroupRoot}
 }
 
 // Start launches the process detached in its own session.
 func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
-	var cmd *exec.Cmd
-	if spec.CaptureStdio {
-		if spec.PayloadLogDir == "" {
-			return nil, fmt.Errorf("start %s: capture_stdio without log dir", spec.BinaryPath)
-		}
-		cmd = exec.Command("/proc/self/exe", buildStdioTeeArgs(spec)...)
-	} else {
-		cmd = exec.Command(spec.BinaryPath, spec.Args...)
+	if spec.CaptureStdio && spec.PayloadLogDir == "" {
+		return nil, fmt.Errorf("start %s: capture_stdio without log dir", spec.BinaryPath)
 	}
+	if err := checkRlimitNofile(spec.MaxOpenFiles); err != nil {
+		return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
+	}
+	cmd := execCommand(spec)
 	cmd.Env = spec.Env
 	cmd.Dir = spec.WorkDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -51,9 +50,11 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		Setsid: true,
 	}
 
-	// ② Optional cgroup v2 confinement. Guarded: any failure degrades to an
-	// unconfined launch so CI and non-delegated hosts still work.
-	cgFD := d.setupCgroup(spec)
+	// ② cgroup v2 slot. A limit that cannot be applied fails the start.
+	cgFD, err := d.setupCgroup(spec)
+	if err != nil {
+		return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
+	}
 	if cgFD >= 0 {
 		cmd.SysProcAttr.UseCgroupFD = true
 		cmd.SysProcAttr.CgroupFD = cgFD
@@ -64,6 +65,22 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
 	}
 	return attachStarted(cmd, now)
+}
+
+// execCommand builds the EXEC launch. The payload runs directly unless stdio
+// capture or max_open_files needs this binary in front of it; both re-execs
+// set the rlimit before the payload's first instruction.
+func execCommand(spec StartSpec) *exec.Cmd {
+	var args []string
+	switch {
+	case spec.CaptureStdio:
+		args = buildStdioTeeArgs(spec)
+	case spec.MaxOpenFiles > 0:
+		args = append([]string{flagExecPayload, "--", spec.BinaryPath}, spec.Args...)
+	default:
+		return exec.Command(spec.BinaryPath, spec.Args...)
+	}
+	return exec.Command("/proc/self/exe", withRlimitArgs(spec, args)...)
 }
 
 // attachStarted builds a Process handle for a child this agent just Start-ed.
@@ -173,29 +190,45 @@ func (d *ExecDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*Pro
 	return &Process{PID: pid, StartTime: cur, PGID: pgid, StartedAt: startedAt, pidfd: pidfd}, nil
 }
 
-// setupCgroup creates a per-strategy cgroup v2 subtree and writes limits,
-// returning an fd for UseCgroupFD. Returns -1 on any failure (degraded mode).
-func (d *ExecDriver) setupCgroup(spec StartSpec) int {
+// CheckLimits reports the limit errors Start would hit before forking.
+func (d *ExecDriver) CheckLimits(spec StartSpec) error {
+	if err := checkRlimitNofile(spec.MaxOpenFiles); err != nil {
+		return err
+	}
+	if d.CgroupRoot == "" && (spec.MemoryBytes > 0 || spec.CPUMillicores > 0) {
+		return errNoCgroupRoot
+	}
+	return nil
+}
+
+var errNoCgroupRoot = errors.New("limits require a cgroup root and this agent has none (--cgroup-root)")
+
+// setupCgroup prepares the slot cgroup and returns an fd for UseCgroupFD, or
+// -1 when confinement is off and the spec asks for no memory or cpu limit.
+// Every payload under a root gets a slot, limited or not, so its descendants
+// stay accounted to it and the unit cgroup never holds processes directly.
+func (d *ExecDriver) setupCgroup(spec StartSpec) (int, error) {
 	if d.CgroupRoot == "" {
-		return -1
+		if spec.MemoryBytes > 0 || spec.CPUMillicores > 0 {
+			return -1, errNoCgroupRoot
+		}
+		return -1, nil
 	}
-	dir := d.CgroupRoot + "/" + spec.Strategy
+	if spec.Strategy == "" || spec.Strategy == "." || spec.Strategy == ".." || strings.Contains(spec.Strategy, "/") {
+		return -1, fmt.Errorf("cgroup: invalid slot name %q", spec.Strategy)
+	}
+	dir := filepath.Join(d.CgroupRoot, spec.Strategy)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return -1
+		return -1, fmt.Errorf("cgroup %s: %w", dir, err)
 	}
-	if spec.MemoryBytes > 0 {
-		_ = os.WriteFile(dir+"/memory.max", []byte(strconv.FormatInt(spec.MemoryBytes, 10)), 0o644)
-	}
-	if spec.CPUMillicores > 0 {
-		// cpu.max is "quota period"; period 100000us, quota scaled by millicores.
-		quota := spec.CPUMillicores * 100000 / 1000
-		_ = os.WriteFile(dir+"/cpu.max", []byte(fmt.Sprintf("%d 100000", quota)), 0o644)
+	if err := writeCgroupLimits(dir, spec.MemoryBytes, spec.CPUMillicores); err != nil {
+		return -1, fmt.Errorf("cgroup %s: %w", dir, err)
 	}
 	fd, err := unix.Open(dir, unix.O_DIRECTORY|unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
-		return -1
+		return -1, fmt.Errorf("cgroup %s: %w", dir, err)
 	}
-	return fd
+	return fd, nil
 }
 
 // pollPidfd blocks until the pidfd becomes readable (process exited).

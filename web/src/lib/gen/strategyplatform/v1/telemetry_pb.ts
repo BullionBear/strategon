@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file strategyplatform/v1/telemetry.proto.
  */
 export const file_strategyplatform_v1_telemetry: GenFile = /*@__PURE__*/
-  fileDesc("CiNzdHJhdGVneXBsYXRmb3JtL3YxL3RlbGVtZXRyeS5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSL+AQoQTWFjaGluZVJlc291cmNlcxITCgtjcHVfcGVyY2VudBgBIAEoARIZChFtZW1vcnlfdXNlZF9ieXRlcxgCIAEoAxIaChJtZW1vcnlfdG90YWxfYnl0ZXMYAyABKAMSFwoPZGlza191c2VkX2J5dGVzGAQgASgDEhgKEGRpc2tfdG90YWxfYnl0ZXMYBSABKAMSDQoFbG9hZDEYBiABKAESFAoMbmV0X3J4X2J5dGVzGAcgASgDEhQKDG5ldF90eF9ieXRlcxgIIAEoAxIwCgxjb2xsZWN0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIo4BCg5Qcm9jZXNzTWV0cmljcxIQCghzdHJhdGVneRgBIAEoCRILCgNwaWQYAiABKAUSDQoFYWxpdmUYAyABKAgSEQoJcnNzX2J5dGVzGAQgASgDEg8KB251bV9mZHMYBSABKAUSEwoLY3B1X3BlcmNlbnQYBiABKAESFQoNcmVzdGFydF9jb3VudBgHIAEoBSJMChJQcm9jZXNzTWV0cmljc0xpc3QSNgoJcHJvY2Vzc2VzGAEgAygLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Qcm9jZXNzTWV0cmljcyLOAQoJSGVhcnRiZWF0EjgKCXJlc291cmNlcxgBIAEoCzIlLnN0cmF0ZWd5cGxhdGZvcm0udjEuTWFjaGluZVJlc291cmNlcxI2Cglwcm9jZXNzZXMYAiADKAsyIy5zdHJhdGVneXBsYXRmb3JtLnYxLlByb2Nlc3NNZXRyaWNzEhsKE29ic2VydmVkX2dlbmVyYXRpb24YAyABKAMSFQoNYWdlbnRfdmVyc2lvbhgEIAEoBRIbChNhZ2VudF9idWlsZF92ZXJzaW9uGAUgASgJQk1aS2dpdGh1Yi5jb20vYnVsbGlvbmJlYXIvc3RyYXRlZ29uL2dlbi9zdHJhdGVneXBsYXRmb3JtL3YxO3N0cmF0ZWd5cGxhdGZvcm12MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("CiNzdHJhdGVneXBsYXRmb3JtL3YxL3RlbGVtZXRyeS5wcm90bxITc3RyYXRlZ3lwbGF0Zm9ybS52MSL+AQoQTWFjaGluZVJlc291cmNlcxITCgtjcHVfcGVyY2VudBgBIAEoARIZChFtZW1vcnlfdXNlZF9ieXRlcxgCIAEoAxIaChJtZW1vcnlfdG90YWxfYnl0ZXMYAyABKAMSFwoPZGlza191c2VkX2J5dGVzGAQgASgDEhgKEGRpc2tfdG90YWxfYnl0ZXMYBSABKAMSDQoFbG9hZDEYBiABKAESFAoMbmV0X3J4X2J5dGVzGAcgASgDEhQKDG5ldF90eF9ieXRlcxgIIAEoAxIwCgxjb2xsZWN0ZWRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wItoBCg5Qcm9jZXNzTWV0cmljcxIQCghzdHJhdGVneRgBIAEoCRILCgNwaWQYAiABKAUSDQoFYWxpdmUYAyABKAgSEQoJcnNzX2J5dGVzGAQgASgDEg8KB251bV9mZHMYBSABKAUSEwoLY3B1X3BlcmNlbnQYBiABKAESFQoNcmVzdGFydF9jb3VudBgHIAEoBRIcChRtZW1vcnlfY3VycmVudF9ieXRlcxgIIAEoAxIZChFtZW1vcnlfcGVha19ieXRlcxgJIAEoAxIRCglvb21fa2lsbHMYCiABKAMiTAoSUHJvY2Vzc01ldHJpY3NMaXN0EjYKCXByb2Nlc3NlcxgBIAMoCzIjLnN0cmF0ZWd5cGxhdGZvcm0udjEuUHJvY2Vzc01ldHJpY3MizgEKCUhlYXJ0YmVhdBI4CglyZXNvdXJjZXMYASABKAsyJS5zdHJhdGVneXBsYXRmb3JtLnYxLk1hY2hpbmVSZXNvdXJjZXMSNgoJcHJvY2Vzc2VzGAIgAygLMiMuc3RyYXRlZ3lwbGF0Zm9ybS52MS5Qcm9jZXNzTWV0cmljcxIbChNvYnNlcnZlZF9nZW5lcmF0aW9uGAMgASgDEhUKDWFnZW50X3ZlcnNpb24YBCABKAUSGwoTYWdlbnRfYnVpbGRfdmVyc2lvbhgFIAEoCUJNWktnaXRodWIuY29tL2J1bGxpb25iZWFyL3N0cmF0ZWdvbi9nZW4vc3RyYXRlZ3lwbGF0Zm9ybS92MTtzdHJhdGVneXBsYXRmb3JtdjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message strategyplatform.v1.MachineResources
@@ -109,6 +109,25 @@ export type ProcessMetrics = Message<"strategyplatform.v1.ProcessMetrics"> & {
    * @generated from field: int32 restart_count = 7;
    */
   restartCount: number;
+
+  /**
+   * Slot cgroup accounting (payload plus every descendant it left behind).
+   * Zero when the agent has no cgroup root. memory_peak_bytes is 0 on kernels
+   * without memory.peak; oom_kills is memory.events oom_kill.
+   *
+   * @generated from field: int64 memory_current_bytes = 8;
+   */
+  memoryCurrentBytes: bigint;
+
+  /**
+   * @generated from field: int64 memory_peak_bytes = 9;
+   */
+  memoryPeakBytes: bigint;
+
+  /**
+   * @generated from field: int64 oom_kills = 10;
+   */
+  oomKills: bigint;
 };
 
 /**

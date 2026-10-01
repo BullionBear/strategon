@@ -77,6 +77,14 @@ func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentS
 		return
 	}
 
+	// A limit this agent cannot enforce would fail STARTING after the old
+	// process is gone, and rollback reuses the same spec, so it would fail
+	// too. Refuse it while the old process is still running.
+	if err := r.checkLimits(spec); err != nil {
+		send(pb.DeployPhase_DEPLOY_PHASE_FAILED, err, nil)
+		return
+	}
+
 	// Only now do we tear down the old process (download/verify failure keeps
 	// the old process running.
 	send(pb.DeployPhase_DEPLOY_PHASE_DRAINING, nil, nil)
@@ -176,6 +184,15 @@ func (r *Reconciler) applyWorkerEvent(ev workerEvent) {
 // (O(1), no download), marking the failed version bad so reconcile() stops
 // pulling it back up.
 func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategyState) {
+	// cause is why the deploy failed (set from the worker event). Every
+	// failure below keeps it, so "nothing to roll back to" cannot hide it.
+	cause := st.lastError
+	withCause := func(msg string) string {
+		if cause == "" {
+			return msg
+		}
+		return fmt.Sprintf("%s (rollback: %s)", cause, msg)
+	}
 	badVersion := spec.GetArtifact().GetVersion()
 	if st.inflight != nil {
 		badVersion = st.inflight.target.GetVersion()
@@ -192,7 +209,7 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 
 	if st.prevArtifact == nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
-		st.lastError = "no previous version to roll back to"
+		st.lastError = withCause("no previous version to roll back to")
 		st.failedAtGen = r.generation
 		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackImpossible", st.lastError)
 		return
@@ -200,9 +217,9 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 
 	if err := r.deps.Artifacts.SwitchTo(st.strategy, st.prevArtifact.GetVersion()); err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
-		st.lastError = err.Error()
+		st.lastError = withCause(err.Error())
 		st.failedAtGen = r.generation
-		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", st.lastError)
 		return
 	}
 	st.runningArtifact = st.prevArtifact
@@ -210,25 +227,25 @@ func (r *Reconciler) beginRollback(spec *pb.StrategyAssignmentSpec, st *strategy
 
 	if err := r.volumeWriterConflictErr(st.strategy, spec.GetVolumeMounts()); err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
-		st.lastError = err.Error()
+		st.lastError = withCause(err.Error())
 		st.failedAtGen = r.generation
-		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", st.lastError)
 		return
 	}
 	sp, err := r.buildStartSpec(spec, st.prevArtifact)
 	if err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
-		st.lastError = err.Error()
+		st.lastError = withCause(err.Error())
 		st.failedAtGen = r.generation
-		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", st.lastError)
 		return
 	}
 	proc, err := r.deps.Driver.Start(sp, r.now())
 	if err != nil {
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
-		st.lastError = err.Error()
+		st.lastError = withCause(err.Error())
 		st.failedAtGen = r.generation
-		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", err.Error())
+		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "RollbackFailed", st.lastError)
 		return
 	}
 	r.installProcess(spec, st, proc)
@@ -257,6 +274,21 @@ func (r *Reconciler) spawnDrain(st *strategyState, spec *pb.StrategyAssignmentSp
 		// The exit watcher will deliver the exit; handleExit finalizes removal.
 		_ = retire
 	}()
+}
+
+// checkLimits asks the driver whether spec's limits could be applied here.
+func (r *Reconciler) checkLimits(spec *pb.StrategyAssignmentSpec) error {
+	lc, ok := r.deps.Driver.(driver.LimitChecker)
+	if !ok {
+		return nil
+	}
+	l := spec.GetLimits()
+	return lc.CheckLimits(driver.StartSpec{
+		Strategy:      spec.GetStrategy(),
+		CPUMillicores: l.GetCpuMillicores(),
+		MemoryBytes:   l.GetMemoryBytes(),
+		MaxOpenFiles:  l.GetMaxOpenFiles(),
+	})
 }
 
 // gracefulStop runs the shared SIGTERM->grace->SIGKILL sequence.

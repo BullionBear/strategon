@@ -31,6 +31,7 @@ import (
 	"github.com/bullionbear/strategon/internal/clock"
 	"github.com/bullionbear/strategon/internal/mtls"
 	"golang.org/x/net/http2"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func main() {
@@ -41,8 +42,8 @@ func main() {
 	controlURL := flag.String("control-plane", "http://127.0.0.1:8080", "control plane base URL (http for h2c, https for mTLS)")
 	machineID := flag.String("machine-id", "", "machine id (defaults to client cert CN when mTLS is enabled)")
 	base := flag.String("base", "/opt/strategies", "strategy release base directory")
-	cgroupRoot := flag.String("cgroup-root", "", "delegated cgroup v2 root (empty disables confinement)")
-	agentVersion := flag.Int("agent-version", 6, "agent capability version (monotonic)")
+	cgroupRoot := flag.String("cgroup-root", "", "cgroup v2 directory for per-slot cgroups; \"auto\" uses <own cgroup's parent>/strategies (systemd Delegate= + DelegateSubgroup=); empty disables limits")
+	agentVersion := flag.Int("agent-version", 7, "agent capability version (monotonic)")
 	sharedRetention := flag.Int("shared-retention", 3, "shared-file store entries to retain per name (including live)")
 	releaseRetention := flag.Int("release-retention", 3, "release versions to retain per strategy (including current)")
 	metricsListen := flag.String("metrics-listen", "", "optional Prometheus text /metrics listen address (e.g. 127.0.0.1:9101); empty disables")
@@ -89,7 +90,8 @@ func main() {
 	agentClient := strategyplatformv1connect.NewAgentServiceClient(httpClient, *controlURL, connect.WithGRPC())
 	artifacts := artifact.NewManager(*base, artifact.NewResolvingFetcher(artifact.NewCPResolver(agentClient)))
 	artifacts.Logger = logger
-	execDrv := driver.NewExecDriver(*cgroupRoot)
+	cgRoot := prepareCgroupRoot(*cgroupRoot, logger)
+	execDrv := driver.NewExecDriver(cgRoot)
 	rec := reconciler.New(reconciler.Deps{
 		Driver:           driver.NewRouter(execDrv, driver.NewOCIDriver(execDrv)),
 		Artifacts:        artifacts,
@@ -117,6 +119,20 @@ func main() {
 		return out
 	})
 	collector.Logger = logger
+	collector.CgroupRoot = cgRoot
+	collector.OnOOMKill = func(strategy string, total, delta int64) {
+		msg := &pb.AgentMessage{Payload: &pb.AgentMessage_Event{Event: &pb.Event{
+			Timestamp: timestamppb.Now(),
+			Severity:  pb.EventSeverity_EVENT_SEVERITY_WARNING,
+			Strategy:  strategy,
+			Reason:    "OOMKilled",
+			Message:   fmt.Sprintf("%d process(es) in the slot OOM-killed (memory.max reached; total %d)", delta, total),
+		}}}
+		select {
+		case out <- msg:
+		case <-ctx.Done():
+		}
+	}
 	go collector.Run(ctx)
 
 	if *metricsListen != "" {
@@ -134,7 +150,7 @@ func main() {
 			Hostname:          hostname,
 			AgentVersion:      int32(*agentVersion),
 			AgentBuildVersion: buildinfo.Version,
-			Spec:              hostSpec(*region, *zone),
+			Spec:              hostSpec(*region, *zone, cgRoot != ""),
 		},
 		Client:      agentClient,
 		Out:         out,
@@ -198,9 +214,29 @@ func h2cTransport() *http2.Transport {
 // hostSpec fills the machine spec from the host and overlays the operator's
 // placement labels. Region and zone are policy, not something the host can
 // discover, so they arrive as flags rather than from /proc.
-func hostSpec(region, zone string) *pb.MachineSpec {
+func hostSpec(region, zone string, cgroupLimits bool) *pb.MachineSpec {
 	spec := telemetry.MachineSpecFromHost()
 	spec.Region = strings.TrimSpace(region)
 	spec.Zone = strings.TrimSpace(zone)
+	spec.CgroupLimitsAvailable = cgroupLimits
 	return spec
+}
+
+// prepareCgroupRoot resolves and sets up --cgroup-root. On failure the agent
+// keeps running without a root: Register then omits cgroup_limits_available,
+// so the control plane refuses limits instead of the agent ignoring them.
+func prepareCgroupRoot(flagVal string, logger *slog.Logger) string {
+	if flagVal == "" {
+		return ""
+	}
+	root, err := driver.ResolveCgroupRoot(flagVal)
+	if err == nil {
+		err = driver.SetupCgroupRoot(root)
+	}
+	if err != nil {
+		logger.Error("cgroup root unavailable; resource limits disabled", "cgroup_root", flagVal, "err", err)
+		return ""
+	}
+	logger.Info("cgroup root ready", "cgroup_root", root)
+	return root
 }

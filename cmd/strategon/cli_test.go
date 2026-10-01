@@ -562,6 +562,48 @@ spec:
 	}
 }
 
+// template.limits must reach the control plane: dropping it here would make
+// a v6 machine accept the set and run it unconfined.
+func TestApplyAssignmentSetTemplateLimitsYAML(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	ctx := context.Background()
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "bin", Version: "v1", Digest: "sha256:bin", Uri: "file:///bin"},
+	}))
+	body := `
+kind: AssignmentSet
+metadata:
+  name: capped
+spec:
+  strategy: bin
+  artifactVersion: v1
+  template:
+    limits:
+      memoryBytes: 268435456
+      cpu_millicores: 500
+      maxOpenFiles: 4096
+  members:
+    - machine: m1
+      name: bin-m1
+`
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 6, Spec: &pb.MachineSpec{CgroupLimitsAvailable: true}})
+	if _, err := applyReader(ctx, client, strings.NewReader(body)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("v6 machine must refuse template.limits, got %v", err)
+	}
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: &pb.MachineSpec{CgroupLimitsAvailable: true}})
+	if _, err := applyReader(ctx, client, strings.NewReader(body)); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := st.GetAssignmentSet("capped")
+	if !ok {
+		t.Fatal("set not persisted")
+	}
+	l := got.GetSpec().GetTemplate().GetLimits()
+	if l.GetMemoryBytes() != 256<<20 || l.GetCpuMillicores() != 500 || l.GetMaxOpenFiles() != 4096 {
+		t.Fatalf("persisted template.limits = %v", l)
+	}
+}
+
 func TestApplyExampleNatsSingleHostManifest(t *testing.T) {
 	data, err := os.ReadFile("../../examples/nats/single-host.yaml")
 	if err != nil {

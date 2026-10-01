@@ -7,6 +7,32 @@ import (
 )
 
 func TestAgentUnitKillModeProcess(t *testing.T) {
+	unit := agentUnit(t)
+	if !strings.Contains(unit, "KillMode=process") {
+		t.Fatal("unit must set KillMode=process")
+	}
+	if strings.Contains(unit, "PrivateTmp") {
+		t.Fatal("unit must not set PrivateTmp")
+	}
+	if !strings.Contains(unit, "control-group") {
+		t.Fatal("unit comment must warn that the first apply still restarts under control-group")
+	}
+}
+
+// TestAgentUnitDelegatesCgroup pins the pieces --cgroup-root auto relies on:
+// a delegated unit cgroup with memory and cpu, and the agent in a subgroup so
+// the unit cgroup can enable controllers for strategies/.
+func TestAgentUnitDelegatesCgroup(t *testing.T) {
+	unit := agentUnit(t)
+	for _, want := range []string{"Delegate=memory cpu pids", "DelegateSubgroup=agent", "--cgroup-root auto"} {
+		if !strings.Contains(unit, want) {
+			t.Fatalf("unit must contain %q", want)
+		}
+	}
+}
+
+func agentUnit(t *testing.T) string {
+	t.Helper()
 	b, err := os.ReadFile("install-agent.sh")
 	if err != nil {
 		t.Fatal(err)
@@ -22,14 +48,5 @@ func TestAgentUnitKillModeProcess(t *testing.T) {
 	if begin < 0 || end < 0 || end <= begin {
 		t.Fatal("unit heredoc not found")
 	}
-	unit := rest[begin:end]
-	if !strings.Contains(unit, "KillMode=process") {
-		t.Fatal("unit must set KillMode=process")
-	}
-	if strings.Contains(unit, "PrivateTmp") {
-		t.Fatal("unit must not set PrivateTmp")
-	}
-	if !strings.Contains(unit, "control-group") {
-		t.Fatal("unit comment must warn that the first apply still restarts under control-group")
-	}
+	return rest[begin:end]
 }

@@ -56,6 +56,18 @@ func (c *Collector) MetricsHandler(machineID string) http.Handler {
 				fmt.Fprintf(&b, "strategon_process_restart_total{machine=%q,strategy=%q} %d\n",
 					m, p.GetStrategy(), p.GetRestartCount())
 			}
+			fmt.Fprintf(&b, "# HELP strategon_slot_memory_bytes Slot cgroup memory.current (payload and descendants).\n")
+			fmt.Fprintf(&b, "# TYPE strategon_slot_memory_bytes gauge\n")
+			for _, p := range procs {
+				fmt.Fprintf(&b, "strategon_slot_memory_bytes{machine=%q,strategy=%q} %d\n",
+					m, p.GetStrategy(), p.GetMemoryCurrentBytes())
+			}
+			fmt.Fprintf(&b, "# HELP strategon_slot_oom_kills_total Slot cgroup memory.events oom_kill.\n")
+			fmt.Fprintf(&b, "# TYPE strategon_slot_oom_kills_total counter\n")
+			for _, p := range procs {
+				fmt.Fprintf(&b, "strategon_slot_oom_kills_total{machine=%q,strategy=%q} %d\n",
+					m, p.GetStrategy(), p.GetOomKills())
+			}
 			fmt.Fprintf(&b, "# HELP strategon_process_alive Strategy process liveness (1=alive).\n")
 			fmt.Fprintf(&b, "# TYPE strategon_process_alive gauge\n")
 			for _, p := range procs {

@@ -56,6 +56,7 @@ type memberTmplYAML struct {
 	CaptureStdioAlt bool              `yaml:"capture_stdio"`
 	OCIHostPID      bool              `yaml:"ociHostPid"`
 	OCIHostPIDAlt   bool              `yaml:"oci_host_pid"`
+	Limits          *limitsYAML       `yaml:"limits"`
 }
 
 type readinessYAML struct {
@@ -257,6 +258,7 @@ func applyAssignmentSet(ctx context.Context, client strategyplatformv1connect.Co
 		VolumeMounts: protoMounts(spec.Template.VolumeMounts),
 		CaptureStdio: spec.Template.CaptureStdio || spec.Template.CaptureStdioAlt,
 		OciHostPid:   spec.Template.OCIHostPID || spec.Template.OCIHostPIDAlt,
+		Limits:       spec.Template.Limits.proto(),
 	}
 	if spec.Template.Readiness.Endpoint != "" {
 		tmpl.Readiness = &pb.ReadinessProbe{Endpoint: spec.Template.Readiness.Endpoint}
@@ -395,11 +397,12 @@ func (s assignmentSpecYAML) schedules() []*pb.CronSchedule {
 	return out
 }
 
-func (s assignmentSpecYAML) limits() *pb.ResourceLimits {
-	if s.Limits == nil {
+func (s assignmentSpecYAML) limits() *pb.ResourceLimits { return s.Limits.proto() }
+
+func (l *limitsYAML) proto() *pb.ResourceLimits {
+	if l == nil {
 		return nil
 	}
-	l := s.Limits
 	return &pb.ResourceLimits{
 		CpuMillicores: pickInt64(l.CPUMillicores, l.CPUMillicoresAlt),
 		MemoryBytes:   pickInt64(l.MemoryBytes, l.MemoryBytesAlt),

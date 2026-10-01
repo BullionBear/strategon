@@ -6,11 +6,13 @@ package telemetry
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/agent/driver"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -33,9 +35,17 @@ type Collector struct {
 	Targets  TargetsFunc
 	Logger   *slog.Logger
 
+	// CgroupRoot is the agent's prepared slot root; empty skips cgroup
+	// accounting. OnOOMKill, if set, is called from the sampling goroutine
+	// when a slot's oom_kill counter rises between samples.
+	CgroupRoot string
+	OnOOMKill  func(strategy string, total, delta int64)
+
 	mu       sync.Mutex
 	prevCPU  *hostCPUSample
 	prevProc map[string]procCPUSample // strategy -> last cpu sample
+	prevOOM  map[string]int64         // slot -> last oom_kill count
+	oomBased bool                     // prevOOM seeded from every existing slot
 
 	snapshot atomic.Pointer[Snapshot]
 }
@@ -53,6 +63,7 @@ func New(targets TargetsFunc) *Collector {
 		Interval: 10 * time.Second,
 		Targets:  targets,
 		prevProc: map[string]procCPUSample{},
+		prevOOM:  map[string]int64{},
 	}
 }
 
@@ -169,10 +180,57 @@ func (c *Collector) sample() {
 			delete(c.prevProc, strat)
 		}
 	}
+	c.seedOOMBaseline()
+	for _, pm := range procs {
+		c.sampleCgroup(pm)
+	}
 
 	c.snapshot.Store(&Snapshot{
 		Resources: res,
 		Processes: procs,
 		At:        now,
 	})
+}
+
+// seedOOMBaseline records oom_kill for every slot cgroup that exists when the
+// collector first runs, whether or not the reconciler has published it as a
+// target yet. Those counts may predate this agent (adopted payloads) and were
+// already reported. Any slot first seen later starts from 0, so an OOM in its
+// first sampling interval is reported too.
+func (c *Collector) seedOOMBaseline() {
+	if c.oomBased || c.CgroupRoot == "" {
+		return
+	}
+	c.oomBased = true
+	entries, err := os.ReadDir(c.CgroupRoot)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, _, kills, ok := driver.SlotCgroupStats(c.CgroupRoot, e.Name()); ok {
+			c.prevOOM[e.Name()] = kills
+		}
+	}
+}
+
+// sampleCgroup fills slot accounting. The slot outlives its payload (setsid
+// descendants stay in it), so it is read whether or not the target is alive.
+// prevOOM is kept for slots that stop being targets: the cgroup and its
+// counter survive, and a re-added slot must not report old kills again.
+func (c *Collector) sampleCgroup(pm *pb.ProcessMetrics) {
+	cur, peak, kills, ok := driver.SlotCgroupStats(c.CgroupRoot, pm.GetStrategy())
+	if !ok {
+		return
+	}
+	pm.MemoryCurrentBytes = cur
+	pm.MemoryPeakBytes = peak
+	pm.OomKills = kills
+	prev := c.prevOOM[pm.GetStrategy()]
+	c.prevOOM[pm.GetStrategy()] = kills
+	if kills > prev && c.OnOOMKill != nil {
+		c.OnOOMKill(pm.GetStrategy(), kills, kills-prev)
+	}
 }

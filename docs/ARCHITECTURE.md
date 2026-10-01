@@ -368,6 +368,76 @@ members take the flag only from `MemberTemplate`; `SetStdioCapture` is
 rejected on reserved slots. Write errors degrade to discard so a full
 disk cannot stall the payload. Requires `agent_version >= 4`.
 
+### Resource limits
+
+`ResourceLimits` bound a **slot**, not one process. With
+`--cgroup-root auto` (the `install-agent.sh` unit) the agent runs in
+`<unit>/agent` (`DelegateSubgroup=agent`, systemd >= 254) and puts every
+payload, limited or not, in `<unit>/strategies/<slot>` via
+`CLONE_INTO_CGROUP`. At startup it enables `memory` and `cpu` (and
+`pids`, best-effort) in `<unit>` and `strategies/`, moves any process
+still sitting in `<unit>` (payloads from a pre-subgroup agent) into
+`strategies/_unassigned`, then clones a probe child into a limited
+cgroup. Only if all of that succeeds does Register carry
+`cgroup_limits_available`.
+
+- `memory_bytes` → slot `memory.max`. It is the budget for the payload
+  **and** every descendant it leaves behind (`oci_host_pid` setsid
+  workers stay in the slot across releases). `memory.oom.group` stays 0:
+  the kernel kills one process in the slot, not the slot. Swap is not
+  limited; a host with swap pages out before it OOM-kills.
+- `cpu_millicores` → `cpu.max` as CFS quota over a 100 ms period.
+  Throttling stalls the whole slot for the rest of the period, so leave
+  it unset for latency-sensitive payloads.
+- `max_open_files` → `RLIMIT_NOFILE`, soft and hard, set by the agent's
+  re-exec helper (`--rlimit-nofile` before `--oci-init` / `--stdio-tee`
+  / `--exec-payload`) before the payload's first instruction. It must not
+  exceed the agent's own hard limit (`LimitNOFILE=`).
+- A limit removed from the spec writes `max` on the next start.
+- Apply rejects (`FailedPrecondition`) memory/cpu limits on a machine
+  without `cgroup_limits_available`, and any limit on `agent_version < 7`.
+  The agent fails a start whose limits it cannot write instead of running
+  it unconfined (`StartFailed`).
+- Heartbeat `ProcessMetrics` carries the slot's `memory.current`,
+  `memory.peak` (kernel >= 5.19) and `memory.events` `oom_kill`; a rise
+  in `oom_kill` emits an `OOMKilled` event. The payload itself cannot see
+  this (no cgroupfs in OCI): an OOM-killed child looks like a bare
+  SIGKILL to its parent.
+- Strategon never removes a slot cgroup; a populated one cannot be
+  removed anyway, and an empty one costs nothing.
+
+Limits apply at start. Changing them on a running assignment takes
+effect at its next start (deploy, restart, crash restart). Deploy checks
+that the agent can enforce the new limits before it drains the old
+process; a start that still fails retries on the crash backoff (1s
+doubling to 64s) and emits `StartFailed` once per distinct error.
+
+#### Reverting the agent unit
+
+Reinstalling a unit without `DelegateSubgroup=` (an older
+`install-agent.sh`, or a hand edit) while payloads run leaves the agent
+unable to start: `status=219/CGROUP`, restarting forever. systemd places
+the main PID in `<unit>` itself, which still enables controllers for
+`strategies/` and `agent/`, and a cgroup that delegates controllers
+cannot hold processes. `KillMode=process` means stopping the service
+does not empty it. Recover without killing payloads by disabling the
+controllers bottom-up, then restart:
+
+```bash
+U=/sys/fs/cgroup/system.slice/strategon-agent.service
+for c in memory cpu pids; do echo "-$c" | sudo tee $U/strategies/cgroup.subtree_control; done
+for c in memory cpu pids; do echo "-$c" | sudo tee $U/cgroup.subtree_control; done
+sudo systemctl reset-failed strategon-agent
+sudo systemctl restart strategon-agent
+```
+
+Payloads stay in their slot cgroups and the old agent adopts them by pid,
+but with the controllers off their `memory.max` / `cpu.max` no longer
+apply. Reinstalling the current unit turns them back on at the next agent
+start. Downgrading only the binary under the current unit does not hit this: an
+old agent runs in `<unit>/agent`, cannot create the relative path `auto`,
+and starts payloads unconfined in its own cgroup.
+
 ### Deploy phases
 
 Happy path on the agent:

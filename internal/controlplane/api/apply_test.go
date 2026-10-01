@@ -646,6 +646,83 @@ func TestApplyAssignmentSetOCIHostPIDGate(t *testing.T) {
 	}
 }
 
+func TestApplyResourceLimitsGate(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:bin", Uri: "file:///hello"},
+	}))
+	apply := func(l *pb.ResourceLimits) error {
+		_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+			MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1", Limits: l,
+		}))
+		return err
+	}
+	mem := &pb.ResourceLimits{MemoryBytes: 256 << 20}
+	nofile := &pb.ResourceLimits{MaxOpenFiles: 4096}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 6, Spec: &pb.MachineSpec{CgroupLimitsAvailable: true}})
+	if err := apply(nofile); connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "agent_version") {
+		t.Fatalf("old agent ignores limits; want version gate, got %v", err)
+	}
+	if err := apply(nil); err != nil {
+		t.Fatalf("no limits must not need the capability: %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: &pb.MachineSpec{}})
+	if err := apply(mem); connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "cgroup_limits") {
+		t.Fatalf("want cgroup gate, got %v", err)
+	}
+	if err := apply(&pb.ResourceLimits{CpuMillicores: 500}); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("cpu needs the cgroup too, got %v", err)
+	}
+	if err := apply(nofile); err != nil {
+		t.Fatalf("max_open_files needs no cgroup: %v", err)
+	}
+	if err := apply(&pb.ResourceLimits{MemoryBytes: -1}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("want negative rejected, got %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7})
+	if err := apply(mem); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("missing spec is no evidence of a cgroup root, got %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: &pb.MachineSpec{CgroupLimitsAvailable: true}})
+	if err := apply(mem); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["hello"].GetLimits().GetMemoryBytes() != 256<<20 {
+		t.Fatal("limits not stored")
+	}
+}
+
+func TestApplyAssignmentSetResourceLimitsGate(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "bin", Version: "v1", Digest: "sha256:bin", Uri: "file:///bin"},
+	}))
+	req := &pb.ApplyAssignmentSetRequest{Set: &pb.AssignmentSet{
+		Metadata: &pb.ObjectMeta{Name: "planes"},
+		Spec: &pb.AssignmentSetSpec{
+			Strategy:        "bin",
+			ArtifactVersion: "v1",
+			Template:        &pb.MemberTemplate{Limits: &pb.ResourceLimits{MemoryBytes: 1 << 30}},
+			Members:         []*pb.SetMember{{Machine: "m1", Name: "p1"}},
+		},
+	}}
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: &pb.MachineSpec{}})
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(req)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("want cgroup gate, got %v", err)
+	}
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: &pb.MachineSpec{CgroupLimitsAvailable: true}})
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(req)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSetStdioCaptureRejectsReservedSlot(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
