@@ -44,7 +44,7 @@ func ociSysProcAttr(uid, gid int, hostPID bool) *syscall.SysProcAttr {
 // hosts where re-execing /proc/self/exe is refused, e.g. an Ubuntu 24.04 kernel
 // with apparmor_restrict_unprivileged_userns=1.
 func UserNSAvailable() bool {
-	cmd := probeCommand()
+	cmd := probeCommand(flagOCIProbe)
 	cmd.SysProcAttr = ociSysProcAttr(0, 0, false)
 	return cmd.Run() == nil
 }
@@ -54,7 +54,7 @@ func UserNSAvailable() bool {
 // /proc/self/exe, which performs the bind inside its own mount namespace.
 // Clone-without-NEWPID alone would pass on a kernel that then refuses the bind.
 func HostPIDAvailable() bool {
-	cmd := exec.Command("/proc/self/exe", flagOCIProbeHostPID)
+	cmd := probeCommand(flagOCIProbeHostPID)
 	cmd.SysProcAttr = ociSysProcAttr(0, 0, true)
 	return cmd.Run() == nil
 }
@@ -77,11 +77,11 @@ func runHostPIDProbe() int {
 	return 0
 }
 
-// probeCommand re-execs this binary; MaybeRunOCIHelper answers --oci-probe by
-// exiting 0 before any other startup work. A test binary that probes must call
-// MaybeRunOCIHelper from TestMain for the same reason.
-func probeCommand() *exec.Cmd {
-	return exec.Command("/proc/self/exe", flagOCIProbe)
+// probeCommand re-execs this binary with a probe flag; MaybeRunOCIHelper
+// answers it before any other startup work. A test binary that probes must
+// call MaybeRunOCIHelper from TestMain for the same reason.
+func probeCommand(flag string) *exec.Cmd {
+	return exec.Command("/proc/self/exe", flag)
 }
 
 // MaybeRunOCIHelper intercepts --oci-init / --oci-probe / --stdio-tee before

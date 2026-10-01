@@ -89,6 +89,10 @@ type workerEvent struct {
 	proc     *driver.Process // STARTING/HEALTH_CHECKING success brings back the new handle
 	artifact *pb.ArtifactRef
 	config   *pb.ArtifactRef
+	// captureStdio / ociHostPid are the modes of the spec the worker started
+	// proc from, which can differ from r.desired by the time the event lands.
+	captureStdio bool
+	ociHostPid   bool
 }
 
 // healthResult is fed back from an async readiness probe goroutine.

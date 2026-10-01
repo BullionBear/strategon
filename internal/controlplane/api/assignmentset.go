@@ -145,12 +145,8 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 			}
 		}
 		if spec.GetTemplate().GetOciHostPid() {
-			if err := requireAgentCapability(srv.GetMachine(), rec, MinOCIHostPIDAgentVersion, "oci host pid"); err != nil {
+			if err := requireOCIHostPIDMachine(srv.GetMachine(), rec); err != nil {
 				return nil, err
-			}
-			if rec.Register != nil && rec.Register.GetSpec() != nil && !rec.Register.GetSpec().GetOciHostPidAvailable() {
-				return nil, connect.NewError(connect.CodeFailedPrecondition,
-					fmt.Errorf("machine %q does not advertise oci_host_pid (host /proc bind failed)", srv.GetMachine()))
 			}
 		}
 		if _, dup := seenName[srv.GetName()]; dup {

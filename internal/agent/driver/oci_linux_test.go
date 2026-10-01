@@ -105,7 +105,7 @@ func TestOCIDriverRejectsEmptyArgv(t *testing.T) {
 // of /proc/self/exe) reports OCI-capable on hosts where Start is refused — the
 // control plane then admits a deploy that dies at launch.
 func TestUserNSProbeMatchesStart(t *testing.T) {
-	cmd := probeCommand()
+	cmd := probeCommand(flagOCIProbe)
 	if cmd.Path != "/proc/self/exe" {
 		t.Fatalf("probe execs %q, want /proc/self/exe like Start", cmd.Path)
 	}

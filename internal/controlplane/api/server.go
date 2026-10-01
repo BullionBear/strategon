@@ -1041,18 +1041,24 @@ func applyDriverFromArtifact(spec *pb.StrategyAssignmentSpec, art *pb.ArtifactRe
 	return nil
 }
 
-// requireOCIHostPID admits oci_host_pid only for an OCI image, on an agent
-// that understands the field, and — when Register carried a spec — on a host
-// whose probe actually bound the host /proc. A missing spec is not a probe
-// failure; the version gate is what stops an old agent from ignoring the field.
+// requireOCIHostPID admits oci_host_pid only for an OCI image on a machine
+// that passes requireOCIHostPIDMachine.
 func requireOCIHostPID(machineID string, rec *store.MachineRecord, spec *pb.StrategyAssignmentSpec) error {
 	if spec.GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_OCI {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("oci_host_pid requires an OCI image"))
 	}
+	return requireOCIHostPIDMachine(machineID, rec)
+}
+
+// requireOCIHostPIDMachine admits oci_host_pid on an agent that understands
+// the field and — when Register carried a spec — on a host whose probe
+// actually bound the host /proc. A missing spec is not a probe failure; the
+// version gate is what stops an old agent from ignoring the field.
+func requireOCIHostPIDMachine(machineID string, rec *store.MachineRecord) error {
 	if err := requireAgentCapability(machineID, rec, MinOCIHostPIDAgentVersion, "oci host pid"); err != nil {
 		return err
 	}
-	if rec == nil || rec.Register == nil || rec.Register.GetSpec() == nil {
+	if rec.Register == nil || rec.Register.GetSpec() == nil {
 		return nil
 	}
 	if !rec.Register.GetSpec().GetOciHostPidAvailable() {

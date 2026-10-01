@@ -68,26 +68,18 @@ func (m *Manager) GCReleases(strategy string, keep []string) error {
 			keepSet[k] = struct{}{}
 		}
 	}
-	users := m.releaseUserLookup()
 	type ver struct {
 		name string
 		mod  time.Time
 	}
 	var extra []ver
+	keptOnDisk := 0
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
 		}
 		if _, ok := keepSet[e.Name()]; ok {
-			continue
-		}
-		rootfs := filepath.Join(root, e.Name(), "rootfs")
-		if pids := users(rootfs); len(pids) > 0 {
-			// In use counts against neither the delete set nor the retention
-			// budget. The next GC reconsiders it after the last process exits.
-			if m.Logger != nil {
-				m.Logger.Info("release in use", "strategy", strategy, "version", e.Name(), "pids", pids)
-			}
+			keptOnDisk++
 			continue
 		}
 		info, err := e.Info()
@@ -99,6 +91,30 @@ func (m *Manager) GCReleases(strategy string, keep []string) error {
 			mod:  releaseInstalledAt(filepath.Join(root, e.Name()), info),
 		})
 	}
+	// Retention includes keep+extra on disk. A keep entry that is not on disk
+	// (a desired version still downloading) does not consume the budget.
+	budget := m.retention() - keptOnDisk
+	if budget < 0 {
+		budget = 0
+	}
+	if len(extra) <= budget {
+		// Dropping in-use releases only shrinks extra; skip the /proc walk.
+		return nil
+	}
+	// In use counts against neither the delete set nor the retention budget.
+	// The next GC reconsiders it after the last process exits.
+	users := m.releaseUserLookup()
+	free := extra[:0]
+	for _, v := range extra {
+		if pids := users(filepath.Join(root, v.name, "rootfs")); len(pids) > 0 {
+			if m.Logger != nil {
+				m.Logger.Info("release in use", "strategy", strategy, "version", v.name, "pids", pids)
+			}
+			continue
+		}
+		free = append(free, v)
+	}
+	extra = free
 	// Stable with an explicit tiebreak: several releases can share a timestamp
 	// (same mtime tick), and an unstable sort would then drop an arbitrary one.
 	sort.SliceStable(extra, func(i, j int) bool {
@@ -107,11 +123,6 @@ func (m *Manager) GCReleases(strategy string, keep []string) error {
 		}
 		return extra[i].mod.After(extra[j].mod)
 	})
-	// Retention includes keep+extra. Drop oldest extras beyond the budget.
-	budget := m.retention() - len(keepSet)
-	if budget < 0 {
-		budget = 0
-	}
 	if len(extra) <= budget {
 		return nil
 	}
@@ -124,7 +135,8 @@ func (m *Manager) GCReleases(strategy string, keep []string) error {
 }
 
 // releaseUserLookup reports pids whose root is the given rootfs directory.
-// The /proc walk happens once per GC, not once per release.
+// The /proc walk happens at most once per GC, not once per release, and only
+// when GC has more candidates than budget.
 func (m *Manager) releaseUserLookup() func(rootfs string) []int {
 	if m.releaseUsers != nil {
 		return m.releaseUsers

@@ -46,7 +46,8 @@ func (r *Reconciler) runDeploy(ctx context.Context, spec *pb.StrategyAssignmentS
 	cfg := spec.GetConfig()
 	send := func(p pb.DeployPhase, err error, proc *driver.Process) {
 		select {
-		case r.workerCh <- workerEvent{strategy: strat, phase: p, err: err, proc: proc, artifact: art, config: cfg}:
+		case r.workerCh <- workerEvent{strategy: strat, phase: p, err: err, proc: proc, artifact: art, config: cfg,
+			captureStdio: spec.GetCaptureStdio(), ociHostPid: spec.GetOciHostPid()}:
 		case <-ctx.Done():
 		}
 	}
@@ -141,6 +142,11 @@ func (r *Reconciler) applyWorkerEvent(ev workerEvent) {
 			return
 		}
 		r.installProcess(spec, st, ev.proc)
+		// installProcess records the modes from the current desired spec, but
+		// this process was started from the spec runDeploy captured. Record
+		// what it actually runs with so a flip during the deploy still drains.
+		st.captureStdio = ev.captureStdio
+		st.ociHostPid = ev.ociHostPid
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTH_CHECKING
 		st.healthDeadline = r.now().Add(healthWindow(spec))
 		st.backoff.Reset()
