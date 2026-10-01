@@ -239,6 +239,41 @@ spec:
 	}
 }
 
+func TestApplyOCIHostPIDYAML(t *testing.T) {
+	client, st, _ := startCLIAPI(t)
+	ctx := context.Background()
+	st.UpsertMachine(&pb.Register{
+		MachineId: "m1", AgentVersion: 6,
+		Spec: &pb.MachineSpec{OciHostPidAvailable: true},
+	})
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "img", Version: "v1", Digest: "sha256:img", Uri: "file:///img.tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		},
+	}))
+	p := filepath.Join(t.TempDir(), "hostpid.yaml")
+	body := []byte(`apiVersion: strategon/v1
+kind: StrategyAssignment
+metadata:
+  name: img
+spec:
+  machineId: m1
+  artifactVersion: v1
+  oci_host_pid: true
+`)
+	if err := os.WriteFile(p, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := applyFile(ctx, client, p); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if !rec.Assignments["img"].GetOciHostPid() {
+		t.Fatal("oci_host_pid not applied")
+	}
+}
+
 func TestGetAndWaitAssignmentSet(t *testing.T) {
 	client, st, _ := startCLIAPI(t)
 	seedNATSExample(t, client, st)

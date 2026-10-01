@@ -54,6 +54,8 @@ type memberTmplYAML struct {
 	VolumeMounts    []volumeMountYAML `yaml:"volumeMounts"`
 	CaptureStdio    bool              `yaml:"captureStdio"`
 	CaptureStdioAlt bool              `yaml:"capture_stdio"`
+	OCIHostPID      bool              `yaml:"ociHostPid"`
+	OCIHostPIDAlt   bool              `yaml:"oci_host_pid"`
 }
 
 type readinessYAML struct {
@@ -113,6 +115,9 @@ type assignmentSpecYAML struct {
 	// (same as stopped — not carried forward like empty configVersion).
 	CaptureStdio    bool `yaml:"captureStdio"`
 	CaptureStdioAlt bool `yaml:"capture_stdio"`
+	// Apply is authoritative: omit / false turns host-PID OCI mode off.
+	OCIHostPID    bool `yaml:"ociHostPid"`
+	OCIHostPIDAlt bool `yaml:"oci_host_pid"`
 }
 
 type volumeMountYAML struct {
@@ -251,6 +256,7 @@ func applyAssignmentSet(ctx context.Context, client strategyplatformv1connect.Co
 		Env:          spec.Template.Env,
 		VolumeMounts: protoMounts(spec.Template.VolumeMounts),
 		CaptureStdio: spec.Template.CaptureStdio || spec.Template.CaptureStdioAlt,
+		OciHostPid:   spec.Template.OCIHostPID || spec.Template.OCIHostPIDAlt,
 	}
 	if spec.Template.Readiness.Endpoint != "" {
 		tmpl.Readiness = &pb.ReadinessProbe{Endpoint: spec.Template.Readiness.Endpoint}
@@ -336,6 +342,7 @@ func applyAssignment(ctx context.Context, client strategyplatformv1connect.Contr
 		Readiness:       spec.readiness(),
 		VolumeMounts:    protoMounts(spec.VolumeMounts),
 		CaptureStdio:    spec.CaptureStdio || spec.CaptureStdioAlt,
+		OciHostPid:      spec.OCIHostPID || spec.OCIHostPIDAlt,
 	}
 	resp, err := client.ApplyAssignment(ctx, connect.NewRequest(req))
 	if err != nil {

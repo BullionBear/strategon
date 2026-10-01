@@ -15,6 +15,10 @@ message MachineSpec {
   string region = 6;
   string zone = 7;
   repeated ExecutionDriver supported_drivers = 8; // drivers this machine supports
+  // True when this agent probed a host-PID OCI start (no CLONE_NEWPID, recursive
+  // bind of the host /proc) and the kernel accepted it. Independent of
+  // supported_drivers: host PID is a mode of OCI, not a driver.
+  bool oci_host_pid_available = 9;
 }
 
 // EnrollRequest is a one-time credential exchange over the bootstrap channel

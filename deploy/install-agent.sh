@@ -212,8 +212,17 @@ RestartSec=5s
 # processes this agent spawns, which is configured separately.
 # OCI (rootless userns) is compatible with NoNewPrivileges and a single-UID
 # map; RestrictNamespaces= would block it, and newuidmap is not used.
+#
+# KillMode=process stops only the agent main PID. Payloads stay in this
+# cgroup and the next agent adopts them. This unit has no private /tmp:
+# an EXEC payload that outlives the agent would otherwise lose it when the
+# unit stops (OCI mounts its own tmpfs and is unaffected).
+#
+# The first install of this unit still restarts under the previous
+# KillMode (control-group), because the script restarts whenever the unit
+# hash changes. Apply it when the machine's strategies can be stopped.
 NoNewPrivileges=true
-PrivateTmp=true
+KillMode=process
 ProtectSystem=full
 ProtectHome=true
 

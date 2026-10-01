@@ -79,18 +79,30 @@ func applyRootfs(ia InitArgs) (int, error) {
 		}
 	}
 
-	// procfs must be mounted before pivot_root, while the host's /proc is
-	// still in this mount namespace. The kernel's mount_too_revealing() only
-	// lets an unprivileged user namespace mount proc when a fully visible
-	// procfs already exists to compare against; detaching the old root below
-	// removes the last one, so mounting afterwards is always EPERM.
+	// proc must be mounted before pivot_root, while the host's /proc is still
+	// in this mount namespace. The kernel's mount_too_revealing() only lets an
+	// unprivileged user namespace mount proc when a fully visible procfs
+	// already exists to compare against; detaching the old root below removes
+	// the last one, so mounting afterwards is always EPERM.
+	//
+	// Default mode mounts a fresh procfs for the new PID namespace.
 	// MS_NOSUID|MS_NODEV|MS_NOEXEC matches the flags the host mount is locked
 	// with — a laxer new mount fails the same check.
+	//
+	// Host-PID mode has no PID namespace of its own, and an unprivileged user
+	// namespace cannot mount a fresh procfs for a PID namespace it does not
+	// own. Recursively bind the host /proc instead. A non-recursive bind of a
+	// tree with locked submounts is refused, hence MS_REC. The payload then
+	// sees the host's process list.
 	procTarget := filepath.Join(rootfs, "proc")
 	if err := os.MkdirAll(procTarget, 0o755); err != nil {
 		return 1, err
 	}
-	if err := unix.Mount("proc", procTarget, "proc",
+	if ia.HostPID {
+		if err := unix.Mount("/proc", procTarget, "", unix.MS_BIND|unix.MS_REC, ""); err != nil {
+			return 1, fmt.Errorf("rbind proc: %w", err)
+		}
+	} else if err := unix.Mount("proc", procTarget, "proc",
 		unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
 		return 1, fmt.Errorf("mount proc: %w", err)
 	}

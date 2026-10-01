@@ -71,6 +71,9 @@ message StrategyView {
   repeated VolumeMount volume_mounts = 23;
   // Desired payload stdio capture from StrategyAssignmentSpec.capture_stdio.
   bool capture_stdio = 24;
+  // Desired host-PID OCI mode from StrategyAssignmentSpec.oci_host_pid.
+  // Echo of desired state, not of the running process.
+  bool oci_host_pid = 25;
 }
 
 message ListMachinesRequest {
@@ -141,6 +144,9 @@ message ApplyAssignmentRequest {
   repeated VolumeMount volume_mounts = 14;
   // Apply is authoritative: omit / false turns capture off.
   bool capture_stdio = 15;
+  // Apply is authoritative: omit / false turns host-PID OCI mode off.
+  // Requires an OCI artifact, agent_version >= 6, and a successful host-pid probe.
+  bool oci_host_pid = 16;
 }
 
 message ApplyAssignmentResponse {

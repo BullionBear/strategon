@@ -136,7 +136,9 @@ browser over the existing agent-initiated `Connect` bidi stream.
   browse timeout 30s; download timeout 5m; chunk size 64 KiB.
 - Capability gate: slot browse `agent_version >= 2`; volume browse
   `agent_version >= 3`; payload stdio capture `agent_version >= 4`;
-  slot inventory + `ReapStrategies` `agent_version >= 5`.
+  slot inventory + `ReapStrategies` `agent_version >= 5`;
+  host-PID OCI (`oci_host_pid`) `agent_version >= 6` and
+  `MachineSpec.oci_host_pid_available`.
   Older agents Nack unknown payloads.
 - CLI: `strategon files ls|get` and `strategon logs MACHINE STRATEGY`
   wrap BrowseDir / DownloadFiles. `.stdio/payload.log` is under the
@@ -335,8 +337,22 @@ default effect and **will** stop it. Rootfs is read-only after start
 (undeclared writes are EROFS); `/tmp` is tmpfs; no `/sys/fs/cgroup` in
 the container; release GC (`--release-retention`) makes
 `RollbackRequest.target_version` a re-fetch if that version was deleted.
-Unprivileged user ns is probed at Register; enabling it later requires an
-agent restart.
+A release whose `rootfs` inode is still some process's root is kept and
+does not consume the retention budget; GC also runs on a 60s tick, not
+only at deploy. Unprivileged user ns is probed at Register; enabling it
+later requires an agent restart.
+
+`StrategyAssignmentSpec.oci_host_pid` (default false; Apply and
+`MemberTemplate` are the only writers — omit means off) drops
+`CLONE_NEWPID` and recursively bind-mounts the host `/proc` before
+`pivot_root`. The supervised process is never PID 1, so SIGTERM keeps its
+default disposition, and a `setsid` descendant survives redeploy, stop,
+and retire. The mode the process was started with is actual state in the
+supervision file; a flip drains, the same way `capture_stdio` does. The
+payload sees the host's `/proc` and, running as the agent uid, can signal
+other assignments' processes — that is why the flag is opt-in per
+assignment. Requires `agent_version >= 6` and a successful host-pid probe
+(`oci_host_pid_available` on Register). There is no one-field RPC.
 
 Payload stdout/stderr default to `/dev/null` (EXEC and OCI). Optional
 `StrategyAssignmentSpec.capture_stdio` (default false; Apply is

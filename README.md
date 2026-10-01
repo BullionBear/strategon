@@ -132,8 +132,11 @@ Requirements and limits:
 
 - Host must allow unprivileged user namespaces. After enabling, restart the agent
   (capability is reported only at Register).
-- Payload is PID 1: SIGTERM is ignored unless the process installs a handler;
-  stop waits `stop_grace` then SIGKILL.
+- By default the payload is PID 1: SIGTERM is ignored unless the process
+  installs a handler; stop waits `stop_grace` then SIGKILL. `ociHostPid`
+  (OCI only, `agent_version >= 6`) leaves the payload in the host PID
+  namespace so SIGTERM has its default effect and `setsid` descendants
+  survive redeploy. That mode can see the host's `/proc`.
 - cwd is `<base>/<strategy>/work` on EXEC and OCI (`${WORK_DIR}`).
   `${CONFIG}`, `${WORK_DIR}`, `${SHARED_DIR}`, and `${VOLUME:name}` are
   valid in args; `${WORK_DIR}`, `${SHARED_DIR}`, and `${VOLUME:name}` also
@@ -142,8 +145,9 @@ Requirements and limits:
   and rejected for OCI. Rootfs is remounted read-only after start; persist
   image-default paths (`/var/lib/…`) via `volumeMounts` or `${WORK_DIR}`.
 - No registry pull, no `/sys/fs/cgroup` inside the container, no per-run
-  writable overlay. Old releases are GC'd (`--release-retention`, default 3);
-  `Rollback` to a GC'd `target_version` re-downloads.
+  writable overlay. Old releases are GC'd (`--release-retention`, default 3).
+  A rootfs that is still a live process's root is kept and does not count
+  toward that budget. `Rollback` to a GC'd `target_version` re-downloads.
 
 ## Declarative multi-machine workloads
 

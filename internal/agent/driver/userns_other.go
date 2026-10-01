@@ -7,6 +7,9 @@ import "os"
 // UserNSAvailable is always false off Linux.
 func UserNSAvailable() bool { return false }
 
+// HostPIDAvailable is always false off Linux.
+func HostPIDAvailable() bool { return false }
+
 // MaybeRunOCIHelper reports whether argv requested an OCI helper. Off Linux
 // probe is a no-op success; init fails so a stray re-exec does not continue
 // as the agent.
@@ -18,7 +21,7 @@ func MaybeRunOCIHelper() bool {
 	case flagOCIProbe:
 		os.Exit(0)
 		return true
-	case flagOCIInit, flagStdioTee:
+	case flagOCIProbeHostPID, flagOCIInit, flagStdioTee:
 		os.Exit(2)
 		return true
 	}

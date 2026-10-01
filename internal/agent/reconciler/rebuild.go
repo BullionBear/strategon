@@ -44,6 +44,7 @@ func (r *Reconciler) rebuildActualState() {
 		st.observedGen = entry.ObservedGeneration
 		st.lastBadVersion = entry.LastBadVersion
 		st.captureStdio = entry.CaptureStdio
+		st.ociHostPid = entry.OCIHostPID
 		r.setCondition(st, conditionLive, pb.ConditionStatus_CONDITION_STATUS_TRUE, "Adopted", "")
 		if st.phase == pb.DeployPhase_DEPLOY_PHASE_HEALTHY {
 			r.setCondition(st, conditionReady, pb.ConditionStatus_CONDITION_STATUS_TRUE, "Adopted", "")
@@ -86,6 +87,7 @@ func (r *Reconciler) persistSupervision() {
 			ObservedGeneration: st.observedGen,
 			LastBadVersion:     st.lastBadVersion,
 			CaptureStdio:       st.captureStdio,
+			OCIHostPID:         st.ociHostPid,
 		}
 	}
 	path := supervisefile.Path(r.deps.BaseDir)

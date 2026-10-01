@@ -118,6 +118,8 @@ func runStdioTee(opts stdioTeeOpts) (int, error) {
 		close(copyDone)
 	}()
 
+	// Host-PID OCI is never pid 1, so pid1 is false and this tee does not reap
+	// descendants. Orphans reparent to the host's nearest subreaper.
 	code := waitPayloadAndReap(childPID, os.Getpid() == 1)
 	if err := pr.SetReadDeadline(time.Now().Add(stdioDrainAfter)); err != nil {
 		_ = pr.Close()

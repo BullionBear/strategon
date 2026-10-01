@@ -23,6 +23,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,6 +42,10 @@ type Manager struct {
 	Base             string
 	Fetcher          Fetcher
 	ReleaseRetention int // versions to keep including current; default 3
+	// Logger receives "release in use" lines from GCReleases. Nil stays quiet.
+	Logger *slog.Logger
+	// releaseUsers, when set, replaces the /proc scan. Tests inject it.
+	releaseUsers func(rootfs string) []int
 }
 
 // NewManager returns a Manager rooted at base using fetcher.

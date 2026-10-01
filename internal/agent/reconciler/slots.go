@@ -13,6 +13,11 @@ import (
 
 const slotWalkInterval = 60 * time.Second
 
+// releaseGCInterval is how often the main loop reconsiders release directories
+// outside of a deploy. In-use rootfs stays until the pinning process exits;
+// without this tick it would wait for the slot's next deploy.
+const releaseGCInterval = 60 * time.Second
+
 type slotSize struct {
 	bytes int64
 	at    time.Time
@@ -33,6 +38,56 @@ type reapBatchDone struct {
 	names     []string
 	results   []*pb.ReapStrategyResult
 	reply     chan *pb.ReapStrategiesResult
+}
+
+// maybeGCReleases deletes unpinned old releases for every strategy the
+// reconciler still knows. keep is current, running, previous, the in-flight
+// target, and desired, so a download that has not switched yet is not removed.
+func (r *Reconciler) maybeGCReleases(now time.Time) {
+	if r.deps.Artifacts == nil {
+		return
+	}
+	if !r.lastReleaseGC.IsZero() && now.Sub(r.lastReleaseGC) < releaseGCInterval {
+		return
+	}
+	r.lastReleaseGC = now
+	names := map[string]struct{}{}
+	for name := range r.actual {
+		names[name] = struct{}{}
+	}
+	for name := range r.desired {
+		names[name] = struct{}{}
+	}
+	for name := range names {
+		if err := r.deps.Artifacts.GCReleases(name, r.releaseKeep(name)); err != nil && r.deps.Logger != nil {
+			r.deps.Logger.Warn("release gc", "strategy", name, "err", err)
+		}
+	}
+}
+
+func (r *Reconciler) releaseKeep(name string) []string {
+	var keep []string
+	add := func(v string) {
+		if v != "" {
+			keep = append(keep, v)
+		}
+	}
+	add(r.deps.Artifacts.CurrentVersion(name))
+	if st := r.actual[name]; st != nil {
+		if st.runningArtifact != nil {
+			add(st.runningArtifact.GetVersion())
+		}
+		if st.prevArtifact != nil {
+			add(st.prevArtifact.GetVersion())
+		}
+		if st.inflight != nil && st.inflight.target != nil {
+			add(st.inflight.target.GetVersion())
+		}
+	}
+	if spec := r.desired[name]; spec != nil && spec.GetArtifact() != nil {
+		add(spec.GetArtifact().GetVersion())
+	}
+	return keep
 }
 
 // SubmitReap queues a reap on the main loop and blocks until it finishes

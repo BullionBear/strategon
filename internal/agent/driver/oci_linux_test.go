@@ -3,9 +3,11 @@
 package driver
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -110,13 +112,24 @@ func TestUserNSProbeMatchesStart(t *testing.T) {
 	if len(cmd.Args) < 2 || cmd.Args[1] != flagOCIProbe {
 		t.Fatalf("probe args = %#v, want %s", cmd.Args, flagOCIProbe)
 	}
-	attr := ociSysProcAttr(0, 0)
+	attr := ociSysProcAttr(0, 0, false)
 	want := uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWUTS)
 	if attr.Cloneflags != want {
 		t.Fatalf("cloneflags = %#x, want %#x", attr.Cloneflags, want)
 	}
 	if len(attr.UidMappings) != 1 || attr.UidMappings[0].HostID != os.Getuid() || attr.UidMappings[0].Size != 1 {
 		t.Fatalf("uid mappings = %#v, want a single-uid map onto this process", attr.UidMappings)
+	}
+}
+
+func TestHostPIDProbeMatchesStart(t *testing.T) {
+	attr := ociSysProcAttr(0, 0, true)
+	want := uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWUTS)
+	if attr.Cloneflags != want {
+		t.Fatalf("cloneflags = %#x, want %#x", attr.Cloneflags, want)
+	}
+	if attr.Cloneflags&unix.CLONE_NEWPID != 0 {
+		t.Fatal("host-pid clone set still has CLONE_NEWPID")
 	}
 }
 
@@ -392,4 +405,174 @@ func TestOCIDriverExecFailureReachesInitLog(t *testing.T) {
 	if !strings.Contains(string(body), "oci-init: exec") {
 		t.Fatalf("log = %q, want oci-init: exec (discardStdio must not swallow exec errors)", body)
 	}
+}
+
+func requireHostPID(t *testing.T) {
+	t.Helper()
+	requireUserNS(t)
+	if HostPIDAvailable() {
+		return
+	}
+	if os.Getenv("STRATEGON_REQUIRE_USERNS") != "" {
+		t.Fatal("host-pid OCI unavailable but STRATEGON_REQUIRE_USERNS is set")
+	}
+	t.Skip("host-pid OCI unavailable")
+}
+
+func TestOCIHostPIDGrandchildSurvivesGroupKill(t *testing.T) {
+	requireHostPID(t)
+	grand := startOCIGrandchild(t, true)
+	if !procRunning(grand) {
+		t.Fatalf("grandchild %d died with the supervised process", grand)
+	}
+}
+
+func TestOCIPrivatePIDKillsGrandchild(t *testing.T) {
+	requireUserNS(t)
+	grand := startOCIGrandchild(t, false)
+	deadline := time.Now().Add(2 * time.Second)
+	for procRunning(grand) && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if procRunning(grand) {
+		t.Fatalf("grandchild %d still alive after private pid namespace init died", grand)
+	}
+}
+
+func TestOCIHostPIDSeesHostProc(t *testing.T) {
+	requireHostPID(t)
+	if got := hostProcAnswer(t, true); got != "yes" {
+		t.Fatalf("host proc visible = %q, want yes", got)
+	}
+}
+
+func TestOCIPrivatePIDHidesHostProc(t *testing.T) {
+	requireUserNS(t)
+	if os.Getpid() < 10 {
+		t.Skip("test pid is too small to distinguish from the container's pid 1")
+	}
+	if got := hostProcAnswer(t, false); got != "no" {
+		t.Fatalf("host proc visible = %q, want no", got)
+	}
+}
+
+func startOCIGrandchild(t *testing.T, hostPID bool) int {
+	t.Helper()
+	sh, setsid, sleep, rootfs, work := ociToolRootfs(t)
+	// Relative path: oci-init chdirs to work before covering /tmp with tmpfs,
+	// and test work dirs live under /tmp. An absolute /tmp/... path would
+	// land on that tmpfs instead of the bind.
+	body := fmt.Sprintf("#!%s\n%s %s 60 &\necho $! > grand.pid\n%s 120\n", sh, setsid, sleep, sleep)
+	if err := os.WriteFile(filepath.Join(rootfs, "stay.sh"), []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	d := NewOCIDriver(NewExecDriver(""))
+	p, err := d.Start(StartSpec{
+		Strategy:   "s",
+		Driver:     KindOCI,
+		Rootfs:     rootfs,
+		Argv:       []string{"/stay.sh"},
+		WorkDir:    work,
+		WorkBind:   work,
+		Env:        []string{"PATH=/usr/bin:/bin"},
+		OCIHostPID: hostPID,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	pidText := waitFile(t, filepath.Join(work, "grand.pid"), OCIInitLogPath(work), p.PID)
+	grand, err := strconv.Atoi(strings.TrimSpace(string(pidText)))
+	if err != nil || grand <= 0 {
+		t.Fatalf("grand pid %q: %v", pidText, err)
+	}
+	t.Cleanup(func() { _ = syscall.Kill(grand, syscall.SIGKILL) })
+	if err := d.Signal(p, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	d.WatchExit(p, time.Now)
+	return grand
+}
+
+func hostProcAnswer(t *testing.T, hostPID bool) string {
+	t.Helper()
+	sh, _, sleep, rootfs, work := ociToolRootfs(t)
+	body := fmt.Sprintf("#!%s\nif [ -d /proc/%d ]; then echo yes; else echo no; fi > hostproc\n%s 30\n", sh, os.Getpid(), sleep)
+	if err := os.WriteFile(filepath.Join(rootfs, "stay.sh"), []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	d := NewOCIDriver(NewExecDriver(""))
+	p, err := d.Start(StartSpec{
+		Strategy:   "s",
+		Driver:     KindOCI,
+		Rootfs:     rootfs,
+		Argv:       []string{"/stay.sh"},
+		WorkDir:    work,
+		WorkBind:   work,
+		Env:        []string{"PATH=/usr/bin:/bin"},
+		OCIHostPID: hostPID,
+	}, time.Now())
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	text := waitFile(t, filepath.Join(work, "hostproc"), OCIInitLogPath(work), p.PID)
+	_ = d.Signal(p, syscall.SIGKILL)
+	d.WatchExit(p, time.Now)
+	return strings.TrimSpace(string(text))
+}
+
+func ociToolRootfs(t *testing.T) (sh, setsid, sleep, rootfs, work string) {
+	t.Helper()
+	var err error
+	sh, err = exec.LookPath("sh")
+	if err != nil {
+		t.Skip("sh not available")
+	}
+	setsid, err = exec.LookPath("setsid")
+	if err != nil {
+		t.Skip("setsid not available")
+	}
+	sleep, err = exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("sleep not available")
+	}
+	rootfs = t.TempDir()
+	copyIntoRootfs(t, rootfs, sh)
+	copyIntoRootfs(t, rootfs, setsid)
+	copyIntoRootfs(t, rootfs, sleep)
+	work = filepath.Join(t.TempDir(), "work")
+	if err := os.MkdirAll(work, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return sh, setsid, sleep, rootfs, work
+}
+
+func waitFile(t *testing.T, path, initLog string, pid int) []byte {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		b, err := os.ReadFile(path)
+		if err == nil && len(strings.TrimSpace(string(b))) > 0 {
+			return b
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	body, _ := os.ReadFile(initLog)
+	cmd, _ := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+	status, _ := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	t.Fatalf("timeout waiting for %s; pid=%d cmdline=%q status=%q oci-init log:\n%s", path, pid, cmd, status, body)
+	return nil
+}
+
+func procRunning(pid int) bool {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return false
+	}
+	s := string(b)
+	i := strings.LastIndex(s, ")")
+	if i < 0 || i+2 >= len(s) {
+		return false
+	}
+	state := s[i+2]
+	return state != 'Z' && state != 'X'
 }

@@ -530,6 +530,122 @@ func TestCaptureStdioApplyGateAndAuthoritative(t *testing.T) {
 	}
 }
 
+func TestOCIHostPIDApplyGateAndAuthoritative(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	oci := &pb.ArtifactRef{
+		Name: "img", Version: "v1", Digest: "sha256:img", Uri: "file:///img.tar",
+		Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+	}
+	bin := &pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:bin", Uri: "file:///hello"}
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{Artifact: oci}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{Artifact: bin}))
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 5, Spec: &pb.MachineSpec{OciHostPidAvailable: true}})
+	_, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "img", ArtifactVersion: "v1", OciHostPid: true,
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "agent_version") {
+		t.Fatalf("want agent_version>=6, got %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 6, Spec: &pb.MachineSpec{OciHostPidAvailable: false}})
+	_, err = client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "img", ArtifactVersion: "v1", OciHostPid: true,
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "oci_host_pid") {
+		t.Fatalf("want probe rejection, got %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 6, Spec: &pb.MachineSpec{OciHostPidAvailable: true}})
+	_, err = client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1", OciHostPid: true,
+	}))
+	if err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "OCI image") {
+		t.Fatalf("want binary rejection, got %v", err)
+	}
+
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "img", ArtifactVersion: "v1", OciHostPid: true,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if !rec.Assignments["img"].GetOciHostPid() {
+		t.Fatal("expected oci_host_pid on")
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "img", ArtifactVersion: "v1",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m1")
+	if rec.Assignments["img"].GetOciHostPid() {
+		t.Fatal("apply without oci_host_pid must turn it off")
+	}
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "img", ArtifactVersion: "v1", OciHostPid: true,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	got, err := client.GetMachine(ctx, connect.NewRequest(&pb.GetMachineRequest{MachineId: "m1"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var view *pb.StrategyView
+	for _, s := range got.Msg.GetStrategies() {
+		if s.GetStrategy() == "img" {
+			view = s
+		}
+	}
+	if view == nil || !view.GetOciHostPid() {
+		t.Fatal("StrategyView should echo oci_host_pid")
+	}
+}
+
+func TestApplyAssignmentSetOCIHostPIDGate(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{
+			Name: "img", Version: "v1", Digest: "sha256:img", Uri: "file:///img.tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		},
+	}))
+	client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{
+		Artifact: &pb.ArtifactRef{Name: "bin", Version: "v1", Digest: "sha256:bin", Uri: "file:///bin"},
+	}))
+	set := func(strategy string, host bool) *pb.ApplyAssignmentSetRequest {
+		return &pb.ApplyAssignmentSetRequest{Set: &pb.AssignmentSet{
+			Metadata: &pb.ObjectMeta{Name: "planes"},
+			Spec: &pb.AssignmentSetSpec{
+				Strategy:        strategy,
+				ArtifactVersion: "v1",
+				Template:        &pb.MemberTemplate{OciHostPid: host},
+				Members:         []*pb.SetMember{{Machine: "m1", Name: "p1"}},
+			},
+		}}
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 5, Spec: &pb.MachineSpec{OciHostPidAvailable: true}})
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(set("img", true))); err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("want version gate, got %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 6, Spec: &pb.MachineSpec{OciHostPidAvailable: false}})
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(set("img", true))); err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("want probe gate, got %v", err)
+	}
+
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 6, Spec: &pb.MachineSpec{OciHostPidAvailable: true}})
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(set("bin", true))); err == nil || connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("want OCI image gate, got %v", err)
+	}
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(set("img", true))); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestSetStdioCaptureRejectsReservedSlot(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()

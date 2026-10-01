@@ -118,6 +118,7 @@ type Reconciler struct {
 	slotSizes        map[string]slotSize
 	slotWalkInflight bool
 	lastSlotWalk     time.Time
+	lastReleaseGC    time.Time
 	lastSlotNames    string
 	reaping          map[string]struct{}
 
@@ -345,7 +346,7 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		return
 	}
 	if versionMatches(spec, st) && st.proc != nil && !st.stopping && st.inflight == nil &&
-		spec.GetCaptureStdio() != st.captureStdio {
+		(spec.GetCaptureStdio() != st.captureStdio || spec.GetOciHostPid() != st.ociHostPid) {
 		r.spawnDrain(st, spec, false)
 		return
 	}
@@ -481,6 +482,7 @@ func (r *Reconciler) installProcess(spec *pb.StrategyAssignmentSpec, st *strateg
 	st.startedAt = proc.StartedAt
 	st.stopping = false
 	st.captureStdio = spec.GetCaptureStdio()
+	st.ociHostPid = spec.GetOciHostPid()
 	r.setCondition(st, conditionLive, pb.ConditionStatus_CONDITION_STATUS_TRUE, "Started", "")
 	go func(strategy string, p *driver.Process) {
 		info := r.deps.Driver.WatchExit(p, r.now)
@@ -577,6 +579,7 @@ func (r *Reconciler) buildOCIStartSpec(spec *pb.StrategyAssignmentSpec, launch *
 		return driver.StartSpec{}, err
 	}
 	out.VolumeBinds = binds
+	out.OCIHostPID = spec.GetOciHostPid()
 	return out, nil
 }
 
@@ -980,6 +983,7 @@ func (r *Reconciler) tick(now time.Time) {
 		r.probeReadiness(st)
 	}
 	r.tickCron(now)
+	r.maybeGCReleases(now)
 }
 
 // probeReadiness launches an async readiness probe (non-blocking loop).
