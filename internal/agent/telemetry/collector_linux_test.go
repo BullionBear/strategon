@@ -114,4 +114,48 @@ func TestCollectorSlotCgroupOOM(t *testing.T) {
 	if len(calls) != 1 || calls[0] != (call{5, 3}) {
 		t.Fatalf("want one OOM report {5 3}, got %v", calls)
 	}
+
+	// A slot created after the collector started, OOM-killed before its first
+	// sample, is reported in full: its baseline is 0, not the first reading.
+	if err := os.MkdirAll(root+"/fresh", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(root+"/fresh/memory.current", []byte("0\n"), 0o644)
+	os.WriteFile(root+"/fresh/memory.events", []byte("oom_kill 1\n"), 0o644)
+	c.Targets = func() []ProcessTarget { return []ProcessTarget{{Strategy: "s"}, {Strategy: "fresh"}} }
+	c.sample()
+	if len(calls) != 2 || calls[1] != (call{1, 1}) {
+		t.Fatalf("OOM in a new slot's first interval must be reported, got %v", calls)
+	}
+
+	// Dropping and re-adding a target must not replay its kills.
+	c.Targets = func() []ProcessTarget { return []ProcessTarget{{Strategy: "s"}} }
+	c.sample()
+	c.Targets = func() []ProcessTarget { return []ProcessTarget{{Strategy: "s"}, {Strategy: "fresh"}} }
+	c.sample()
+	if len(calls) != 2 {
+		t.Fatalf("re-added slot replayed old kills: %v", calls)
+	}
+}
+
+// Slots that already exist when the agent starts (adopted payloads) are
+// baselined even if the reconciler has not published them yet.
+func TestCollectorOOMBaselineCoversUnpublishedSlots(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(root+"/old", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(root+"/old/memory.current", []byte("0\n"), 0o644)
+	os.WriteFile(root+"/old/memory.events", []byte("oom_kill 7\n"), 0o644)
+	var calls int
+	targets := []ProcessTarget{}
+	c := New(func() []ProcessTarget { return targets })
+	c.CgroupRoot = root
+	c.OnOOMKill = func(string, int64, int64) { calls++ }
+	c.sample() // reconciler has not published anything yet
+	targets = []ProcessTarget{{Strategy: "old"}}
+	c.sample()
+	if calls != 0 {
+		t.Fatalf("pre-existing kills replayed after agent restart: %d", calls)
+	}
 }

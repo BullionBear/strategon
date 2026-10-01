@@ -190,6 +190,19 @@ func (d *ExecDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*Pro
 	return &Process{PID: pid, StartTime: cur, PGID: pgid, StartedAt: startedAt, pidfd: pidfd}, nil
 }
 
+// CheckLimits reports the limit errors Start would hit before forking.
+func (d *ExecDriver) CheckLimits(spec StartSpec) error {
+	if err := checkRlimitNofile(spec.MaxOpenFiles); err != nil {
+		return err
+	}
+	if d.CgroupRoot == "" && (spec.MemoryBytes > 0 || spec.CPUMillicores > 0) {
+		return errNoCgroupRoot
+	}
+	return nil
+}
+
+var errNoCgroupRoot = errors.New("limits require a cgroup root and this agent has none (--cgroup-root)")
+
 // setupCgroup prepares the slot cgroup and returns an fd for UseCgroupFD, or
 // -1 when confinement is off and the spec asks for no memory or cpu limit.
 // Every payload under a root gets a slot, limited or not, so its descendants
@@ -197,7 +210,7 @@ func (d *ExecDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*Pro
 func (d *ExecDriver) setupCgroup(spec StartSpec) (int, error) {
 	if d.CgroupRoot == "" {
 		if spec.MemoryBytes > 0 || spec.CPUMillicores > 0 {
-			return -1, errors.New("limits require a cgroup root and this agent has none (--cgroup-root)")
+			return -1, errNoCgroupRoot
 		}
 		return -1, nil
 	}

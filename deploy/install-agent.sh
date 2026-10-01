@@ -215,6 +215,9 @@ RestartSec=5s
 # and every descendant (--cgroup-root auto). DelegateSubgroup= needs systemd
 # >= 254; on older systemd the agent logs "cgroup root unavailable" and the
 # control plane refuses limits for this machine instead of ignoring them.
+# Reverting to a unit without DelegateSubgroup= while payloads run makes
+# every agent start fail with 219/CGROUP (KillMode=process keeps the unit
+# cgroup populated); see docs/ARCHITECTURE.md "Reverting the agent unit".
 Delegate=memory cpu pids
 DelegateSubgroup=agent
 

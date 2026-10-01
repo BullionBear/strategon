@@ -33,3 +33,6 @@ func (d *ExecDriver) Signal(p *Process, sig syscall.Signal) error { return errUn
 func (d *ExecDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*Process, error) {
 	return nil, errUnsupported
 }
+
+// CheckLimits has nothing to check off Linux; Start fails anyway.
+func (d *ExecDriver) CheckLimits(StartSpec) error { return nil }

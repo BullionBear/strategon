@@ -39,3 +39,12 @@ func (r *Router) Signal(p *Process, sig syscall.Signal) error {
 func (r *Router) Adopt(pid int, startTime uint64, startedAt time.Time) (*Process, error) {
 	return r.Exec.Adopt(pid, startTime, startedAt)
 }
+
+// CheckLimits forwards to the exec driver, whose cgroup root and rlimit
+// ceiling both drivers share.
+func (r *Router) CheckLimits(spec StartSpec) error {
+	if lc, ok := r.Exec.(LimitChecker); ok {
+		return lc.CheckLimits(spec)
+	}
+	return nil
+}

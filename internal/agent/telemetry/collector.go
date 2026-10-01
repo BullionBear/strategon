@@ -6,6 +6,7 @@ package telemetry
 import (
 	"context"
 	"log/slog"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -43,7 +44,8 @@ type Collector struct {
 	mu       sync.Mutex
 	prevCPU  *hostCPUSample
 	prevProc map[string]procCPUSample // strategy -> last cpu sample
-	prevOOM  map[string]int64         // strategy -> last oom_kill count
+	prevOOM  map[string]int64         // slot -> last oom_kill count
+	oomBased bool                     // prevOOM seeded from every existing slot
 
 	snapshot atomic.Pointer[Snapshot]
 }
@@ -171,7 +173,6 @@ func (c *Collector) sample() {
 				c.prevProc[t.Strategy] = next
 			}
 		}
-		c.sampleCgroup(pm)
 		procs = append(procs, pm)
 	}
 	for strat := range c.prevProc {
@@ -179,10 +180,9 @@ func (c *Collector) sample() {
 			delete(c.prevProc, strat)
 		}
 	}
-	for strat := range c.prevOOM {
-		if _, ok := seen[strat]; !ok {
-			delete(c.prevOOM, strat)
-		}
+	c.seedOOMBaseline()
+	for _, pm := range procs {
+		c.sampleCgroup(pm)
 	}
 
 	c.snapshot.Store(&Snapshot{
@@ -192,10 +192,34 @@ func (c *Collector) sample() {
 	})
 }
 
+// seedOOMBaseline records oom_kill for every slot cgroup that exists when the
+// collector first runs, whether or not the reconciler has published it as a
+// target yet. Those counts may predate this agent (adopted payloads) and were
+// already reported. Any slot first seen later starts from 0, so an OOM in its
+// first sampling interval is reported too.
+func (c *Collector) seedOOMBaseline() {
+	if c.oomBased || c.CgroupRoot == "" {
+		return
+	}
+	c.oomBased = true
+	entries, err := os.ReadDir(c.CgroupRoot)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if _, _, kills, ok := driver.SlotCgroupStats(c.CgroupRoot, e.Name()); ok {
+			c.prevOOM[e.Name()] = kills
+		}
+	}
+}
+
 // sampleCgroup fills slot accounting. The slot outlives its payload (setsid
 // descendants stay in it), so it is read whether or not the target is alive.
-// The first sample of a slot only sets the baseline: an agent restart must
-// not replay OOM kills it already reported.
+// prevOOM is kept for slots that stop being targets: the cgroup and its
+// counter survive, and a re-added slot must not report old kills again.
 func (c *Collector) sampleCgroup(pm *pb.ProcessMetrics) {
 	cur, peak, kills, ok := driver.SlotCgroupStats(c.CgroupRoot, pm.GetStrategy())
 	if !ok {
@@ -204,9 +228,9 @@ func (c *Collector) sampleCgroup(pm *pb.ProcessMetrics) {
 	pm.MemoryCurrentBytes = cur
 	pm.MemoryPeakBytes = peak
 	pm.OomKills = kills
-	prev, seen := c.prevOOM[pm.GetStrategy()]
+	prev := c.prevOOM[pm.GetStrategy()]
 	c.prevOOM[pm.GetStrategy()] = kills
-	if seen && kills > prev && c.OnOOMKill != nil {
+	if kills > prev && c.OnOOMKill != nil {
 		c.OnOOMKill(pm.GetStrategy(), kills, kills-prev)
 	}
 }

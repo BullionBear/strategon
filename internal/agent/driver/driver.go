@@ -116,6 +116,14 @@ type ExitInfo struct {
 	At        time.Time
 }
 
+// LimitChecker is implemented by drivers that can tell, without starting
+// anything, that Start would reject spec's resource limits. Deploy asks
+// before draining the old process, so an unenforceable limit fails the
+// deploy instead of taking the running version down.
+type LimitChecker interface {
+	CheckLimits(spec StartSpec) error
+}
+
 // Driver launches and supervises strategy processes.
 type Driver interface {
 	// Start forks/execs the workload in its own session (setsid) and returns a

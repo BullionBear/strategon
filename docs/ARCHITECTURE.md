@@ -407,7 +407,36 @@ cgroup. Only if all of that succeeds does Register carry
   removed anyway, and an empty one costs nothing.
 
 Limits apply at start. Changing them on a running assignment takes
-effect at its next start (deploy, restart, crash restart).
+effect at its next start (deploy, restart, crash restart). Deploy checks
+that the agent can enforce the new limits before it drains the old
+process; a start that still fails retries on the crash backoff (1s
+doubling to 64s) and emits `StartFailed` once per distinct error.
+
+#### Reverting the agent unit
+
+Reinstalling a unit without `DelegateSubgroup=` (an older
+`install-agent.sh`, or a hand edit) while payloads run leaves the agent
+unable to start: `status=219/CGROUP`, restarting forever. systemd places
+the main PID in `<unit>` itself, which still enables controllers for
+`strategies/` and `agent/`, and a cgroup that delegates controllers
+cannot hold processes. `KillMode=process` means stopping the service
+does not empty it. Recover without killing payloads by disabling the
+controllers bottom-up, then restart:
+
+```bash
+U=/sys/fs/cgroup/system.slice/strategon-agent.service
+for c in memory cpu pids; do echo "-$c" | sudo tee $U/strategies/cgroup.subtree_control; done
+for c in memory cpu pids; do echo "-$c" | sudo tee $U/cgroup.subtree_control; done
+sudo systemctl reset-failed strategon-agent
+sudo systemctl restart strategon-agent
+```
+
+Payloads stay in their slot cgroups and the old agent adopts them by pid,
+but with the controllers off their `memory.max` / `cpu.max` no longer
+apply. Reinstalling the current unit turns them back on at the next agent
+start. Downgrading only the binary under the current unit does not hit this: an
+old agent runs in `<unit>/agent`, cannot create the relative path `auto`,
+and starts payloads unconfined in its own cgroup.
 
 ### Deploy phases
 

@@ -452,16 +452,12 @@ func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyS
 	}
 	sp, err := r.buildStartSpec(spec, launch)
 	if err != nil {
-		st.lastError = err.Error()
-		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
-		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", err.Error())
+		r.startFailed(st, err)
 		return
 	}
 	proc, err := r.deps.Driver.Start(sp, r.now())
 	if err != nil {
-		st.lastError = err.Error()
-		st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
-		r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", err.Error())
+		r.startFailed(st, err)
 		return
 	}
 	r.installProcess(spec, st, proc)
@@ -473,6 +469,20 @@ func (r *Reconciler) startProcess(spec *pb.StrategyAssignmentSpec, st *strategyS
 		st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
 		st.observedGen = r.generation
 	}
+}
+
+// startFailed records a failed start. The retry waits out the crash backoff
+// (1s doubling to 64s) and StartFailed is emitted only when the error
+// changes: a start that fails the same way every time (an unenforceable
+// limit, a missing binary) would otherwise retry and report every tick.
+func (r *Reconciler) startFailed(st *strategyState, err error) {
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_FAILED
+	st.backoff.RecordCrash(r.now(), r.deps.Jitter)
+	if st.lastError == err.Error() {
+		return
+	}
+	st.lastError = err.Error()
+	r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", err.Error())
 }
 
 // installProcess wires a freshly-started process into state and launches its
