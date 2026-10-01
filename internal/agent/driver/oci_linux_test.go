@@ -481,9 +481,18 @@ func startOCIGrandchild(t *testing.T, hostPID bool) int {
 		t.Fatalf("start: %v", err)
 	}
 	pidText := waitFile(t, filepath.Join(work, "grand.pid"), OCIInitLogPath(work), p.PID)
-	grand, err := strconv.Atoi(strings.TrimSpace(string(pidText)))
-	if err != nil || grand <= 0 {
+	inner, err := strconv.Atoi(strings.TrimSpace(string(pidText)))
+	if err != nil || inner <= 0 {
 		t.Fatalf("grand pid %q: %v", pidText, err)
+	}
+	// stay.sh records $! inside the container. With a private PID namespace
+	// that number is not a host pid; /proc/<n> on the host is some other
+	// process (CI pid 6 is a runner daemon). Resolve it before killing the
+	// namespace init, while both processes are still alive.
+	grand, err := hostPIDForInnerPID(inner, p.PID)
+	if err != nil {
+		body, _ := os.ReadFile(OCIInitLogPath(work))
+		t.Fatalf("resolve grandchild host pid for inner pid %d anchor %d: %v\n%s", inner, p.PID, err, body)
 	}
 	t.Cleanup(func() { _ = syscall.Kill(grand, syscall.SIGKILL) })
 	if err := d.Signal(p, syscall.SIGKILL); err != nil {
@@ -491,6 +500,74 @@ func startOCIGrandchild(t *testing.T, hostPID bool) int {
 	}
 	d.WatchExit(p, time.Now)
 	return grand
+}
+
+// hostPIDForInnerPID maps a pid observed inside anchor's PID namespace to the
+// host pid. NSpid's last field is that innermost pid; the pid namespace inode
+// keeps a same-numbered process in another namespace from matching.
+func hostPIDForInnerPID(inner, anchor int) (int, error) {
+	anchorNS, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/pid", anchor))
+	if err != nil {
+		return 0, fmt.Errorf("anchor pid namespace: %w", err)
+	}
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return 0, err
+	}
+	var match, found int
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		status, err := os.ReadFile("/proc/" + e.Name() + "/status")
+		if err != nil {
+			continue
+		}
+		ids := nspids(string(status))
+		if len(ids) == 0 || ids[len(ids)-1] != inner {
+			continue
+		}
+		ns, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/pid", pid))
+		if err != nil || ns != anchorNS {
+			continue
+		}
+		match = pid
+		found++
+	}
+	if found != 1 {
+		return 0, fmt.Errorf("found %d processes with inner pid %d in %s", found, inner, anchorNS)
+	}
+	return match, nil
+}
+
+func nspids(status string) []int {
+	for _, line := range strings.Split(status, "\n") {
+		if !strings.HasPrefix(line, "NSpid:") {
+			continue
+		}
+		fields := strings.Fields(line)
+		ids := make([]int, 0, len(fields)-1)
+		for _, f := range fields[1:] {
+			n, err := strconv.Atoi(f)
+			if err != nil {
+				return nil
+			}
+			ids = append(ids, n)
+		}
+		return ids
+	}
+	return nil
+}
+
+func TestNSpids(t *testing.T) {
+	got := nspids("Name:\tsleep\nNSpid:\t4242\t6\nPPid:\t1\n")
+	if len(got) != 2 || got[0] != 4242 || got[1] != 6 {
+		t.Fatalf("nspids = %v, want [4242 6]", got)
+	}
+	if got := nspids("Name:\tsh\n"); got != nil {
+		t.Fatalf("nspids without NSpid = %v, want nil", got)
+	}
 }
 
 func hostProcAnswer(t *testing.T, hostPID bool) string {
