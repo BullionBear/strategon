@@ -37,7 +37,10 @@ func (d *OCIDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		gid = uid
 	}
 
-	cmd := exec.Command("/proc/self/exe", BuildInitArgs(spec)...)
+	if err := checkRlimitNofile(spec.MaxOpenFiles); err != nil {
+		return nil, fmt.Errorf("oci start: %w", err)
+	}
+	cmd := exec.Command("/proc/self/exe", withRlimitArgs(spec, BuildInitArgs(spec))...)
 	// Never leave Env nil: exec.Cmd reads that as "inherit", which would leak
 	// the agent's environment into the container.
 	cmd.Env = spec.Env
@@ -56,12 +59,18 @@ func (d *OCIDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		defer f.Close()
 	}
 
-	if d.exec != nil {
-		if cgFD := d.exec.setupCgroup(spec); cgFD >= 0 {
-			cmd.SysProcAttr.UseCgroupFD = true
-			cmd.SysProcAttr.CgroupFD = cgFD
-			defer unix.Close(cgFD)
-		}
+	cgDrv := d.exec
+	if cgDrv == nil {
+		cgDrv = &ExecDriver{}
+	}
+	cgFD, err := cgDrv.setupCgroup(spec)
+	if err != nil {
+		return nil, fmt.Errorf("oci start: %w", err)
+	}
+	if cgFD >= 0 {
+		cmd.SysProcAttr.UseCgroupFD = true
+		cmd.SysProcAttr.CgroupFD = cgFD
+		defer unix.Close(cgFD)
 	}
 
 	if err := cmd.Start(); err != nil {

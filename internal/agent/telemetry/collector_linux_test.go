@@ -74,3 +74,44 @@ func TestMachineSpecFromHost(t *testing.T) {
 		t.Fatalf("oci_host_pid_available=%v, probe=%v", spec.GetOciHostPidAvailable(), driver.HostPIDAvailable())
 	}
 }
+
+// Slot accounting is read for dead targets too (descendants outlive the
+// payload), the first sample only sets the OOM baseline, and a rise in
+// oom_kill reports the delta once.
+func TestCollectorSlotCgroupOOM(t *testing.T) {
+	root := t.TempDir()
+	slot := root + "/s"
+	if err := os.MkdirAll(slot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(name, body string) {
+		if err := os.WriteFile(slot+"/"+name, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("memory.current", "1048576\n")
+	write("memory.peak", "2097152\n")
+	write("memory.events", "low 0\nhigh 0\nmax 4\noom 2\noom_kill 2\noom_group_kill 0\n")
+
+	type call struct{ total, delta int64 }
+	var calls []call
+	c := New(func() []ProcessTarget { return []ProcessTarget{{Strategy: "s"}} })
+	c.CgroupRoot = root
+	c.OnOOMKill = func(_ string, total, delta int64) { calls = append(calls, call{total, delta}) }
+
+	c.sample()
+	pm := c.Latest().Processes[0]
+	if pm.GetMemoryCurrentBytes() != 1<<20 || pm.GetMemoryPeakBytes() != 2<<20 || pm.GetOomKills() != 2 {
+		t.Fatalf("slot stats = %d/%d/%d", pm.GetMemoryCurrentBytes(), pm.GetMemoryPeakBytes(), pm.GetOomKills())
+	}
+	if len(calls) != 0 {
+		t.Fatalf("first sample must only set the baseline, got %v", calls)
+	}
+
+	write("memory.events", "oom_kill 5\n")
+	c.sample()
+	c.sample()
+	if len(calls) != 1 || calls[0] != (call{5, 3}) {
+		t.Fatalf("want one OOM report {5 3}, got %v", calls)
+	}
+}

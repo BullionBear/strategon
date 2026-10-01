@@ -52,6 +52,11 @@ const MinReapStrategiesAgentVersion int32 = 5
 // PID namespace while the control plane believed otherwise.
 const MinOCIHostPIDAgentVersion int32 = 6
 
+// MinResourceLimitsAgentVersion is the capability version that fails a start
+// whose limits it cannot apply and sets max_open_files. Older agents
+// silently ran payloads without any limit.
+const MinResourceLimitsAgentVersion int32 = 7
+
 // AgentNotifier pushes a fresh DesiredState to a connected agent after a write.
 type AgentNotifier interface {
 	Notify(machineID string)
@@ -363,6 +368,9 @@ func (s *Server) ApplyAssignment(ctx context.Context, req *connect.Request[pb.Ap
 		if err := requireOCIHostPID(msg.GetMachineId(), rec, spec); err != nil {
 			return nil, err
 		}
+	}
+	if err := requireResourceLimits(msg.GetMachineId(), rec, spec.GetLimits()); err != nil {
+		return nil, err
 	}
 	if err := validateAssignmentMounts(msg.GetMachineId(), msg.GetStrategy(), rec, spec); err != nil {
 		var wc *volume.WriterConflictError
@@ -1064,6 +1072,32 @@ func requireOCIHostPIDMachine(machineID string, rec *store.MachineRecord) error 
 	if !rec.Register.GetSpec().GetOciHostPidAvailable() {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("machine %q does not advertise oci_host_pid (host /proc bind failed)", machineID))
+	}
+	return nil
+}
+
+// requireResourceLimits admits limits only where the agent enforces them.
+// Any limit needs an agent that fails loudly instead of skipping it;
+// memory_bytes and cpu_millicores also need a prepared cgroup root. Unlike
+// oci_host_pid, a Register without a spec does not pass: there is no
+// evidence the root exists, and the point of the gate is that a limit is
+// never silently dropped.
+func requireResourceLimits(machineID string, rec *store.MachineRecord, l *pb.ResourceLimits) error {
+	if l.GetMemoryBytes() < 0 || l.GetCpuMillicores() < 0 || l.GetMaxOpenFiles() < 0 {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("limits must not be negative"))
+	}
+	if l.GetMemoryBytes() == 0 && l.GetCpuMillicores() == 0 && l.GetMaxOpenFiles() == 0 {
+		return nil
+	}
+	if err := requireAgentCapability(machineID, rec, MinResourceLimitsAgentVersion, "resource limits"); err != nil {
+		return err
+	}
+	if l.GetMemoryBytes() == 0 && l.GetCpuMillicores() == 0 {
+		return nil
+	}
+	if !rec.Register.GetSpec().GetCgroupLimitsAvailable() {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("machine %q does not advertise cgroup_limits (agent has no usable --cgroup-root; see its log for \"cgroup root unavailable\")", machineID))
 	}
 	return nil
 }

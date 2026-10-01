@@ -156,24 +156,30 @@ export const ArtifactRefSchema: GenMessage<ArtifactRef> = /*@__PURE__*/
   messageDesc(file_strategyplatform_v1_common, 2);
 
 /**
+ * ResourceLimits apply to the slot, not one process. memory_bytes and
+ * cpu_millicores need a machine with cgroup_limits_available; max_open_files
+ * needs agent_version >= 7. Apply rejects what the machine cannot enforce.
+ *
  * @generated from message strategyplatform.v1.ResourceLimits
  */
 export type ResourceLimits = Message<"strategyplatform.v1.ResourceLimits"> & {
   /**
-   * written to cgroup v2 cpu.max
+   * slot cgroup cpu.max (CFS quota over 100ms)
    *
    * @generated from field: int64 cpu_millicores = 1;
    */
   cpuMillicores: bigint;
 
   /**
-   * memory.max
+   * slot cgroup memory.max, shared by all descendants
    *
    * @generated from field: int64 memory_bytes = 2;
    */
   memoryBytes: bigint;
 
   /**
+   * RLIMIT_NOFILE (soft and hard) on the payload
+   *
    * @generated from field: int32 max_open_files = 3;
    */
   maxOpenFiles: number;

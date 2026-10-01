@@ -3379,6 +3379,11 @@
             "type": "boolean",
             "title": "oci_host_pid_available",
             "description": "True when this agent probed a host-PID OCI start (no CLONE_NEWPID, recursive\n bind of the host /proc) and the kernel accepted it. Independent of\n supported_drivers: host PID is a mode of OCI, not a driver."
+          },
+          "cgroupLimitsAvailable": {
+            "type": "boolean",
+            "title": "cgroup_limits_available",
+            "description": "True when the agent prepared a cgroup v2 root with memory and cpu\n enabled and cloned a probe child into it. Without it, ResourceLimits\n memory_bytes / cpu_millicores cannot be enforced and apply rejects them."
           }
         },
         "title": "MachineSpec",
@@ -3615,6 +3620,31 @@
             "type": "integer",
             "title": "restart_count",
             "format": "int32"
+          },
+          "memoryCurrentBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "memory_current_bytes",
+            "format": "int64",
+            "description": "Slot cgroup accounting (payload plus every descendant it left behind).\n Zero when the agent has no cgroup root. memory_peak_bytes is 0 on kernels\n without memory.peak; oom_kills is memory.events oom_kill."
+          },
+          "memoryPeakBytes": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "memory_peak_bytes",
+            "format": "int64"
+          },
+          "oomKills": {
+            "type": [
+              "integer",
+              "string"
+            ],
+            "title": "oom_kills",
+            "format": "int64"
           }
         },
         "title": "ProcessMetrics",
@@ -3749,7 +3779,7 @@
             ],
             "title": "cpu_millicores",
             "format": "int64",
-            "description": "written to cgroup v2 cpu.max"
+            "description": "slot cgroup cpu.max (CFS quota over 100ms)"
           },
           "memoryBytes": {
             "type": [
@@ -3758,16 +3788,18 @@
             ],
             "title": "memory_bytes",
             "format": "int64",
-            "description": "memory.max"
+            "description": "slot cgroup memory.max, shared by all descendants"
           },
           "maxOpenFiles": {
             "type": "integer",
             "title": "max_open_files",
-            "format": "int32"
+            "format": "int32",
+            "description": "RLIMIT_NOFILE (soft and hard) on the payload"
           }
         },
         "title": "ResourceLimits",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "ResourceLimits apply to the slot, not one process. memory_bytes and\n cpu_millicores need a machine with cgroup_limits_available; max_open_files\n needs agent_version \u003e= 7. Apply rejects what the machine cannot enforce."
       },
       "strategyplatform.v1.ResourceSamplePoint": {
         "type": "object",

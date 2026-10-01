@@ -105,6 +105,8 @@ Commands:
 
   Apply is authoritative: omit captureStdio to turn payload stdio capture off.
   Omit ociHostPid to keep a private PID namespace (OCI only; agent_version >= 6).
+  limits.memoryBytes / cpuMillicores need a machine reporting cgroup_limits;
+  limits.maxOpenFiles needs agent_version >= 7. Otherwise apply fails.
 
 Apply dispatches on kind:
   AssignmentSet       → ApplyAssignmentSet (does not Deploy members)

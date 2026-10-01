@@ -59,10 +59,13 @@ enum ExecutionDriver {
   EXECUTION_DRIVER_OCI = 2; // in-process rootless userns, host network
 }
 
+// ResourceLimits apply to the slot, not one process. memory_bytes and
+// cpu_millicores need a machine with cgroup_limits_available; max_open_files
+// needs agent_version >= 7. Apply rejects what the machine cannot enforce.
 message ResourceLimits {
-  int64 cpu_millicores = 1; // written to cgroup v2 cpu.max
-  int64 memory_bytes = 2; // memory.max
-  int32 max_open_files = 3;
+  int64 cpu_millicores = 1; // slot cgroup cpu.max (CFS quota over 100ms)
+  int64 memory_bytes = 2; // slot cgroup memory.max, shared by all descendants
+  int32 max_open_files = 3; // RLIMIT_NOFILE (soft and hard) on the payload
 }
 
 message DeployPolicy {

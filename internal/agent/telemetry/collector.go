@@ -11,6 +11,7 @@ import (
 	"time"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/agent/driver"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -33,9 +34,16 @@ type Collector struct {
 	Targets  TargetsFunc
 	Logger   *slog.Logger
 
+	// CgroupRoot is the agent's prepared slot root; empty skips cgroup
+	// accounting. OnOOMKill, if set, is called from the sampling goroutine
+	// when a slot's oom_kill counter rises between samples.
+	CgroupRoot string
+	OnOOMKill  func(strategy string, total, delta int64)
+
 	mu       sync.Mutex
 	prevCPU  *hostCPUSample
 	prevProc map[string]procCPUSample // strategy -> last cpu sample
+	prevOOM  map[string]int64         // strategy -> last oom_kill count
 
 	snapshot atomic.Pointer[Snapshot]
 }
@@ -53,6 +61,7 @@ func New(targets TargetsFunc) *Collector {
 		Interval: 10 * time.Second,
 		Targets:  targets,
 		prevProc: map[string]procCPUSample{},
+		prevOOM:  map[string]int64{},
 	}
 }
 
@@ -162,11 +171,17 @@ func (c *Collector) sample() {
 				c.prevProc[t.Strategy] = next
 			}
 		}
+		c.sampleCgroup(pm)
 		procs = append(procs, pm)
 	}
 	for strat := range c.prevProc {
 		if _, ok := seen[strat]; !ok {
 			delete(c.prevProc, strat)
+		}
+	}
+	for strat := range c.prevOOM {
+		if _, ok := seen[strat]; !ok {
+			delete(c.prevOOM, strat)
 		}
 	}
 
@@ -175,4 +190,23 @@ func (c *Collector) sample() {
 		Processes: procs,
 		At:        now,
 	})
+}
+
+// sampleCgroup fills slot accounting. The slot outlives its payload (setsid
+// descendants stay in it), so it is read whether or not the target is alive.
+// The first sample of a slot only sets the baseline: an agent restart must
+// not replay OOM kills it already reported.
+func (c *Collector) sampleCgroup(pm *pb.ProcessMetrics) {
+	cur, peak, kills, ok := driver.SlotCgroupStats(c.CgroupRoot, pm.GetStrategy())
+	if !ok {
+		return
+	}
+	pm.MemoryCurrentBytes = cur
+	pm.MemoryPeakBytes = peak
+	pm.OomKills = kills
+	prev, seen := c.prevOOM[pm.GetStrategy()]
+	c.prevOOM[pm.GetStrategy()] = kills
+	if seen && kills > prev && c.OnOOMKill != nil {
+		c.OnOOMKill(pm.GetStrategy(), kills, kills-prev)
+	}
 }

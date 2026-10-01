@@ -368,6 +368,47 @@ members take the flag only from `MemberTemplate`; `SetStdioCapture` is
 rejected on reserved slots. Write errors degrade to discard so a full
 disk cannot stall the payload. Requires `agent_version >= 4`.
 
+### Resource limits
+
+`ResourceLimits` bound a **slot**, not one process. With
+`--cgroup-root auto` (the `install-agent.sh` unit) the agent runs in
+`<unit>/agent` (`DelegateSubgroup=agent`, systemd >= 254) and puts every
+payload, limited or not, in `<unit>/strategies/<slot>` via
+`CLONE_INTO_CGROUP`. At startup it enables `memory` and `cpu` (and
+`pids`, best-effort) in `<unit>` and `strategies/`, moves any process
+still sitting in `<unit>` (payloads from a pre-subgroup agent) into
+`strategies/_unassigned`, then clones a probe child into a limited
+cgroup. Only if all of that succeeds does Register carry
+`cgroup_limits_available`.
+
+- `memory_bytes` → slot `memory.max`. It is the budget for the payload
+  **and** every descendant it leaves behind (`oci_host_pid` setsid
+  workers stay in the slot across releases). `memory.oom.group` stays 0:
+  the kernel kills one process in the slot, not the slot. Swap is not
+  limited; a host with swap pages out before it OOM-kills.
+- `cpu_millicores` → `cpu.max` as CFS quota over a 100 ms period.
+  Throttling stalls the whole slot for the rest of the period, so leave
+  it unset for latency-sensitive payloads.
+- `max_open_files` → `RLIMIT_NOFILE`, soft and hard, set by the agent's
+  re-exec helper (`--rlimit-nofile` before `--oci-init` / `--stdio-tee`
+  / `--exec-payload`) before the payload's first instruction. It must not
+  exceed the agent's own hard limit (`LimitNOFILE=`).
+- A limit removed from the spec writes `max` on the next start.
+- Apply rejects (`FailedPrecondition`) memory/cpu limits on a machine
+  without `cgroup_limits_available`, and any limit on `agent_version < 7`.
+  The agent fails a start whose limits it cannot write instead of running
+  it unconfined (`StartFailed`).
+- Heartbeat `ProcessMetrics` carries the slot's `memory.current`,
+  `memory.peak` (kernel >= 5.19) and `memory.events` `oom_kill`; a rise
+  in `oom_kill` emits an `OOMKilled` event. The payload itself cannot see
+  this (no cgroupfs in OCI): an OOM-killed child looks like a bare
+  SIGKILL to its parent.
+- Strategon never removes a slot cgroup; a populated one cannot be
+  removed anyway, and an empty one costs nothing.
+
+Limits apply at start. Changing them on a running assignment takes
+effect at its next start (deploy, restart, crash restart).
+
 ### Deploy phases
 
 Happy path on the agent:

@@ -19,6 +19,10 @@ message MachineSpec {
   // bind of the host /proc) and the kernel accepted it. Independent of
   // supported_drivers: host PID is a mode of OCI, not a driver.
   bool oci_host_pid_available = 9;
+  // True when the agent prepared a cgroup v2 root with memory and cpu
+  // enabled and cloned a probe child into it. Without it, ResourceLimits
+  // memory_bytes / cpu_millicores cannot be enforced and apply rejects them.
+  bool cgroup_limits_available = 10;
 }
 
 // EnrollRequest is a one-time credential exchange over the bootstrap channel

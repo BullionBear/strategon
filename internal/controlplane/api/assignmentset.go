@@ -149,6 +149,9 @@ func (s *Server) normalizeAndValidateSetSpec(name string, in *pb.AssignmentSetSp
 				return nil, err
 			}
 		}
+		if err := requireResourceLimits(srv.GetMachine(), rec, spec.GetTemplate().GetLimits()); err != nil {
+			return nil, err
+		}
 		if _, dup := seenName[srv.GetName()]; dup {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("duplicate member name %q", srv.GetName()))
 		}

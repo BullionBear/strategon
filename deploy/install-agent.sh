@@ -204,17 +204,26 @@ ExecStart=${REMOTE_DIR}/agent \\
   --machine-id ${MACHINE_ID} \\
   --region ${REGION} \\
   --base ${STATE_DIR}/strategies \\
+  --cgroup-root auto \\
   --metrics-listen ${METRICS_IP}:9101
 Restart=always
 RestartSec=5s
 
-# Cheap hardening. Not a substitute for cgroup confinement of the strategy
-# processes this agent spawns, which is configured separately.
+# Resource limits: the unit's cgroup is delegated to the agent user. The
+# agent itself runs in <unit>/agent and puts each slot in
+# <unit>/strategies/<name>, where memory.max / cpu.max apply to the payload
+# and every descendant (--cgroup-root auto). DelegateSubgroup= needs systemd
+# >= 254; on older systemd the agent logs "cgroup root unavailable" and the
+# control plane refuses limits for this machine instead of ignoring them.
+Delegate=memory cpu pids
+DelegateSubgroup=agent
+
+# Cheap hardening.
 # OCI (rootless userns) is compatible with NoNewPrivileges and a single-UID
 # map; RestrictNamespaces= would block it, and newuidmap is not used.
 #
-# KillMode=process stops only the agent main PID. Payloads stay in this
-# cgroup and the next agent adopts them. This unit has no private /tmp:
+# KillMode=process stops only the agent main PID. Payloads stay in their
+# slot cgroups and the next agent adopts them. This unit has no private /tmp:
 # an EXEC payload that outlives the agent would otherwise lose it when the
 # unit stops (OCI mounts its own tmpfs and is unaffected).
 #

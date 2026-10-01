@@ -26,6 +26,12 @@ message ProcessMetrics {
   int32 num_fds = 5;
   double cpu_percent = 6;
   int32 restart_count = 7;
+  // Slot cgroup accounting (payload plus every descendant it left behind).
+  // Zero when the agent has no cgroup root. memory_peak_bytes is 0 on kernels
+  // without memory.peak; oom_kills is memory.events oom_kill.
+  int64 memory_current_bytes = 8;
+  int64 memory_peak_bytes = 9;
+  int64 oom_kills = 10;
 }
 
 // ProcessMetricsList is a storage/transport wrapper for a process metrics snapshot.
