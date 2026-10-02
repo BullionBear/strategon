@@ -3779,7 +3779,7 @@
             ],
             "title": "cpu_millicores",
             "format": "int64",
-            "description": "slot cgroup cpu.max (CFS quota over 100ms)"
+            "description": "slot cpu.max over 100ms; 0 or 10..175921860"
           },
           "memoryBytes": {
             "type": [
@@ -3799,7 +3799,7 @@
         },
         "title": "ResourceLimits",
         "additionalProperties": false,
-        "description": "ResourceLimits apply to the slot, not one process. memory_bytes and\n cpu_millicores need a machine with cgroup_limits_available; max_open_files\n needs agent_version \u003e= 7. Apply rejects what the machine cannot enforce."
+        "description": "ResourceLimits apply to the slot, not one process. memory_bytes and\n cpu_millicores need a machine with cgroup_limits_available; max_open_files\n needs agent_version \u003e= 7. cpu_millicores is 0 (unset) or 10..175921860:\n the kernel's minimum CFS quota is 1ms and the quota must fit in MAX_BW.\n Apply rejects what the machine or the kernel cannot enforce."
       },
       "strategyplatform.v1.ResourceSamplePoint": {
         "type": "object",
