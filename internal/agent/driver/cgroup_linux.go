@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -165,7 +166,10 @@ func cgroupProcs(dir string) ([]int, error) {
 
 // probeCgroupPlacement clones a throwaway child into dir with a memory limit,
 // the same way Start places a payload. Writing the limit and migrating the
-// child are separate permission checks; both must pass.
+// child are separate permission checks; both must pass. The child also runs
+// the --seal-cgroup helper: every EXEC start under a root is sealed, so a
+// host that blocks unprivileged user namespaces or a cgroup2 mount inside
+// one must not advertise a root whose every start would fail.
 func probeCgroupPlacement(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -179,9 +183,13 @@ func probeCgroupPlacement(dir string) error {
 		return err
 	}
 	defer unix.Close(fd)
-	cmd := probeCommand(flagOCIProbe)
+	cmd := exec.Command("/proc/self/exe", flagSealCgroup, flagOCIProbe)
 	cmd.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: fd}
-	if err := cmd.Run(); err != nil {
+	setSealNamespaces(cmd.SysProcAttr)
+	if err := startSealed(cmd); err != nil {
+		return fmt.Errorf("clone into %s: %w", dir, err)
+	}
+	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("clone into %s: %w", dir, err)
 	}
 	return nil

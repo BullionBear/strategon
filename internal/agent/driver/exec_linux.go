@@ -62,13 +62,7 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		Setsid: true,
 	}
 	if seal {
-		cmd.SysProcAttr.Cloneflags = uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWCGROUP)
-		cmd.SysProcAttr.UidMappings = []syscall.SysProcIDMap{{
-			ContainerID: 0, HostID: os.Getuid(), Size: 1,
-		}}
-		cmd.SysProcAttr.GidMappings = []syscall.SysProcIDMap{{
-			ContainerID: 0, HostID: os.Getgid(), Size: 1,
-		}}
+		setSealNamespaces(cmd.SysProcAttr)
 	}
 
 	// ② cgroup v2 slot. A limit that cannot be applied fails the start.
@@ -122,7 +116,21 @@ func execCommand(spec StartSpec, seal bool) *exec.Cmd {
 	return exec.Command("/proc/self/exe", withRlimitArgs(spec, args)...)
 }
 
-// startSealed waits until the helper reports that cgroupfs is read-only.
+// setSealNamespaces adds the user, mount, and cgroup namespaces the
+// --seal-cgroup helper needs. uid 0 inside keeps CAP_SYS_ADMIN across the
+// helper's exec so it can mount the leaf cgroupfs.
+func setSealNamespaces(attr *syscall.SysProcAttr) {
+	attr.Cloneflags = uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWCGROUP)
+	attr.UidMappings = []syscall.SysProcIDMap{{
+		ContainerID: 0, HostID: os.Getuid(), Size: 1,
+	}}
+	attr.GidMappings = []syscall.SysProcIDMap{{
+		ContainerID: 0, HostID: os.Getgid(), Size: 1,
+	}}
+}
+
+// startSealed waits until the helper reports that the host cgroupfs is
+// covered.
 // On any other result the child is killed and reaped so it cannot be
 // supervised as a running payload.
 func startSealed(cmd *exec.Cmd) error {

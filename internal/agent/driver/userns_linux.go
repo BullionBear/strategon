@@ -100,6 +100,11 @@ func MaybeRunOCIHelper() bool {
 	if val, ok := strings.CutPrefix(args[0], flagRlimitNofile+"="); ok {
 		if err := applyRlimitNofile(val); err != nil {
 			fmt.Fprintln(os.Stderr, "rlimit:", err)
+			// Start is waiting on the seal ack; report the real cause
+			// instead of a bare "cgroup seal failed".
+			if len(args) > 1 && args[1] == flagSealCgroup {
+				ackSeal(fmt.Errorf("rlimit: %w", err))
+			}
 			os.Exit(126)
 		}
 		args = args[1:]

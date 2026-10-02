@@ -19,6 +19,8 @@ const sealAckFD = 3
 const (
 	seccompDataNR   = 0
 	seccompDataArch = 4
+	// x32SyscallBit is __X32_SYSCALL_BIT on x86_64.
+	x32SyscallBit = 0x40000000
 )
 
 // sealHostCgroupFS hides the host cgroup hierarchy and then makes that
@@ -35,7 +37,9 @@ func sealHostCgroupFS() error {
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
 		return fmt.Errorf("make mounts private: %w", err)
 	}
-	dir, err := os.MkdirTemp("", "strategon-cg-")
+	// Not os.TempDir: the helper runs with the payload's env, and a TMPDIR
+	// the payload has not created yet would fail every start.
+	dir, err := os.MkdirTemp("/tmp", "strategon-cg-")
 	if err != nil {
 		return fmt.Errorf("cgroup cover: %w", err)
 	}
@@ -102,6 +106,16 @@ func denyMountSyscalls() error {
 		{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: seccompDataNR},
 	}
 	n := len(denied)
+	if arch == unix.AUDIT_ARCH_X86_64 {
+		// x32 syscalls report AUDIT_ARCH_X86_64 with bit 30 set in the
+		// number, so they would miss every JEQ below. Deny the whole range.
+		filter = append(filter, unix.SockFilter{
+			Code: unix.BPF_JMP | unix.BPF_JGE | unix.BPF_K,
+			K:    x32SyscallBit,
+			Jt:   uint8(n + 1),
+			Jf:   0,
+		})
+	}
 	for i, nr := range denied {
 		filter = append(filter, unix.SockFilter{
 			Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K,

@@ -159,7 +159,10 @@ func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, co
 		return fmt.Errorf("mkdir release: %w", err)
 	}
 	if err := m.populateRelease(ctx, strategy, artifactRef, configRef); err != nil {
-		if !already {
+		// A rootfs that is still some process's root stays: deleting it
+		// empties that process's / (see RemoveStrategyDir).
+		rootfs := m.RootfsPath(strategy, artifactRef.GetVersion())
+		if !already && len(m.releaseUserLookup()(rootfs)) == 0 {
 			_ = os.RemoveAll(dir)
 		}
 		return err

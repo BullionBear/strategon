@@ -500,10 +500,14 @@ func (r *Reconciler) ensureSlotLimits(spec *pb.StrategyAssignmentSpec, st *strat
 		st.limitsApplied = true
 		return
 	}
-	sp, err := r.buildStartSpec(spec, st.runningArtifact)
-	if err != nil {
-		r.noteLimits(st, err)
-		return
+	// Only the slot and its limits matter here. buildStartSpec would render
+	// args/env (secrets) and touch the work dir on every tick, and any of
+	// those failing would leave the payload unlimited.
+	l := spec.GetLimits()
+	sp := driver.StartSpec{
+		Strategy:      spec.GetStrategy(),
+		MemoryBytes:   l.GetMemoryBytes(),
+		CPUMillicores: l.GetCpuMillicores(),
 	}
 	if err := applier.ApplyLimits(sp); err != nil {
 		r.noteLimits(st, err)

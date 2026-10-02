@@ -1091,12 +1091,6 @@ func requireOCIHostPIDMachine(machineID string, rec *store.MachineRecord) error 
 	return nil
 }
 
-// requireResourceLimits admits limits only where the agent enforces them.
-// Any limit needs an agent that fails loudly instead of skipping it;
-// memory_bytes and cpu_millicores also need a prepared cgroup root. Unlike
-// oci_host_pid, a Register without a spec does not pass: there is no
-// evidence the root exists, and the point of the gate is that a limit is
-// never silently dropped.
 // requireSpecRunnable is the gate Deploy, SetDeployment, Rollback, and
 // Start share. Apply already checked these when the spec was written;
 // cloning that spec onto a machine whose agent was replaced must check
@@ -1112,6 +1106,12 @@ func requireSpecRunnable(machineID string, rec *store.MachineRecord, spec *pb.St
 	return requireResourceLimits(machineID, rec, spec.GetLimits())
 }
 
+// requireResourceLimits admits limits only where the agent enforces them.
+// Any limit needs an agent that fails loudly instead of skipping it;
+// memory_bytes and cpu_millicores also need a prepared cgroup root. Unlike
+// oci_host_pid, a Register without a spec does not pass: there is no
+// evidence the root exists, and the point of the gate is that a limit is
+// never silently dropped.
 func requireResourceLimits(machineID string, rec *store.MachineRecord, l *pb.ResourceLimits) error {
 	if l.GetMemoryBytes() < 0 || l.GetCpuMillicores() < 0 || l.GetMaxOpenFiles() < 0 {
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("limits must not be negative"))
