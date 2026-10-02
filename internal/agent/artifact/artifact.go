@@ -149,11 +149,26 @@ func (m *Manager) HasVerifiedRelease(strategy string, ref *pb.ArtifactRef) bool 
 
 // Download fetches the artifact (and optional config) into its release dir. It
 // is idempotent: an already-present, verified release is left untouched.
+// A failure of a release that was not already verified removes the version
+// directory, including an empty one left by a failed fetch and a binary or
+// image whose digest did not match.
 func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, configRef *pb.ArtifactRef) error {
 	dir := m.ReleaseDir(strategy, artifactRef.GetVersion())
+	already := m.HasVerifiedRelease(strategy, artifactRef)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("mkdir release: %w", err)
 	}
+	if err := m.populateRelease(ctx, strategy, artifactRef, configRef); err != nil {
+		if !already {
+			_ = os.RemoveAll(dir)
+		}
+		return err
+	}
+	return nil
+}
+
+func (m *Manager) populateRelease(ctx context.Context, strategy string, artifactRef, configRef *pb.ArtifactRef) error {
+	dir := m.ReleaseDir(strategy, artifactRef.GetVersion())
 	if isOCI(artifactRef) {
 		if err := m.downloadOCI(ctx, strategy, artifactRef); err != nil {
 			return err
@@ -165,6 +180,11 @@ func (m *Manager) Download(ctx context.Context, strategy string, artifactRef, co
 		}
 		if err := os.Chmod(bin, 0o755); err != nil {
 			return fmt.Errorf("chmod binary: %w", err)
+		}
+		if artifactRef.GetDigest() != "" {
+			if err := m.Verify(strategy, artifactRef); err != nil {
+				return err
+			}
 		}
 	}
 	if configRef != nil && configRef.GetDigest() != "" {

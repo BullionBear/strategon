@@ -163,8 +163,11 @@ intentional: Stop/Undeploy keep disk for browse and same-name redeploy.
 - `ListStrategySlots` joins agent inventory with whether the control
   plane still has an assignment (including Stopped).
 - `ReapStrategies` deletes named slots that are not in desired and have
-  no live process / inflight deploy. Assigned+Stopped must Undeploy
-  first. There is no `Undeploy(purge=…)` flag.
+  no live process / inflight deploy. It also refuses the whole delete
+  when any `releases/<version>/rootfs` is still a process's root,
+  including a `setsid` grandchild whose supervised parent has already
+  exited. Assigned+Stopped must Undeploy first. There is no
+  `Undeploy(purge=…)` flag.
 
 ## Core concepts
 
@@ -373,13 +376,15 @@ disk cannot stall the payload. Requires `agent_version >= 4`.
 `ResourceLimits` bound a **slot**, not one process. With
 `--cgroup-root auto` (the `install-agent.sh` unit) the agent runs in
 `<unit>/agent` (`DelegateSubgroup=agent`, systemd >= 254) and puts every
-payload, limited or not, in `<unit>/strategies/<slot>` via
-`CLONE_INTO_CGROUP`. At startup it enables `memory` and `cpu` (and
-`pids`, best-effort) in `<unit>` and `strategies/`, moves any process
+payload, limited or not, under `<unit>/strategies/<slot>` via
+`CLONE_INTO_CGROUP`. OCI enters the slot itself; EXEC enters
+`<slot>/leaf` with the limits written on the slot. At startup it enables
+`memory` and `cpu` (and `pids`, best-effort) in `<unit>` and `strategies/`,
+moves any process
 still sitting in `<unit>` (payloads from a pre-subgroup agent) into
-`strategies/_unassigned`, then clones a probe child into a limited
-cgroup. Only if all of that succeeds does Register carry
-`cgroup_limits_available`.
+`<unit>/_unassigned` (a sibling of `strategies/`, not a slot under it),
+then clones a probe child into a limited cgroup. Only if all of that
+succeeds does Register carry `cgroup_limits_available`.
 
 - `memory_bytes` → slot `memory.max`. It is the budget for the payload
   **and** every descendant it leaves behind (`oci_host_pid` setsid
@@ -387,8 +392,11 @@ cgroup. Only if all of that succeeds does Register carry
   the kernel kills one process in the slot, not the slot. Swap is not
   limited; a host with swap pages out before it OOM-kills.
 - `cpu_millicores` → `cpu.max` as CFS quota over a 100 ms period.
-  Throttling stalls the whole slot for the rest of the period, so leave
-  it unset for latency-sensitive payloads.
+  The kernel accepts 10 through 175921860 (1 ms minimum quota; the
+  quota in nanoseconds must fit in `MAX_BW`). Apply rejects anything
+  outside that range (`InvalidArgument`), before the agent-version and
+  cgroup gates. Throttling stalls the whole slot for the rest of the
+  period, so leave it unset for latency-sensitive payloads.
 - `max_open_files` → `RLIMIT_NOFILE`, soft and hard, set by the agent's
   re-exec helper (`--rlimit-nofile` before `--oci-init` / `--stdio-tee`
   / `--exec-payload`) before the payload's first instruction. It must not
@@ -408,9 +416,36 @@ cgroup. Only if all of that succeeds does Register carry
 
 Limits apply at start. Changing them on a running assignment takes
 effect at its next start (deploy, restart, crash restart). Deploy checks
-that the agent can enforce the new limits before it drains the old
-process; a start that still fails retries on the crash backoff (1s
-doubling to 64s) and emits `StartFailed` once per distinct error.
+that the agent can enforce the new limits — including a cpu quota the
+kernel would reject — before it drains the old process. The check writes
+a throwaway cgroup next to `strategies/` and removes it; it does not
+touch the live slot. Rollback reuses the same spec, so a limit that
+fails this check never takes the running version down. A start that
+still fails retries on the crash backoff (1s doubling to 64s) and emits
+`StartFailed` once per distinct error.
+
+`Deploy`, `SetDeployment`, `Rollback`, and `Start` re-check the stored
+spec against the machine's current agent. Memory and cpu limits need
+`agent_version >= 7` and `cgroup_limits_available`. `oci_host_pid` is
+re-checked only when the flag is set and the driver that will run is
+OCI, so a binary rollback that still carries the flag is accepted.
+`Stop` stays available so a payload can be halted after a downgrade.
+
+An EXEC payload under a cgroup root is cloned with
+`CLONE_NEWUSER|CLONE_NEWNS|CLONE_NEWCGROUP` (not `CLONE_NEWPID`, so
+SIGTERM still has its default effect and the agent supervises the host
+pid). Inside the user namespace its uid and gid are 0, mapped onto the
+agent's own ids, so host file access is unchanged. Limits are written on
+`<unit>/strategies/<slot>`; the process is placed in `<slot>/leaf`, and
+the slot's `subtree_control` stays empty so an adopted process still
+sitting in the slot is not evicted. Before exec, the helper makes the mount tree private and bind-mounts a
+cgroup2 filesystem rooted at the leaf over `/sys/fs/cgroup`, so the host
+hierarchy is not visible. A user namespace cannot remount that host
+superblock read-only, and unmounting the cover would reveal it, so the
+helper then blocks `mount`, `umount2`, `setns`, and the new mount API.
+`Start` waits for the helper to ack that seal and kills the child if it
+does not. OCI is unchanged: the process stays in the slot cgroup, and
+the container has no cgroupfs.
 
 #### Reverting the agent unit
 
@@ -431,12 +466,17 @@ sudo systemctl reset-failed strategon-agent
 sudo systemctl restart strategon-agent
 ```
 
-Payloads stay in their slot cgroups and the old agent adopts them by pid,
-but with the controllers off their `memory.max` / `cpu.max` no longer
-apply. Reinstalling the current unit turns them back on at the next agent
-start. Downgrading only the binary under the current unit does not hit this: an
-old agent runs in `<unit>/agent`, cannot create the relative path `auto`,
-and starts payloads unconfined in its own cgroup.
+Payloads stay in their slot cgroups and the agent adopts them by pid.
+With the controllers off, their `memory.max` / `cpu.max` no longer apply,
+and turning the controllers back on resets those files to `max`. The
+agent rewrites them from the desired spec on the next reconcile, without
+restarting the payload. v0.4.0 adopts the process and leaves the reset
+files at `max` until the payload's next start. Downgrading only the
+binary under the current unit does not hit 219/CGROUP: an old agent runs
+in `<unit>/agent`, cannot create the relative path `auto`, and starts
+payloads unconfined in its own cgroup. `Deploy`, `Rollback`, and `Start`
+on that older agent are refused while the stored spec still carries
+limits or an OCI `oci_host_pid`.
 
 ### Deploy phases
 

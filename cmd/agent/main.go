@@ -128,9 +128,12 @@ func main() {
 			Reason:    "OOMKilled",
 			Message:   fmt.Sprintf("%d process(es) in the slot OOM-killed (memory.max reached; total %d)", delta, total),
 		}}}
+		// The sampler calls this inline. A full outbound buffer must drop
+		// the event; blocking here stalls every later sample.
 		select {
 		case out <- msg:
-		case <-ctx.Done():
+		default:
+			logger.Warn("dropped OOM event; outbound channel is full", "strategy", strategy)
 		}
 	}
 	go collector.Run(ctx)

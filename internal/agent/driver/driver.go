@@ -124,6 +124,14 @@ type LimitChecker interface {
 	CheckLimits(spec StartSpec) error
 }
 
+// SlotLimitApplier rewrites the slot's memory.max and cpu.max from spec
+// without restarting the process. The reconciler uses it once for a
+// process this agent adopted: re-enabling cgroup controllers resets those
+// files to "max", and the running payload keeps the desired limit.
+type SlotLimitApplier interface {
+	ApplyLimits(spec StartSpec) error
+}
+
 // Driver launches and supervises strategy processes.
 type Driver interface {
 	// Start forks/execs the workload in its own session (setsid) and returns a

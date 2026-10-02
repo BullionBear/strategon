@@ -3,15 +3,26 @@
 package driver
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 )
+
+// cgroupUnitSeq keeps TestCgroupSlotLimitsAndOOM's unit directory unique
+// across repeated runs in one process. -count reuses the pid, and a unit
+// that already has subtree_control cannot accept the stray process.
+var cgroupUnitSeq atomic.Uint64
+
+func testCgroupUnit() string {
+	return fmt.Sprintf("unit-%d-%d-%d", os.Getpid(), time.Now().UnixNano(), cgroupUnitSeq.Add(1))
+}
 
 func TestExecLimitsWithoutCgroupRootFailStart(t *testing.T) {
 	sleep, err := exec.LookPath("sleep")
@@ -85,9 +96,7 @@ func TestCgroupSlotLimitsAndOOM(t *testing.T) {
 	// The namespace root holds every process; move them out so it can
 	// delegate memory and cpu, as a systemd slice does for the unit. Other
 	// test binaries (go test ./...) keep spawning into it, so retry.
-	// A fresh unit per run: an earlier run left its unit with controllers
-	// enabled, which no longer accepts the stray process below.
-	unit := "unit-" + strconv.Itoa(os.Getpid())
+	unit := testCgroupUnit()
 	for _, d := range []string{"init", unit + "/agent"} {
 		if err := os.MkdirAll(filepath.Join(cgroupFS, d), 0o755); err != nil {
 			t.Fatal(err)
@@ -134,13 +143,19 @@ func TestCgroupSlotLimitsAndOOM(t *testing.T) {
 	}
 
 	d := NewExecDriver(root)
+	if err := d.CheckLimits(StartSpec{Strategy: "slot", CPUMillicores: 5}); err == nil || !strings.Contains(err.Error(), "minimum") {
+		t.Fatalf("cpu 5 must be rejected before any probe write: %v", err)
+	}
+	if err := d.CheckLimits(StartSpec{Strategy: "slot", CPUMillicores: 500, MemoryBytes: 64 << 20}); err != nil {
+		t.Fatal(err)
+	}
 	p, err := d.Start(StartSpec{Strategy: "slot", BinaryPath: "/bin/sleep", Args: []string{"30"},
 		MemoryBytes: 64 << 20, CPUMillicores: 500}, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile("/proc/" + strconv.Itoa(p.PID) + "/cgroup")
-	if !strings.Contains(string(b), "/"+unit+"/strategies/slot") {
+	if !strings.Contains(string(b), "/"+unit+"/strategies/slot/leaf") {
 		t.Fatalf("payload cgroup = %q", b)
 	}
 	if got := readTrim(t, filepath.Join(root, "slot/memory.max")); got != strconv.Itoa(64<<20) {
@@ -151,6 +166,29 @@ func TestCgroupSlotLimitsAndOOM(t *testing.T) {
 	}
 	_ = d.Signal(p, syscall.SIGKILL)
 	d.WatchExit(p, time.Now)
+
+	// The payload is uid 0 in its user namespace. Unmounting the leaf
+	// cover would reveal the host cgroupfs, so the script tries that
+	// before writing the slot limit and moving itself up.
+	sealScript := fmt.Sprintf(`uid=$(id -u)
+if [ "$uid" != 0 ]; then exit 44; fi
+slot=/sys/fs/cgroup/%s/strategies/seal
+umount /sys/fs/cgroup 2>/dev/null
+if echo 1073741824 > "$slot/memory.max" 2>/dev/null; then exit 42; fi
+if echo $$ > "$slot/cgroup.procs" 2>/dev/null; then exit 43; fi
+exit 0
+`, unit)
+	p, err = d.Start(StartSpec{Strategy: "seal", BinaryPath: "/bin/sh", Args: []string{"-c", sealScript},
+		MemoryBytes: 64 << 20}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info := d.WatchExit(p, time.Now); info.Code != 0 {
+		t.Fatalf("payload escaped its cgroup, exit %d", info.Code)
+	}
+	if got := readTrim(t, filepath.Join(root, "seal/memory.max")); got != strconv.Itoa(64<<20) {
+		t.Fatalf("memory.max after seal attempt = %s", got)
+	}
 
 	// Restart without limits lifts them on the same slot.
 	p, err = d.Start(StartSpec{Strategy: "slot", BinaryPath: "/bin/sleep", Args: []string{"30"}}, time.Now())

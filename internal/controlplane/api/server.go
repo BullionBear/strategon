@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
+	"github.com/bullionbear/strategon/internal/agent/driver"
 	"github.com/bullionbear/strategon/internal/agent/filebrowse"
 	"github.com/bullionbear/strategon/internal/auth"
 	"github.com/bullionbear/strategon/internal/buildinfo"
@@ -294,6 +295,9 @@ func (s *Server) buildDeploymentSpec(machineID, strategy, artifactVersion, confi
 	if existing == nil {
 		spec.Stopped = true
 	}
+	if err := requireSpecRunnable(machineID, rec, spec); err != nil {
+		return nil, nil, "", err
+	}
 
 	return spec, art, fromVersion, nil
 }
@@ -513,6 +517,9 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[pb.RollbackR
 	if err := applyDriverFromArtifact(next, target, rec); err != nil {
 		return nil, err
 	}
+	if err := requireSpecRunnable(msg.GetMachineId(), rec, next); err != nil {
+		return nil, err
+	}
 	gen, _, err := s.assign.Apply(ctx, assign.Request{
 		MachineID:             msg.GetMachineId(),
 		Strategy:              msg.GetStrategy(),
@@ -599,6 +606,14 @@ func (s *Server) setRunState(ctx context.Context, machineID, strategy string, st
 	}
 	next := proto.Clone(spec).(*pb.StrategyAssignmentSpec)
 	next.Stopped = stopped
+	// Stop must still halt a payload whose limits or host-pid flag this
+	// agent can no longer enforce. Start re-checks, so a downgraded agent
+	// is not told to run unlimited or in a private PID namespace.
+	if !stopped {
+		if err := requireSpecRunnable(machineID, rec, next); err != nil {
+			return 0, err
+		}
+	}
 	gen, _, err := s.assign.Apply(ctx, assign.Request{
 		MachineID:   machineID,
 		Strategy:    strategy,
@@ -1082,9 +1097,29 @@ func requireOCIHostPIDMachine(machineID string, rec *store.MachineRecord) error 
 // oci_host_pid, a Register without a spec does not pass: there is no
 // evidence the root exists, and the point of the gate is that a limit is
 // never silently dropped.
+// requireSpecRunnable is the gate Deploy, SetDeployment, Rollback, and
+// Start share. Apply already checked these when the spec was written;
+// cloning that spec onto a machine whose agent was replaced must check
+// again. Host PID is enforced only when the process that will actually
+// start is OCI: a binary rollback keeps a stored flag and must not be
+// rejected for lacking an image. Limits are enforced whenever they are set.
+func requireSpecRunnable(machineID string, rec *store.MachineRecord, spec *pb.StrategyAssignmentSpec) error {
+	if spec.GetOciHostPid() && spec.GetDriver() == pb.ExecutionDriver_EXECUTION_DRIVER_OCI {
+		if err := requireOCIHostPID(machineID, rec, spec); err != nil {
+			return err
+		}
+	}
+	return requireResourceLimits(machineID, rec, spec.GetLimits())
+}
+
 func requireResourceLimits(machineID string, rec *store.MachineRecord, l *pb.ResourceLimits) error {
 	if l.GetMemoryBytes() < 0 || l.GetCpuMillicores() < 0 || l.GetMaxOpenFiles() < 0 {
 		return connect.NewError(connect.CodeInvalidArgument, errors.New("limits must not be negative"))
+	}
+	if l.GetCpuMillicores() > 0 {
+		if err := driver.ValidateCPUMillicores(l.GetCpuMillicores()); err != nil {
+			return connect.NewError(connect.CodeInvalidArgument, err)
+		}
 	}
 	if l.GetMemoryBytes() == 0 && l.GetCpuMillicores() == 0 && l.GetMaxOpenFiles() == 0 {
 		return nil

@@ -63,6 +63,15 @@ type strategyState struct {
 	// not see a false mismatch and drain.
 	ociHostPid bool
 
+	// limitsApplied is set when this process's Start wrote the slot limits,
+	// or when a later reconcile rewrote them after adopt. It is in-memory
+	// only: an adopted process (agent restart, controllers toggled back on)
+	// comes back false so the next healthy tick rewrites memory.max and
+	// cpu.max from desired state. A later edit of the spec waits for the
+	// next start; this flag is not cleared when desired limits change.
+	limitsApplied bool
+	limitsError   string
+
 	// cron tracks next fire times for DesiredState schedules.
 	cron map[string]*cronEntry
 }

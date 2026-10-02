@@ -23,12 +23,23 @@ type fakeDriver struct {
 	failStart  bool
 	startTries int
 	limitErr   error // returned by CheckLimits
+	applyCount int
+	applyErr   error
+	applied    []driver.StartSpec
 }
 
 func (f *fakeDriver) CheckLimits(driver.StartSpec) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.limitErr
+}
+
+func (f *fakeDriver) ApplyLimits(spec driver.StartSpec) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.applyCount++
+	f.applied = append(f.applied, spec)
+	return f.applyErr
 }
 
 func newFakeDriver() *fakeDriver {

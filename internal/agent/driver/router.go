@@ -48,3 +48,13 @@ func (r *Router) CheckLimits(spec StartSpec) error {
 	}
 	return nil
 }
+
+// ApplyLimits forwards to the exec driver. OCI and EXEC share the slot
+// cgroup; the process's own cgroup (the slot, or the EXEC leaf under it)
+// is covered by the slot's memory.max and cpu.max.
+func (r *Router) ApplyLimits(spec StartSpec) error {
+	if a, ok := r.Exec.(SlotLimitApplier); ok {
+		return a.ApplyLimits(spec)
+	}
+	return nil
+}

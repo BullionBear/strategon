@@ -34,5 +34,14 @@ func (d *ExecDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*Pro
 	return nil, errUnsupported
 }
 
-// CheckLimits has nothing to check off Linux; Start fails anyway.
-func (d *ExecDriver) CheckLimits(StartSpec) error { return nil }
+// CheckLimits still rejects a cpu quota the kernel would refuse. The
+// cgroup probe itself is Linux-only; Start fails on this platform anyway.
+func (d *ExecDriver) CheckLimits(spec StartSpec) error {
+	if spec.MemoryBytes < 0 || spec.CPUMillicores < 0 || spec.MaxOpenFiles < 0 {
+		return errors.New("limits must not be negative")
+	}
+	return ValidateCPUMillicores(spec.CPUMillicores)
+}
+
+// ApplyLimits is a no-op off Linux.
+func (d *ExecDriver) ApplyLimits(StartSpec) error { return nil }
