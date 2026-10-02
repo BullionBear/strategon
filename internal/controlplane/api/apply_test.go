@@ -662,6 +662,12 @@ func TestApplyResourceLimitsGate(t *testing.T) {
 	nofile := &pb.ResourceLimits{MaxOpenFiles: 4096}
 
 	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 6, Spec: &pb.MachineSpec{CgroupLimitsAvailable: true}})
+	if err := apply(&pb.ResourceLimits{CpuMillicores: 5}); connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "minimum") {
+		t.Fatalf("cpu 5 is below the kernel minimum, got %v", err)
+	}
+	if err := apply(&pb.ResourceLimits{CpuMillicores: 100_000_000_000_000}); connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "maximum") {
+		t.Fatalf("cpu 1e14 exceeds the kernel maximum, got %v", err)
+	}
 	if err := apply(nofile); connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "agent_version") {
 		t.Fatalf("old agent ignores limits; want version gate, got %v", err)
 	}
@@ -698,6 +704,110 @@ func TestApplyResourceLimitsGate(t *testing.T) {
 	}
 }
 
+func TestDeployAndRollbackRecheckAfterDowngrade(t *testing.T) {
+	client, st, _, _ := startHumanAPI(t)
+	ctx := context.Background()
+	reg := func(art *pb.ArtifactRef) {
+		t.Helper()
+		if _, err := client.RegisterArtifact(ctx, connect.NewRequest(&pb.RegisterArtifactRequest{Artifact: art})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg(&pb.ArtifactRef{Name: "hello", Version: "v1", Digest: "sha256:v1", Uri: "file:///v1"})
+	reg(&pb.ArtifactRef{Name: "hello", Version: "v2", Digest: "sha256:v2", Uri: "file:///v2"})
+	limits := &pb.MachineSpec{CgroupLimitsAvailable: true}
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: limits})
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1",
+		Limits: &pb.ResourceLimits{MemoryBytes: 1 << 20, CpuMillicores: 500},
+	})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v2",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 5, Spec: limits})
+	_, err := client.Rollback(ctx, connect.NewRequest(&pb.RollbackRequest{
+		MachineId: "m1", Strategy: "hello", TargetVersion: "v1",
+	}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "resource limits") {
+		t.Fatalf("rollback on a v5 agent: %v", err)
+	}
+	_, err = client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m1", Strategy: "hello", ArtifactVersion: "v1",
+	}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("deploy on a v5 agent: %v", err)
+	}
+	rec, _ := st.GetMachine("m1")
+	if rec.Assignments["hello"].GetArtifact().GetVersion() != "v2" {
+		t.Fatalf("failed deploy changed the assignment to %s", rec.Assignments["hello"].GetArtifact().GetVersion())
+	}
+	if _, err := client.Start(ctx, connect.NewRequest(&pb.StartRequest{MachineId: "m1", Strategy: "hello"})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("start on a v5 agent: %v", err)
+	}
+	if _, err := client.Stop(ctx, connect.NewRequest(&pb.StopRequest{MachineId: "m1", Strategy: "hello"})); err != nil {
+		t.Fatalf("stop must still halt the payload: %v", err)
+	}
+
+	oci := func(version string) *pb.ArtifactRef {
+		return &pb.ArtifactRef{
+			Name: "img", Version: version, Digest: "sha256:" + version, Uri: "file:///img-" + version + ".tar",
+			Type: pb.ArtifactType_ARTIFACT_TYPE_OCI_IMAGE,
+		}
+	}
+	reg(oci("v1"))
+	reg(oci("v2"))
+	reg(&pb.ArtifactRef{Name: "img", Version: "bin", Digest: "sha256:bin", Uri: "file:///bin"})
+	host := &pb.MachineSpec{OciHostPidAvailable: true}
+	st.UpsertMachine(&pb.Register{MachineId: "m2", AgentVersion: 6, Spec: host})
+	if _, err := client.ApplyAssignment(ctx, connect.NewRequest(&pb.ApplyAssignmentRequest{
+		MachineId: "m2", Strategy: "img", ArtifactVersion: "v1", OciHostPid: true,
+	})); err != nil {
+		t.Fatal(err)
+	}
+	// A binary deploy keeps the stored flag. The process is EXEC, so the
+	// host-pid gate (which requires an OCI image) must not reject it.
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m2", Strategy: "img", ArtifactVersion: "bin",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	rec, _ = st.GetMachine("m2")
+	if rec.Assignments["img"].GetDriver() != pb.ExecutionDriver_EXECUTION_DRIVER_EXEC || !rec.Assignments["img"].GetOciHostPid() {
+		t.Fatalf("binary deploy driver=%v host_pid=%v", rec.Assignments["img"].GetDriver(), rec.Assignments["img"].GetOciHostPid())
+	}
+	if _, err := client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m2", Strategy: "img", ArtifactVersion: "v2",
+	})); err != nil {
+		t.Fatal(err)
+	}
+	st.UpsertMachine(&pb.Register{MachineId: "m2", AgentVersion: 5, Spec: host})
+	_, err = client.Deploy(ctx, connect.NewRequest(&pb.DeployRequest{
+		MachineId: "m2", Strategy: "img", ArtifactVersion: "v1",
+	}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "oci host pid") {
+		t.Fatalf("oci deploy on a v5 agent: %v", err)
+	}
+	_, err = client.Rollback(ctx, connect.NewRequest(&pb.RollbackRequest{
+		MachineId: "m2", Strategy: "img", TargetVersion: "v1",
+	}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("oci rollback on a v5 agent: %v", err)
+	}
+	rec, _ = st.GetMachine("m2")
+	if rec.Assignments["img"].GetArtifact().GetVersion() != "v2" {
+		t.Fatalf("failed rollback changed the assignment to %s", rec.Assignments["img"].GetArtifact().GetVersion())
+	}
+	if _, err := client.Rollback(ctx, connect.NewRequest(&pb.RollbackRequest{
+		MachineId: "m2", Strategy: "img", TargetVersion: "bin",
+	})); err != nil {
+		t.Fatalf("binary rollback with a stored host-pid flag: %v", err)
+	}
+}
+
 func TestApplyAssignmentSetResourceLimitsGate(t *testing.T) {
 	client, st, _, _ := startHumanAPI(t)
 	ctx := context.Background()
@@ -713,6 +823,12 @@ func TestApplyAssignmentSetResourceLimitsGate(t *testing.T) {
 			Members:         []*pb.SetMember{{Machine: "m1", Name: "p1"}},
 		},
 	}}
+	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: &pb.MachineSpec{CgroupLimitsAvailable: true}})
+	req.Set.Spec.Template.Limits = &pb.ResourceLimits{CpuMillicores: 5}
+	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(req)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("cpu 5 on a set: %v", err)
+	}
+	req.Set.Spec.Template.Limits = &pb.ResourceLimits{MemoryBytes: 1 << 30}
 	st.UpsertMachine(&pb.Register{MachineId: "m1", AgentVersion: 7, Spec: &pb.MachineSpec{}})
 	if _, err := client.ApplyAssignmentSet(ctx, connect.NewRequest(req)); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("want cgroup gate, got %v", err)

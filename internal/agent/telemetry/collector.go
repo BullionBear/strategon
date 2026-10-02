@@ -37,7 +37,8 @@ type Collector struct {
 
 	// CgroupRoot is the agent's prepared slot root; empty skips cgroup
 	// accounting. OnOOMKill, if set, is called from the sampling goroutine
-	// when a slot's oom_kill counter rises between samples.
+	// when a slot's oom_kill counter rises between samples. It must not
+	// block: the next sample waits until this one returns.
 	CgroupRoot string
 	OnOOMKill  func(strategy string, total, delta int64)
 
@@ -146,7 +147,6 @@ func (c *Collector) sample() {
 	}
 
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	if hostCPU != nil {
 		c.prevCPU = hostCPU
 	}
@@ -181,8 +181,11 @@ func (c *Collector) sample() {
 		}
 	}
 	c.seedOOMBaseline()
+	var ooms []oomNote
 	for _, pm := range procs {
-		c.sampleCgroup(pm)
+		if n, ok := c.sampleCgroup(pm); ok {
+			ooms = append(ooms, n)
+		}
 	}
 
 	c.snapshot.Store(&Snapshot{
@@ -190,6 +193,22 @@ func (c *Collector) sample() {
 		Processes: procs,
 		At:        now,
 	})
+	cb := c.OnOOMKill
+	c.mu.Unlock()
+
+	// The callback runs after the snapshot is published and without c.mu,
+	// so a handler can read Latest. It still has to return: Run calls
+	// sample synchronously.
+	for _, n := range ooms {
+		if cb != nil {
+			cb(n.strategy, n.total, n.delta)
+		}
+	}
+}
+
+type oomNote struct {
+	strategy     string
+	total, delta int64
 }
 
 // seedOOMBaseline records oom_kill for every slot cgroup that exists when the
@@ -220,17 +239,18 @@ func (c *Collector) seedOOMBaseline() {
 // descendants stay in it), so it is read whether or not the target is alive.
 // prevOOM is kept for slots that stop being targets: the cgroup and its
 // counter survive, and a re-added slot must not report old kills again.
-func (c *Collector) sampleCgroup(pm *pb.ProcessMetrics) {
+func (c *Collector) sampleCgroup(pm *pb.ProcessMetrics) (oomNote, bool) {
 	cur, peak, kills, ok := driver.SlotCgroupStats(c.CgroupRoot, pm.GetStrategy())
 	if !ok {
-		return
+		return oomNote{}, false
 	}
 	pm.MemoryCurrentBytes = cur
 	pm.MemoryPeakBytes = peak
 	pm.OomKills = kills
 	prev := c.prevOOM[pm.GetStrategy()]
 	c.prevOOM[pm.GetStrategy()] = kills
-	if kills > prev && c.OnOOMKill != nil {
-		c.OnOOMKill(pm.GetStrategy(), kills, kills-prev)
+	if kills > prev {
+		return oomNote{strategy: pm.GetStrategy(), total: kills, delta: kills - prev}, true
 	}
+	return oomNote{}, false
 }

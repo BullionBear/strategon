@@ -355,6 +355,9 @@ func (r *Reconciler) reconcileOne(spec *pb.StrategyAssignmentSpec, st *strategyS
 		// Same bytes, possibly a new version/uri (http→s3 retag). Do not
 		// re-fetch; just advance the running label so status matches desired.
 		r.promoteRunningLabels(spec, st)
+		// Adopted processes did not have their limits written by this
+		// process. Re-enabling controllers resets the files to "max".
+		r.ensureSlotLimits(spec, st)
 		st.observedGen = r.generation
 		return // steady state
 
@@ -485,6 +488,43 @@ func (r *Reconciler) startFailed(st *strategyState, err error) {
 	r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "StartFailed", err.Error())
 }
 
+// ensureSlotLimits rewrites the slot cgroup once for a process this agent
+// adopted. Failure is reported once and retried on the next tick; the
+// payload keeps running.
+func (r *Reconciler) ensureSlotLimits(spec *pb.StrategyAssignmentSpec, st *strategyState) {
+	if st.limitsApplied {
+		return
+	}
+	applier, ok := r.deps.Driver.(driver.SlotLimitApplier)
+	if !ok {
+		st.limitsApplied = true
+		return
+	}
+	// Only the slot and its limits matter here. buildStartSpec would render
+	// args/env (secrets) and touch the work dir on every tick, and any of
+	// those failing would leave the payload unlimited.
+	l := spec.GetLimits()
+	sp := driver.StartSpec{
+		Strategy:      spec.GetStrategy(),
+		MemoryBytes:   l.GetMemoryBytes(),
+		CPUMillicores: l.GetCpuMillicores(),
+	}
+	if err := applier.ApplyLimits(sp); err != nil {
+		r.noteLimits(st, err)
+		return
+	}
+	st.limitsApplied = true
+	st.limitsError = ""
+}
+
+func (r *Reconciler) noteLimits(st *strategyState, err error) {
+	if st.limitsError == err.Error() {
+		return
+	}
+	st.limitsError = err.Error()
+	r.emitEvent(st.strategy, pb.EventSeverity_EVENT_SEVERITY_ERROR, "LimitsNotApplied", err.Error())
+}
+
 // installProcess wires a freshly-started process into state and launches its
 // exit watcher (single-writer: only the main loop launches watchers).
 func (r *Reconciler) installProcess(spec *pb.StrategyAssignmentSpec, st *strategyState, proc *driver.Process) {
@@ -493,6 +533,10 @@ func (r *Reconciler) installProcess(spec *pb.StrategyAssignmentSpec, st *strateg
 	st.stopping = false
 	st.captureStdio = spec.GetCaptureStdio()
 	st.ociHostPid = spec.GetOciHostPid()
+	// Start already wrote the slot limits. Do not rewrite them on the
+	// next healthy tick; a spec edit takes effect at the next start.
+	st.limitsApplied = true
+	st.limitsError = ""
 	r.setCondition(st, conditionLive, pb.ConditionStatus_CONDITION_STATUS_TRUE, "Started", "")
 	go func(strategy string, p *driver.Process) {
 		info := r.deps.Driver.WatchExit(p, r.now)

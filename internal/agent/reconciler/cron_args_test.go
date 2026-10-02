@@ -2,6 +2,8 @@ package reconciler
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +30,8 @@ func TestCronRestartRerendersConfigPlaceholder(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte("k: v\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	art := &pb.ArtifactRef{Version: "v1", Digest: "sha256:x", Uri: "file://" + binPath}
+	binSum := sha256.Sum256([]byte("#!/bin/true\n"))
+	art := &pb.ArtifactRef{Version: "v1", Digest: "sha256:" + hex.EncodeToString(binSum[:]), Uri: "file://" + binPath}
 	cfg := &pb.ArtifactRef{Version: "c1", Digest: "sha256:y", Uri: "file://" + cfgPath}
 	if err := mgr.Download(context.Background(), "s", art, cfg); err != nil {
 		t.Fatal(err)

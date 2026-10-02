@@ -146,8 +146,9 @@ Requirements and limits:
   image-default paths (`/var/lib/…`) via `volumeMounts` or `${WORK_DIR}`.
 - `limits` (EXEC and OCI) need the agent's delegated cgroup (the
   `install-agent.sh` unit, systemd >= 254) for `memoryBytes` /
-  `cpuMillicores`; apply refuses them on a machine that cannot enforce
-  them. See ARCHITECTURE "Resource limits".
+  `cpuMillicores`. `cpuMillicores` is 10..175921860. Apply refuses a
+  value the machine or the kernel cannot enforce. See ARCHITECTURE
+  "Resource limits".
 - No registry pull, no `/sys/fs/cgroup` inside the container, no per-run
   writable overlay. Old releases are GC'd (`--release-retention`, default 3).
   A rootfs that is still a live process's root is kept and does not count

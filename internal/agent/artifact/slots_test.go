@@ -3,6 +3,7 @@ package artifact
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -94,5 +95,37 @@ func TestRemoveStrategyDirDeletesSlot(t *testing.T) {
 	}
 	if err := mgr.RemoveStrategyDir("already-gone"); err != nil {
 		t.Fatalf("missing dir should succeed: %v", err)
+	}
+}
+
+func TestRemoveStrategyDirRefusesBusyRootfs(t *testing.T) {
+	base := t.TempDir()
+	mgr := NewManager(base, nil)
+	rootfs := filepath.Join(mgr.ReleaseDir("s", "v1"), "rootfs")
+	if err := os.MkdirAll(rootfs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(mgr.ReleaseDir("s", "v1"), "bin"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mgr.releaseUsers = func(path string) []int {
+		if path == rootfs {
+			return []int{4242, 7}
+		}
+		return nil
+	}
+	err := mgr.RemoveStrategyDir("s")
+	if err == nil || !strings.Contains(err.Error(), "v1") || !strings.Contains(err.Error(), "4242") {
+		t.Fatalf("busy rootfs: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(mgr.ReleaseDir("s", "v1"), "bin")); statErr != nil {
+		t.Fatalf("busy slot was partially deleted: %v", statErr)
+	}
+	mgr.releaseUsers = func(string) []int { return nil }
+	if err := mgr.RemoveStrategyDir("s"); err != nil {
+		t.Fatal(err)
+	}
+	if _, statErr := os.Stat(mgr.StrategyDir("s")); !os.IsNotExist(statErr) {
+		t.Fatalf("slot still present after the rootfs was free: %v", statErr)
 	}
 }

@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	pb "github.com/bullionbear/strategon/gen/strategyplatform/v1"
@@ -115,10 +117,53 @@ func TestVerifyRejectsBadDigest(t *testing.T) {
 	mgr := NewManager(base, LocalFetcher{})
 	p1, _ := writeSource(t, src, "v1bin", "binary-one")
 	bad := &pb.ArtifactRef{Version: "v1", Digest: "sha256:deadbeef", Uri: "file://" + p1}
-	if err := mgr.Download(context.Background(), "s", bad, nil); err != nil {
+	if err := mgr.Download(context.Background(), "s", bad, nil); err == nil || !strings.Contains(err.Error(), "digest mismatch") {
 		t.Fatalf("download: %v", err)
 	}
-	if err := mgr.Verify("s", bad); err == nil {
-		t.Fatalf("verify must reject a mismatched digest")
+	if _, err := os.Stat(mgr.ReleaseDir("s", "v1")); !os.IsNotExist(err) {
+		t.Fatalf("mismatched binary left a release dir: %v", err)
+	}
+}
+
+type errFetcher struct{}
+
+func (errFetcher) Fetch(context.Context, *pb.ArtifactRef, string) error {
+	return errors.New("fetch failed")
+}
+
+type configFailFetcher struct{}
+
+func (configFailFetcher) Fetch(ctx context.Context, ref *pb.ArtifactRef, dest string) error {
+	if strings.Contains(ref.GetUri(), "config-missing") {
+		return errors.New("config fetch failed")
+	}
+	return LocalFetcher{}.Fetch(ctx, ref, dest)
+}
+
+func TestDownloadFetchFailureRemovesReleaseDir(t *testing.T) {
+	mgr := NewManager(t.TempDir(), errFetcher{})
+	ref := &pb.ArtifactRef{Version: "v1", Digest: "sha256:abc", Uri: "file:///nope"}
+	if err := mgr.Download(context.Background(), "s", ref, nil); err == nil {
+		t.Fatal("expected fetch failure")
+	}
+	if _, err := os.Stat(mgr.ReleaseDir("s", "v1")); !os.IsNotExist(err) {
+		t.Fatalf("failed fetch left a release dir: %v", err)
+	}
+}
+
+func TestDownloadKeepsVerifiedReleaseWhenConfigFetchFails(t *testing.T) {
+	src := t.TempDir()
+	mgr := NewManager(t.TempDir(), configFailFetcher{})
+	p1, d1 := writeSource(t, src, "v1bin", "binary-one")
+	ref := &pb.ArtifactRef{Version: "v1", Digest: d1, Uri: "file://" + p1}
+	if err := mgr.Download(context.Background(), "s", ref, nil); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &pb.ArtifactRef{Version: "c1", Digest: "sha256:cfg", Uri: "file:///config-missing"}
+	if err := mgr.Download(context.Background(), "s", ref, cfg); err == nil {
+		t.Fatal("expected config fetch failure")
+	}
+	if err := mgr.Verify("s", ref); err != nil {
+		t.Fatalf("verified binary was removed with the failed config: %v", err)
 	}
 }

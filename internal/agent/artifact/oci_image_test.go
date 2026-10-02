@@ -149,6 +149,9 @@ func TestDownloadOCIDigestMismatch(t *testing.T) {
 	if err := mgr.Download(context.Background(), "s", ref, nil); err == nil {
 		t.Fatal("expected digest mismatch")
 	}
+	if _, err := os.Stat(mgr.ReleaseDir("s", "v1")); !os.IsNotExist(err) {
+		t.Fatalf("digest mismatch left a release dir: %v", err)
+	}
 }
 
 func TestParseUser(t *testing.T) {

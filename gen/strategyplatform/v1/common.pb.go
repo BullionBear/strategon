@@ -479,13 +479,15 @@ func (x *ArtifactRef) GetCreatedAt() *timestamppb.Timestamp {
 
 // ResourceLimits apply to the slot, not one process. memory_bytes and
 // cpu_millicores need a machine with cgroup_limits_available; max_open_files
-// needs agent_version >= 7. Apply rejects what the machine cannot enforce.
+// needs agent_version >= 7. cpu_millicores is 0 (unset) or 10..175921860:
+// the kernel's minimum CFS quota is 1ms and the quota must fit in MAX_BW.
+// Apply rejects what the machine or the kernel cannot enforce.
 type ResourceLimits struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	CpuMillicores int64 `protobuf:"varint,1,opt,name=cpu_millicores,json=cpuMillicores,proto3" json:"cpu_millicores,omitempty"` // slot cgroup cpu.max (CFS quota over 100ms)
+	CpuMillicores int64 `protobuf:"varint,1,opt,name=cpu_millicores,json=cpuMillicores,proto3" json:"cpu_millicores,omitempty"` // slot cpu.max over 100ms; 0 or 10..175921860
 	MemoryBytes   int64 `protobuf:"varint,2,opt,name=memory_bytes,json=memoryBytes,proto3" json:"memory_bytes,omitempty"`       // slot cgroup memory.max, shared by all descendants
 	MaxOpenFiles  int32 `protobuf:"varint,3,opt,name=max_open_files,json=maxOpenFiles,proto3" json:"max_open_files,omitempty"`  // RLIMIT_NOFILE (soft and hard) on the payload
 }

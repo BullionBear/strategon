@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,6 +30,17 @@ const (
 	// no slot name can collide with them.
 	cgroupUnassigned = "_unassigned"
 	cgroupProbe      = "_probe"
+	// cgroupLeaf is the EXEC process's cgroup. Limits stay on the slot
+	// (its parent) so an adopted process still sitting in the slot and a
+	// new process in the leaf share one memory.max. The slot's
+	// subtree_control stays empty: enabling a controller there would
+	// reject processes that already live in the slot.
+	cgroupLeaf = "leaf"
+	// cgroupLimitProbe is a throwaway sibling of the strategies root.
+	// CheckLimits writes a candidate limit here before drain. It is not a
+	// slot, so the OOM sampler's baseline of the strategies directory
+	// never sees it.
+	cgroupLimitProbe = "_limitprobe"
 )
 
 // ResolveCgroupRoot turns the --cgroup-root flag into an absolute cgroup v2
@@ -154,7 +166,10 @@ func cgroupProcs(dir string) ([]int, error) {
 
 // probeCgroupPlacement clones a throwaway child into dir with a memory limit,
 // the same way Start places a payload. Writing the limit and migrating the
-// child are separate permission checks; both must pass.
+// child are separate permission checks; both must pass. The child also runs
+// the --seal-cgroup helper: every EXEC start under a root is sealed, so a
+// host that blocks unprivileged user namespaces or a cgroup2 mount inside
+// one must not advertise a root whose every start would fail.
 func probeCgroupPlacement(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -168,9 +183,13 @@ func probeCgroupPlacement(dir string) error {
 		return err
 	}
 	defer unix.Close(fd)
-	cmd := probeCommand(flagOCIProbe)
+	cmd := exec.Command("/proc/self/exe", flagSealCgroup, flagOCIProbe)
 	cmd.SysProcAttr = &syscall.SysProcAttr{UseCgroupFD: true, CgroupFD: fd}
-	if err := cmd.Run(); err != nil {
+	setSealNamespaces(cmd.SysProcAttr)
+	if err := startSealed(cmd); err != nil {
+		return fmt.Errorf("clone into %s: %w", dir, err)
+	}
+	if err := cmd.Wait(); err != nil {
 		return fmt.Errorf("clone into %s: %w", dir, err)
 	}
 	return nil
@@ -179,6 +198,13 @@ func probeCgroupPlacement(dir string) error {
 // writeCgroupLimits sets memory.max and cpu.max on a slot. Zero writes "max"
 // so a limit removed from the spec is lifted on the next start.
 func writeCgroupLimits(dir string, memoryBytes, cpuMillicores int64) error {
+	if memoryBytes < 0 {
+		return fmt.Errorf("memory_bytes %d must not be negative", memoryBytes)
+	}
+	cpu, err := cpuMaxFile(cpuMillicores)
+	if err != nil {
+		return err
+	}
 	mem := "max"
 	if memoryBytes > 0 {
 		mem = strconv.FormatInt(memoryBytes, 10)
@@ -186,13 +212,24 @@ func writeCgroupLimits(dir string, memoryBytes, cpuMillicores int64) error {
 	if err := os.WriteFile(filepath.Join(dir, "memory.max"), []byte(mem), 0o644); err != nil {
 		return fmt.Errorf("memory.max: %w", err)
 	}
-	// cpu.max is "quota period"; period 100000us, quota scaled by millicores.
-	cpu := "max 100000"
-	if cpuMillicores > 0 {
-		cpu = fmt.Sprintf("%d 100000", cpuMillicores*100000/1000)
-	}
 	if err := os.WriteFile(filepath.Join(dir, "cpu.max"), []byte(cpu), 0o644); err != nil {
 		return fmt.Errorf("cpu.max: %w", err)
+	}
+	return nil
+}
+
+// probeCgroupLimits writes the candidate limits into a fresh sibling of
+// root and removes it. A value the kernel rejects fails here, before
+// deploy drains the running process or rewrites the live slot.
+func probeCgroupLimits(root string, memoryBytes, cpuMillicores int64) error {
+	parent := filepath.Dir(root)
+	dir, err := os.MkdirTemp(parent, cgroupLimitProbe+"-")
+	if err != nil {
+		return fmt.Errorf("limit probe: %w", err)
+	}
+	defer os.Remove(dir)
+	if err := writeCgroupLimits(dir, memoryBytes, cpuMillicores); err != nil {
+		return fmt.Errorf("limit probe: %w", err)
 	}
 	return nil
 }

@@ -1013,6 +1013,59 @@ func TestDeployChecksLimitsBeforeDrain(t *testing.T) {
 	}
 }
 
+func TestSteadyStateReappliesAdoptedLimitsOnce(t *testing.T) {
+	r, fd, _, _, out := newTestReconciler(t, time.Unix(1000, 0))
+	spec := assignment("s", "v1", "sha256:aaa", &pb.DeployPolicy{Startsecs: 5})
+	spec.Limits = &pb.ResourceLimits{MemoryBytes: 1 << 20, CpuMillicores: 500}
+	r.generation = 7
+	r.desired = map[string]*pb.StrategyAssignmentSpec{"s": spec}
+	st := newStrategyState("s")
+	st.phase = pb.DeployPhase_DEPLOY_PHASE_HEALTHY
+	st.runningArtifact = artRef("v1", "sha256:aaa")
+	st.proc = mustStart(t, fd)
+	r.actual["s"] = st
+
+	r.reconcile()
+	r.reconcile()
+	fd.mu.Lock()
+	n, gotMem, gotCPU := fd.applyCount, fd.applied[0].MemoryBytes, fd.applied[0].CPUMillicores
+	fd.mu.Unlock()
+	if n != 1 || gotMem != 1<<20 || gotCPU != 500 {
+		t.Fatalf("apply count=%d mem=%d cpu=%d", n, gotMem, gotCPU)
+	}
+	if fd.starts() != 1 {
+		t.Fatalf("rewrite restarted the payload, starts=%d", fd.starts())
+	}
+	drainEvents(out)
+
+	fd.mu.Lock()
+	fd.applyErr = errString("memory.max: busy")
+	fd.mu.Unlock()
+	st.limitsApplied = false
+	r.reconcile()
+	r.reconcile()
+	fd.mu.Lock()
+	n = fd.applyCount
+	fd.mu.Unlock()
+	if n != 3 {
+		t.Fatalf("failed rewrite should retry, apply count=%d", n)
+	}
+	var events int
+	for {
+		select {
+		case msg := <-out:
+			if ev := msg.GetEvent(); ev.GetReason() == "LimitsNotApplied" {
+				events++
+			}
+		default:
+			if events != 1 {
+				t.Fatalf("LimitsNotApplied events = %d, want 1", events)
+			}
+			return
+		}
+	}
+}
+
 type errString string
 
 func (e errString) Error() string { return string(e) }

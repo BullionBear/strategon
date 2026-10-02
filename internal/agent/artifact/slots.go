@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/bullionbear/strategon/internal/agent/filebrowse"
 )
@@ -102,7 +104,11 @@ func (m *Manager) StrategyDirSize(strategy string) (int64, error) {
 }
 
 // RemoveStrategyDir deletes the whole strategy slot. Rejects reserved and
-// invalid names. Missing dirs succeed.
+// invalid names. Missing dirs succeed. A release whose rootfs is still some
+// process's root — including a setsid grandchild whose supervised parent
+// has already exited — is left in place. Deleting that directory makes the
+// process's root empty and the next exec of a relative path can fork without
+// bound. Nothing is removed when any version is busy.
 func (m *Manager) RemoveStrategyDir(strategy string) error {
 	if err := filebrowse.ValidateStrategy(strategy); err != nil {
 		return err
@@ -110,8 +116,50 @@ func (m *Manager) RemoveStrategyDir(strategy string) error {
 	if ReservedBaseName(strategy) {
 		return fmt.Errorf("reserved base name %q", strategy)
 	}
+	if err := m.rootfsBusy(strategy); err != nil {
+		return err
+	}
 	if err := os.RemoveAll(m.StrategyDir(strategy)); err != nil {
 		return fmt.Errorf("remove strategy dir %s: %w", strategy, err)
 	}
 	return nil
+}
+
+// rootfsBusy reports versions whose rootfs inode is a live process root.
+// A missing releases directory is not busy. Any other read error refuses
+// the delete.
+func (m *Manager) rootfsBusy(strategy string) error {
+	root := filepath.Join(m.StrategyDir(strategy), "releases")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	users := m.releaseUserLookup()
+	var parts []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		pids := users(filepath.Join(root, e.Name(), "rootfs"))
+		if len(pids) == 0 {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s used by pid %s", e.Name(), formatPIDs(pids)))
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	sort.Strings(parts)
+	return fmt.Errorf("refusing to delete %s: rootfs still in use (%s)", strategy, strings.Join(parts, "; "))
+}
+
+func formatPIDs(pids []int) string {
+	parts := make([]string, len(pids))
+	for i, pid := range pids {
+		parts[i] = strconv.Itoa(pid)
+	}
+	return strings.Join(parts, ",")
 }

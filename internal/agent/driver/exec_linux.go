@@ -5,6 +5,7 @@ package driver
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -33,6 +34,11 @@ func NewExecDriver(cgroupRoot string) *ExecDriver {
 	return &ExecDriver{CgroupRoot: cgroupRoot}
 }
 
+// sealTimeout is how long Start waits for the helper to remount cgroupfs
+// and ack. A helper that never writes is killed; treating its exit as a
+// successful start would crash-loop a payload that was never confined.
+const sealTimeout = 5 * time.Second
+
 // Start launches the process detached in its own session.
 func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 	if spec.CaptureStdio && spec.PayloadLogDir == "" {
@@ -41,7 +47,13 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 	if err := checkRlimitNofile(spec.MaxOpenFiles); err != nil {
 		return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
 	}
-	cmd := execCommand(spec)
+	// A delegated cgroup is writable by this uid. The payload shares that
+	// uid, so DAC cannot stop it raising memory.max or walking cgroup.procs
+	// to a sibling. Confine it: user ns (uid 0 inside, mapped to this uid),
+	// mount ns whose /sys/fs/cgroup is the leaf, cgroup ns rooted at the
+	// leaf, and no mount/umount/setns after the cover is in place.
+	seal := d.CgroupRoot != ""
+	cmd := execCommand(spec, seal)
 	cmd.Env = spec.Env
 	cmd.Dir = spec.WorkDir
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -49,9 +61,22 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		// the strategy (self-update prerequisite).
 		Setsid: true,
 	}
+	if seal {
+		setSealNamespaces(cmd.SysProcAttr)
+	}
 
 	// ② cgroup v2 slot. A limit that cannot be applied fails the start.
-	cgFD, err := d.setupCgroup(spec)
+	// EXEC enters <slot>/leaf; limits are written on <slot> so they also
+	// cover an adopted process that still sits directly in the slot.
+	var (
+		cgFD int
+		err  error
+	)
+	if seal {
+		cgFD, err = d.setupExecCgroup(spec)
+	} else {
+		cgFD, err = d.setupCgroup(spec)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
 	}
@@ -61,26 +86,83 @@ func (d *ExecDriver) Start(spec StartSpec, now time.Time) (*Process, error) {
 		defer unix.Close(cgFD)
 	}
 
-	if err := cmd.Start(); err != nil {
+	if seal {
+		if err := startSealed(cmd); err != nil {
+			return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
+		}
+	} else if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start %s: %w", spec.BinaryPath, err)
 	}
 	return attachStarted(cmd, now)
 }
 
 // execCommand builds the EXEC launch. The payload runs directly unless stdio
-// capture or max_open_files needs this binary in front of it; both re-execs
-// set the rlimit before the payload's first instruction.
-func execCommand(spec StartSpec) *exec.Cmd {
-	var args []string
-	switch {
-	case spec.CaptureStdio:
-		args = buildStdioTeeArgs(spec)
-	case spec.MaxOpenFiles > 0:
-		args = append([]string{flagExecPayload, "--", spec.BinaryPath}, spec.Args...)
-	default:
+// capture, max_open_files, or the cgroup seal needs this binary in front of
+// it. The helper applies the rlimit, seals the cgroup mount, and acks before
+// the payload's first instruction.
+func execCommand(spec StartSpec, seal bool) *exec.Cmd {
+	if !seal && !spec.CaptureStdio && spec.MaxOpenFiles <= 0 {
 		return exec.Command(spec.BinaryPath, spec.Args...)
 	}
+	var args []string
+	if spec.CaptureStdio {
+		args = buildStdioTeeArgs(spec)
+	} else {
+		args = append([]string{flagExecPayload, "--", spec.BinaryPath}, spec.Args...)
+	}
+	if seal {
+		args = append([]string{flagSealCgroup}, args...)
+	}
 	return exec.Command("/proc/self/exe", withRlimitArgs(spec, args)...)
+}
+
+// setSealNamespaces adds the user, mount, and cgroup namespaces the
+// --seal-cgroup helper needs. uid 0 inside keeps CAP_SYS_ADMIN across the
+// helper's exec so it can mount the leaf cgroupfs.
+func setSealNamespaces(attr *syscall.SysProcAttr) {
+	attr.Cloneflags = uintptr(unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWCGROUP)
+	attr.UidMappings = []syscall.SysProcIDMap{{
+		ContainerID: 0, HostID: os.Getuid(), Size: 1,
+	}}
+	attr.GidMappings = []syscall.SysProcIDMap{{
+		ContainerID: 0, HostID: os.Getgid(), Size: 1,
+	}}
+}
+
+// startSealed waits until the helper reports that the host cgroupfs is
+// covered.
+// On any other result the child is killed and reaped so it cannot be
+// supervised as a running payload.
+func startSealed(cmd *exec.Cmd) error {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		return err
+	}
+	cmd.ExtraFiles = []*os.File{pw}
+	if err := cmd.Start(); err != nil {
+		pr.Close()
+		pw.Close()
+		return err
+	}
+	pw.Close()
+	defer pr.Close()
+	_ = pr.SetDeadline(time.Now().Add(sealTimeout))
+	buf, readErr := io.ReadAll(pr)
+	text := strings.TrimSpace(string(buf))
+	if readErr != nil || text != "ok" {
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+			_, _ = cmd.Process.Wait()
+		}
+		if text != "" {
+			return errors.New(text)
+		}
+		if readErr != nil {
+			return fmt.Errorf("cgroup seal failed: %w", readErr)
+		}
+		return errors.New("cgroup seal failed")
+	}
+	return nil
 }
 
 // attachStarted builds a Process handle for a child this agent just Start-ed.
@@ -191,14 +273,35 @@ func (d *ExecDriver) Adopt(pid int, startTime uint64, startedAt time.Time) (*Pro
 }
 
 // CheckLimits reports the limit errors Start would hit before forking.
+// A cpu quota the kernel rejects is reported before the missing-root
+// check, and a probe write uses a throwaway cgroup rather than the live
+// slot: rollback reuses this spec, so the failure has to happen while the
+// old process is still running.
 func (d *ExecDriver) CheckLimits(spec StartSpec) error {
+	if spec.MemoryBytes < 0 || spec.CPUMillicores < 0 || spec.MaxOpenFiles < 0 {
+		return errors.New("limits must not be negative")
+	}
 	if err := checkRlimitNofile(spec.MaxOpenFiles); err != nil {
 		return err
 	}
-	if d.CgroupRoot == "" && (spec.MemoryBytes > 0 || spec.CPUMillicores > 0) {
+	if err := ValidateCPUMillicores(spec.CPUMillicores); err != nil {
+		return err
+	}
+	if spec.MemoryBytes == 0 && spec.CPUMillicores == 0 {
+		return nil
+	}
+	if d.CgroupRoot == "" {
 		return errNoCgroupRoot
 	}
-	return nil
+	return probeCgroupLimits(d.CgroupRoot, spec.MemoryBytes, spec.CPUMillicores)
+}
+
+// ApplyLimits rewrites the slot cgroup from spec. The process is left
+// where it is: a payload in the slot and one in <slot>/leaf are both
+// charged to the slot's memory.max and cpu.max.
+func (d *ExecDriver) ApplyLimits(spec StartSpec) error {
+	_, err := ensureSlotLimits(d.CgroupRoot, spec)
+	return err
 }
 
 var errNoCgroupRoot = errors.New("limits require a cgroup root and this agent has none (--cgroup-root)")
@@ -207,23 +310,52 @@ var errNoCgroupRoot = errors.New("limits require a cgroup root and this agent ha
 // -1 when confinement is off and the spec asks for no memory or cpu limit.
 // Every payload under a root gets a slot, limited or not, so its descendants
 // stay accounted to it and the unit cgroup never holds processes directly.
+// OCI places the process in this cgroup. EXEC uses setupExecCgroup.
 func (d *ExecDriver) setupCgroup(spec StartSpec) (int, error) {
-	if d.CgroupRoot == "" {
+	dir, err := ensureSlotLimits(d.CgroupRoot, spec)
+	if err != nil || dir == "" {
+		return -1, err
+	}
+	return openCgroupDir(dir)
+}
+
+// setupExecCgroup writes limits on the slot and returns an fd for the leaf
+// the process is cloned into. subtree_control on the slot stays empty.
+func (d *ExecDriver) setupExecCgroup(spec StartSpec) (int, error) {
+	dir, err := ensureSlotLimits(d.CgroupRoot, spec)
+	if err != nil || dir == "" {
+		return -1, err
+	}
+	leaf := filepath.Join(dir, cgroupLeaf)
+	if err := os.MkdirAll(leaf, 0o755); err != nil {
+		return -1, fmt.Errorf("cgroup %s: %w", leaf, err)
+	}
+	return openCgroupDir(leaf)
+}
+
+// ensureSlotLimits creates the slot and writes memory.max and cpu.max.
+// An empty root with no memory or cpu limit returns an empty dir.
+func ensureSlotLimits(root string, spec StartSpec) (string, error) {
+	if root == "" {
 		if spec.MemoryBytes > 0 || spec.CPUMillicores > 0 {
-			return -1, errNoCgroupRoot
+			return "", errNoCgroupRoot
 		}
-		return -1, nil
+		return "", nil
 	}
 	if spec.Strategy == "" || spec.Strategy == "." || spec.Strategy == ".." || strings.Contains(spec.Strategy, "/") {
-		return -1, fmt.Errorf("cgroup: invalid slot name %q", spec.Strategy)
+		return "", fmt.Errorf("cgroup: invalid slot name %q", spec.Strategy)
 	}
-	dir := filepath.Join(d.CgroupRoot, spec.Strategy)
+	dir := filepath.Join(root, spec.Strategy)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return -1, fmt.Errorf("cgroup %s: %w", dir, err)
+		return "", fmt.Errorf("cgroup %s: %w", dir, err)
 	}
 	if err := writeCgroupLimits(dir, spec.MemoryBytes, spec.CPUMillicores); err != nil {
-		return -1, fmt.Errorf("cgroup %s: %w", dir, err)
+		return "", fmt.Errorf("cgroup %s: %w", dir, err)
 	}
+	return dir, nil
+}
+
+func openCgroupDir(dir string) (int, error) {
 	fd, err := unix.Open(dir, unix.O_DIRECTORY|unix.O_RDONLY|unix.O_CLOEXEC, 0)
 	if err != nil {
 		return -1, fmt.Errorf("cgroup %s: %w", dir, err)
