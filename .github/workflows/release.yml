@@ -101,8 +101,11 @@ jobs:
   # outbound and lease TTLs outlast the gap. Schema migrations run at
   # CP startup and must stay expand-only — a destructive migration
   # would break the old container still serving during the swap.
+  #
+  # Disabled: strategon was decommissioned on 2026-10-26 and the production
+  # stack on s7n.lynkora.com is down. A tag must not bring it back.
   deploy:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: false
     needs: [image, binaries]
     runs-on: ubuntu-latest
     environment: production

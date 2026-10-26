@@ -1,5 +1,10 @@
 # Strategon
 
+> [!WARNING]
+> **Deprecated.** Strategon was decommissioned on 2026-10-26. The production
+> control plane and all agents are shut down, and this repository is archived.
+> The code is kept for reference only.
+
 <p align="center">
   <img src="docs/logo.webp" alt="Strategon" width="128" />
 </p>
